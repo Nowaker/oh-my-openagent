@@ -70,12 +70,12 @@ function formatDiagnosticBlock({ filePath, diagnostics }: DiagnosticBlock): stri
 
 function formatDiagnosticsForDisplay(diagnostics: string): string {
 	const chunks = splitDiagnosticChunks(diagnostics);
-	if (!chunks.some(isDiagnosticChunk)) return diagnostics.trim();
+	if (!chunks.some(isDiagnosticChunk)) return chunks.join("\n").trim();
 	return chunks.map(formatDiagnosticChunk).join("\n");
 }
 
 function splitDiagnosticChunks(diagnostics: string): string[] {
-	const normalized = diagnostics.replace(/\r\n/g, "\n").trim();
+	const normalized = diagnostics.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
 	if (normalized.length === 0) return [];
 
 	const matches = Array.from(normalized.matchAll(DIAGNOSTIC_START_PATTERN));

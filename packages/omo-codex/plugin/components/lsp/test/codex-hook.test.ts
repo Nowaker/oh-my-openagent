@@ -122,6 +122,29 @@ describe("codex PostToolUse hook", () => {
 		expect(parsed.hookSpecificOutput.additionalContext).toBe(parsed.reason);
 	});
 
+	it("#given plain non-diagnostic feedback with CRLF and bare CR #when the hook blocks #then it normalizes line endings", async () => {
+		// given
+		const output = await runLspPostToolUseHook(
+			{
+				tool_name: "write",
+				tool_input: { path: "src/broken.ts" },
+				tool_response: { ok: true },
+			},
+			async () => "\r\nlanguage server failed\r\n  retry detail\rbefore diagnostics could be collected\r\n",
+		);
+
+		// when
+		const parsed: unknown = JSON.parse(output);
+		if (!isPostToolUseHookOutput(parsed)) throw new TypeError("Expected PostToolUse hook output");
+
+		// then
+		expect(parsed.reason).toBe(
+			"LSP diagnostics after editing src/broken.ts:\n\nlanguage server failed\n  retry detail\nbefore diagnostics could be collected",
+		);
+		expect(parsed.reason).not.toContain("\r");
+		expect(parsed.hookSpecificOutput.additionalContext).toBe(parsed.reason);
+	});
+
 	it("#given multiple edited files #when only one file has diagnostics #then it injects only files with diagnostics", async () => {
 		// given
 		const checkedFilePaths: string[] = [];
