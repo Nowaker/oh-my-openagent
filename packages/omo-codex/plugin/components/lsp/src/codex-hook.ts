@@ -27,6 +27,8 @@ interface PostToolUseHookOutput {
 const MUTATION_TOOL_NAMES = new Set(["apply_patch", "write", "edit", "multiedit", "multi_edit"]);
 const CLEAN_DIAGNOSTICS_TEXT = "No diagnostics found";
 const UNSUPPORTED_EXTENSION_TEXT = "No LSP server configured for extension:";
+const DIAGNOSTIC_START_PATTERN = /(?:error|warning|information|hint)\[[^\]\r\n]+\] \(\d+\) at \d+:\d+:/g;
+const DIAGNOSTIC_CHUNK_PATTERN = /^(?:error|warning|information|hint)\[[^\]\r\n]+\] \(\d+\) at \d+:\d+:/;
 
 export async function runLspDiagnosticsText(filePath: string): Promise<string> {
 	const result = await executeLspDiagnostics({ filePath, severity: "error" });
@@ -49,9 +51,7 @@ export async function runLspPostToolUseHook(
 
 	if (blocks.length === 0) return "";
 
-	const reason = blocks
-		.map(({ filePath, diagnostics }) => `LSP diagnostics after editing ${filePath}:\n${diagnostics}`)
-		.join("\n\n");
+	const reason = blocks.map(formatDiagnosticBlock).join("\n\n");
 	const output: PostToolUseHookOutput = {
 		decision: "block",
 		reason,
@@ -61,6 +61,52 @@ export async function runLspPostToolUseHook(
 		},
 	};
 	return `${JSON.stringify(output)}\n`;
+}
+
+function formatDiagnosticBlock({ filePath, diagnostics }: DiagnosticBlock): string {
+	return `LSP diagnostics after editing ${filePath}:\n\n${formatDiagnosticsForDisplay(diagnostics)}`;
+}
+
+function formatDiagnosticsForDisplay(diagnostics: string): string {
+	const chunks = splitDiagnosticChunks(diagnostics);
+	if (!chunks.some(isDiagnosticChunk)) return diagnostics.trim();
+	return chunks.map(formatDiagnosticChunk).join("\n");
+}
+
+function splitDiagnosticChunks(diagnostics: string): string[] {
+	const normalized = diagnostics.replace(/\r\n/g, "\n").trim();
+	if (normalized.length === 0) return [];
+
+	const matches = Array.from(normalized.matchAll(DIAGNOSTIC_START_PATTERN));
+	const firstMatch = matches[0];
+	if (firstMatch?.index === undefined) return [normalized];
+
+	const chunks: string[] = [];
+	const leadingText = normalized.slice(0, firstMatch.index).trim();
+	if (leadingText.length > 0) chunks.push(leadingText);
+
+	for (const [index, match] of matches.entries()) {
+		if (match.index === undefined) continue;
+		const nextMatch = matches[index + 1];
+		const end = nextMatch?.index ?? normalized.length;
+		const chunk = normalized.slice(match.index, end).trim();
+		if (chunk.length > 0) chunks.push(chunk);
+	}
+
+	return chunks;
+}
+
+function formatDiagnosticChunk(chunk: string): string {
+	const lines = chunk.split("\n");
+	const firstLine = lines[0];
+	if (firstLine === undefined) return "";
+	if (!isDiagnosticChunk(firstLine)) return chunk;
+	const followingLines = lines.slice(1).map((line) => `  ${line}`);
+	return [`- ${firstLine}`, ...followingLines].join("\n");
+}
+
+function isDiagnosticChunk(chunk: string): boolean {
+	return DIAGNOSTIC_CHUNK_PATTERN.test(chunk);
 }
 
 export function extractMutatedFilePaths(input: CodexPostToolUseInput): string[] {

@@ -34,7 +34,8 @@ describe("codex PostToolUse hook", () => {
 		expect(paths).toEqual(["src/edit.ts"]);
 	});
 
-	it("returns blocking feedback when post-edit diagnostics contain errors", async () => {
+	it("#given post-edit diagnostics contain one error #when the hook blocks #then it keeps the blocked output shape", async () => {
+		// given
 		const output = await runLspPostToolUseHook(
 			{
 				tool_name: "apply_patch",
@@ -49,21 +50,80 @@ describe("codex PostToolUse hook", () => {
 			},
 		);
 
+		// when
+		const parsed: unknown = JSON.parse(output);
+
+		// then
 		expect(JSON.parse(output)).toEqual({
 			decision: "block",
 			hookSpecificOutput: {
 				hookEventName: "PostToolUse",
 				additionalContext:
-					"LSP diagnostics after editing src/broken.ts:\n" +
-					"error[typescript] (2304) at 1:1: Cannot find name 'missing'.",
+					"LSP diagnostics after editing src/broken.ts:\n\n" +
+					"- error[typescript] (2304) at 1:1: Cannot find name 'missing'.",
 			},
 			reason:
-				"LSP diagnostics after editing src/broken.ts:\n" +
-				"error[typescript] (2304) at 1:1: Cannot find name 'missing'.",
+				"LSP diagnostics after editing src/broken.ts:\n\n" +
+				"- error[typescript] (2304) at 1:1: Cannot find name 'missing'.",
 		});
+		expect(parsed).toHaveProperty("decision", "block");
 	});
 
-	it("injects only files with diagnostics when multiple files are edited", async () => {
+	it("#given adjacent TypeScript diagnostics #when the hook blocks #then it renders each diagnostic on its own bullet line", async () => {
+		// given
+		const output = await runLspPostToolUseHook(
+			{
+				tool_name: "apply_patch",
+				tool_input: {
+					command: "*** Begin Patch\n*** Update File: src/broken.ts\n@@\n+missing();\n*** End Patch\n",
+				},
+				tool_response: "Success. Updated files.",
+			},
+			async () =>
+				"error[typescript] (2307) at 5:7: Cannot find module 'openclaw/plugin-sdk/config-runtime' or its corresponding type declarations.error[typescript] (2307) at 6:49: Cannot find module 'openclaw/plugin-sdk/config-runtime' or its corresponding type declarations.error[typescript] (2307) at 10:7: Cannot find module 'openclaw/plugin-sdk/config-runtime' or its corresponding type declarations.",
+		);
+
+		// when
+		const parsed: unknown = JSON.parse(output);
+		if (!isPostToolUseHookOutput(parsed)) throw new TypeError("Expected PostToolUse hook output");
+
+		// then
+		expect(parsed.reason).toBe(
+			[
+				"LSP diagnostics after editing src/broken.ts:",
+				"",
+				"- error[typescript] (2307) at 5:7: Cannot find module 'openclaw/plugin-sdk/config-runtime' or its corresponding type declarations.",
+				"- error[typescript] (2307) at 6:49: Cannot find module 'openclaw/plugin-sdk/config-runtime' or its corresponding type declarations.",
+				"- error[typescript] (2307) at 10:7: Cannot find module 'openclaw/plugin-sdk/config-runtime' or its corresponding type declarations.",
+			].join("\n"),
+		);
+		expect(parsed.hookSpecificOutput.additionalContext).toBe(parsed.reason);
+	});
+
+	it("#given plain non-diagnostic feedback #when the hook blocks #then it preserves the text after the readable header", async () => {
+		// given
+		const output = await runLspPostToolUseHook(
+			{
+				tool_name: "write",
+				tool_input: { path: "src/broken.ts" },
+				tool_response: { ok: true },
+			},
+			async () => "language server failed before diagnostics could be collected",
+		);
+
+		// when
+		const parsed: unknown = JSON.parse(output);
+		if (!isPostToolUseHookOutput(parsed)) throw new TypeError("Expected PostToolUse hook output");
+
+		// then
+		expect(parsed.reason).toBe(
+			"LSP diagnostics after editing src/broken.ts:\n\nlanguage server failed before diagnostics could be collected",
+		);
+		expect(parsed.hookSpecificOutput.additionalContext).toBe(parsed.reason);
+	});
+
+	it("#given multiple edited files #when only one file has diagnostics #then it injects only files with diagnostics", async () => {
+		// given
 		const checkedFilePaths: string[] = [];
 		const output = await runLspPostToolUseHook(
 			{
@@ -85,10 +145,12 @@ describe("codex PostToolUse hook", () => {
 			},
 		);
 
+		// when
 		const expectedDiagnostics =
-			"LSP diagnostics after editing src/broken.ts:\n" +
-			"error[typescript] (2322) at 1:7: Type 'number' is not assignable to type 'string'.";
+			"LSP diagnostics after editing src/broken.ts:\n\n" +
+			"- error[typescript] (2322) at 1:7: Type 'number' is not assignable to type 'string'.";
 
+		// then
 		expect(checkedFilePaths).toEqual(["src/clean.ts", "README.md", "src/broken.ts"]);
 		expect(JSON.parse(output)).toEqual({
 			decision: "block",
@@ -132,3 +194,28 @@ describe("codex PostToolUse hook", () => {
 		expect(output).toBe("");
 	});
 });
+
+interface PostToolUseHookOutput {
+	readonly decision: "block";
+	readonly reason: string;
+	readonly hookSpecificOutput: {
+		readonly hookEventName: "PostToolUse";
+		readonly additionalContext: string;
+	};
+}
+
+function isPostToolUseHookOutput(value: unknown): value is PostToolUseHookOutput {
+	if (!isRecord(value)) return false;
+	const hookSpecificOutput = value["hookSpecificOutput"];
+	return (
+		value["decision"] === "block" &&
+		typeof value["reason"] === "string" &&
+		isRecord(hookSpecificOutput) &&
+		hookSpecificOutput["hookEventName"] === "PostToolUse" &&
+		typeof hookSpecificOutput["additionalContext"] === "string"
+	);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
