@@ -1,3 +1,4 @@
+import type { UlwLoopScope } from "./paths.js";
 import { parseUlwLoopSteeringDirective, steerUlwLoop } from "./steering.js";
 
 export interface UserPromptSubmitPayload {
@@ -64,7 +65,7 @@ export async function applyUserPromptUlwLoopSteering(payload: UserPromptSubmitPa
 		if (payload.hook_event_name !== "UserPromptSubmit") return "";
 		const proposal = parseUlwLoopSteeringDirective(payload.prompt);
 		if (proposal === null) return "";
-		const result = await steerUlwLoop(payload.cwd, proposal);
+		const result = await steerUlwLoop(payload.cwd, proposal, payloadScope(payload));
 		if (!result.accepted) return "";
 		return JSON.stringify({
 			status: "accepted",
@@ -76,6 +77,10 @@ export async function applyUserPromptUlwLoopSteering(payload: UserPromptSubmitPa
 		if (error instanceof Error) return "";
 		return "";
 	}
+}
+
+function payloadScope(payload: UserPromptSubmitPayload): UlwLoopScope {
+	return { sessionId: payload.session_id };
 }
 
 export function applyPreToolUseGoalBudgetGuard(payload: PreToolUsePayload): string {

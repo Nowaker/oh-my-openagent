@@ -13,16 +13,17 @@ import {
 	runUlwLoopHookCli,
 	type UserPromptSubmitPayload,
 } from "../src/codex-hook.js";
-import { ulwLoopDir } from "../src/paths.js";
+import { ulwLoopDir, ulwLoopLedgerPath } from "../src/paths.js";
 import { writePlan } from "../src/plan-io.js";
 import type { UlwLoopPlan } from "../src/types.js";
 
 const NOW = "2026-05-23T00:00:00.000Z";
+const DEFAULT_SESSION_ID = "s1";
 
 async function bootstrapPlanRepo(): Promise<string> {
 	const repoRoot = await mkdtemp(join(tmpdir(), "ug-hook-"));
-	await mkdir(ulwLoopDir(repoRoot), { recursive: true });
-	await writePlan(repoRoot, samplePlan());
+	await mkdir(ulwLoopDir(repoRoot, { sessionId: DEFAULT_SESSION_ID }), { recursive: true });
+	await writePlan(repoRoot, samplePlan(), { sessionId: DEFAULT_SESSION_ID });
 	return repoRoot;
 }
 
@@ -50,7 +51,7 @@ function samplePlan(): UlwLoopPlan {
 }
 
 function payload(prompt: string, cwd: string): UserPromptSubmitPayload {
-	return { cwd, hook_event_name: "UserPromptSubmit", prompt, session_id: "s1" };
+	return { cwd, hook_event_name: "UserPromptSubmit", prompt, session_id: DEFAULT_SESSION_ID };
 }
 
 function preToolPayload(toolName: string, toolInput: unknown): PreToolUsePayload {
@@ -120,6 +121,22 @@ describe("applyUserPromptUlwLoopSteering - OMO directive patterns", () => {
 		);
 		expect(out.length).toBeGreaterThan(0);
 		expect(out).toContain("annotate_ledger");
+	});
+
+	it("#given a Codex session id #when steering from a hook #then writes the session-scoped ledger", async () => {
+		const repoRoot = await bootstrapPlanRepo();
+
+		const out = await applyUserPromptUlwLoopSteering(
+			payload(
+				'OMO_ULW_LOOP_STEER: {"kind":"annotate_ledger","source":"user_prompt_submit","evidence":"x","rationale":"y"}',
+				repoRoot,
+			),
+		);
+
+		expect(out).toContain("accepted");
+		expect(await readFile(ulwLoopLedgerPath(repoRoot, { sessionId: DEFAULT_SESSION_ID }), "utf8")).toContain(
+			"steering_accepted",
+		);
 	});
 
 	it("processes omo.ulw-loop.steer: pattern", async () => {

@@ -48,8 +48,8 @@ function buildText(
 		"- Use the create_goal payload exactly as rendered: objective and status only.",
 		"- Goals are unlimited. Do not add numeric limits.",
 		...modeConstraintLines(mode, isFinal),
-		finalSection(goal, isFinal, mode === "aggregate"),
-		...checkpointLines(mode),
+		finalSection(plan, goal, isFinal, mode === "aggregate"),
+		...checkpointLines(plan, mode),
 		"",
 		"create_goal payload:",
 		JSON.stringify(createGoal, null, 2),
@@ -75,9 +75,8 @@ function modeConstraintLines(mode: UlwLoopCodexGoalMode, isFinal: boolean): read
 	];
 }
 
-function checkpointLines(mode: UlwLoopCodexGoalMode): readonly string[] {
-	const failureLine =
-		"- If blocked or failed, checkpoint with --status failed and the failure evidence; rerun complete-goals --retry-failed to resume.";
+function checkpointLines(plan: UlwLoopPlan, mode: UlwLoopCodexGoalMode): readonly string[] {
+	const failureLine = `- If blocked or failed, checkpoint with --status failed and the failure evidence; rerun complete-goals${sessionOption(plan)} --retry-failed to resume.`;
 	if (mode === "per_story") return [failureLine];
 	return [
 		"- Checkpoint this OMO story with a fresh get_goal snapshot whose objective matches the aggregate payload.",
@@ -99,11 +98,12 @@ function formatCriterionLine(criterion: UlwLoopSuccessCriterion): string {
 	return `-${remainingWork} [${criterion.id}] (${criterion.userModel}) ${criterion.scenario} — expect: ${criterion.expectedEvidence} — status: ${criterion.status}`;
 }
 
-function finalSection(goal: UlwLoopItem, isFinal: boolean, aggregate: boolean): string {
+function finalSection(plan: UlwLoopPlan, goal: UlwLoopItem, isFinal: boolean, aggregate: boolean): string {
 	if (!isFinal)
 		return "- This is not the final ulw-loop story; do not run the final ai-slop-cleaner/$code-review gate yet.";
-	const blockerCommand = `omo ulw-loop record-review-blockers --goal-id ${goal.id} --title "Resolve final code-review blockers" --objective "<blocker-resolution objective>" --evidence "<review findings>" --codex-goal-json "<active get_goal JSON or path>"`;
-	const checkpointCommand = `omo ulw-loop checkpoint --goal-id ${goal.id} --status complete --evidence "<tests/files/PR evidence>" --codex-goal-json "<fresh complete get_goal JSON or path>" --quality-gate-json "<quality gate JSON or path>"`;
+	const option = sessionOption(plan);
+	const blockerCommand = `omo ulw-loop record-review-blockers${option} --goal-id ${goal.id} --title "Resolve final code-review blockers" --objective "<blocker-resolution objective>" --evidence "<review findings>" --codex-goal-json "<active get_goal JSON or path>"`;
+	const checkpointCommand = `omo ulw-loop checkpoint${option} --goal-id ${goal.id} --status complete --evidence "<tests/files/PR evidence>" --codex-goal-json "<fresh complete get_goal JSON or path>" --quality-gate-json "<quality gate JSON or path>"`;
 	return joinLines([
 		"Final story — run mandatory quality gate before update_goal:",
 		"- Run ai-slop-cleaner on changed files even when it is a no-op, rerun verification, then run $code-review.",
@@ -114,6 +114,14 @@ function finalSection(goal: UlwLoopItem, isFinal: boolean, aggregate: boolean): 
 			: '- If final $code-review is clean, call update_goal({status: "complete"}), call get_goal again, then checkpoint:',
 		`  ${checkpointCommand}`,
 	]);
+}
+
+function sessionOption(plan: UlwLoopPlan): string {
+	const prefix = ".omo/ulw-loop/";
+	const suffix = "/goals.json";
+	if (!plan.goalsPath.startsWith(prefix) || !plan.goalsPath.endsWith(suffix)) return "";
+	const sessionId = plan.goalsPath.slice(prefix.length, -suffix.length);
+	return sessionId.length === 0 ? "" : ` --session-id ${sessionId}`;
 }
 
 function joinLines(lines: readonly string[]): string {

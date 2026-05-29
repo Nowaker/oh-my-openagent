@@ -83,6 +83,22 @@ describe("buildCodexGoalInstruction aggregate mode", () => {
 		});
 		expect(text).toMatch(/quality gate/i);
 	});
+
+	it("#given a scoped plan #when rendering final commands #then includes the session id option", () => {
+		const { text } = buildCodexGoalInstruction({
+			plan: makePlan({
+				codexGoalMode: "aggregate",
+				goalsPath: ".omo/ulw-loop/session-A/goals.json",
+				ledgerPath: ".omo/ulw-loop/session-A/ledger.jsonl",
+			}),
+			goal: makeGoal(),
+			isFinal: true,
+		});
+
+		expect(text).toContain("record-review-blockers --session-id session-A");
+		expect(text).toContain("checkpoint --session-id session-A");
+		expect(text).toContain("complete-goals --session-id session-A --retry-failed");
+	});
 });
 
 describe("buildCodexGoalInstruction per_story mode", () => {
