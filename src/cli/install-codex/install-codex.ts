@@ -8,9 +8,14 @@ import { trustedHookStatesForPlugin } from "./codex-hook-trust"
 import { linkCachedPluginAgents } from "./link-cached-plugin-agents"
 import { readMarketplace, readPluginManifest, resolvePluginSource, validatePathSegment } from "./codex-marketplace"
 import { defaultRunCommand } from "./codex-process"
-import type { CodexInstallOptions, CodexInstallResult, InstalledPlugin } from "./types"
+import type { CodexInstallOptions, CodexInstallResult, CodexMarketplaceSource, InstalledPlugin } from "./types"
 
 const SISYPHUS_LEGACY_CACHE_MARKETPLACES = ["lazycodex", "code-yeongyu-codex-plugins"] as const
+const SISYPHUS_MARKETPLACE_SOURCE: CodexMarketplaceSource = {
+  sourceType: "git",
+  source: "https://github.com/code-yeongyu/lazycodex.git",
+  ref: "main",
+} as const
 
 export async function runCodexInstaller(options: CodexInstallOptions = {}): Promise<CodexInstallResult> {
   const repoRoot = resolve(options.repoRoot ?? findRepoRootFromImporter(import.meta.dir))
@@ -98,7 +103,7 @@ export async function runCodexInstaller(options: CodexInstallOptions = {}): Prom
     configPath,
     repoRoot: codexPackageRoot,
     marketplaceName: marketplace.name,
-    marketplaceSource: { sourceType: "local", source: marketplaceRoot },
+    marketplaceSource: codexMarketplaceSource(marketplace.name, marketplaceRoot),
     pluginNames: marketplace.plugins.map((plugin) => plugin.name),
     trustedHookStates,
     agentConfigs: [...agentConfigs.values()].sort((left, right) => left.name.localeCompare(right.name)),
@@ -159,6 +164,11 @@ async function writeCachedMarketplaceManifest(input: {
 
 function legacyCacheMarketplaces(marketplaceName: string): readonly string[] {
   return marketplaceName === "sisyphuslabs" ? SISYPHUS_LEGACY_CACHE_MARKETPLACES : []
+}
+
+function codexMarketplaceSource(marketplaceName: string, marketplaceRoot: string): CodexMarketplaceSource {
+  if (marketplaceName === "sisyphuslabs") return SISYPHUS_MARKETPLACE_SOURCE
+  return { sourceType: "local", source: marketplaceRoot }
 }
 
 function findRepoRootFromImporter(importerDir: string): string {

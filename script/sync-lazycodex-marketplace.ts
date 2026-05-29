@@ -3,8 +3,12 @@ import { dirname, join, resolve, sep } from "node:path"
 
 const MARKETPLACE_SOURCE_PATH = join("packages", "omo-codex", "marketplace.json")
 const PLUGIN_SOURCE_PATH = join("packages", "omo-codex", "plugin")
+const AST_GREP_MCP_DIST_SOURCE_PATH = join("packages", "ast-grep-mcp", "dist")
 const MARKETPLACE_DESTINATION_PATH = join(".agents", "plugins", "marketplace.json")
 const PLUGIN_DESTINATION_PATH = join("plugins", "omo")
+const AST_GREP_MCP_DIST_DESTINATION_PATH = join(PLUGIN_DESTINATION_PATH, "components", "ast-grep-mcp", "dist")
+const AST_GREP_MCP_SOURCE_ARG = "../../ast-grep-mcp/dist/cli.js"
+const AST_GREP_MCP_PLUGIN_ARG = "./components/ast-grep-mcp/dist/cli.js"
 
 export interface SyncLazycodexMarketplaceInput {
   readonly sourceRoot: string
@@ -48,6 +52,8 @@ export async function syncLazycodexMarketplace(input: SyncLazycodexMarketplaceIn
     recursive: true,
     filter: (path) => shouldCopyPluginPath(path, pluginRoot),
   })
+  await copyAstGrepMcpDist(sourceRoot, lazycodexRoot)
+  await rewritePluginMcpManifest(destinationPluginRoot)
 }
 
 async function readMarketplaceManifest(path: string): Promise<MarketplaceManifest> {
@@ -79,6 +85,44 @@ async function isFile(path: string): Promise<boolean> {
     if (error instanceof Error) return false
     return false
   }
+}
+
+async function isDirectory(path: string): Promise<boolean> {
+  try {
+    return (await stat(path)).isDirectory()
+  } catch (error) {
+    if (error instanceof Error) return false
+    return false
+  }
+}
+
+async function copyAstGrepMcpDist(sourceRoot: string, lazycodexRoot: string): Promise<void> {
+  const sourcePath = join(sourceRoot, AST_GREP_MCP_DIST_SOURCE_PATH)
+  if (!(await isDirectory(sourcePath))) {
+    throw new Error(`missing built ast-grep MCP dist at ${sourcePath}`)
+  }
+  const destinationPath = join(lazycodexRoot, AST_GREP_MCP_DIST_DESTINATION_PATH)
+  await mkdir(dirname(destinationPath), { recursive: true })
+  await cp(sourcePath, destinationPath, { recursive: true })
+}
+
+async function rewritePluginMcpManifest(pluginRoot: string): Promise<void> {
+  const manifestPath = join(pluginRoot, ".mcp.json")
+  if (!(await isFile(manifestPath))) return
+  const parsed: unknown = JSON.parse(await readFile(manifestPath, "utf8"))
+  if (!isRecord(parsed) || !isRecord(parsed.mcpServers)) return
+
+  let changed = false
+  for (const server of Object.values(parsed.mcpServers)) {
+    if (!isRecord(server) || !Array.isArray(server.args)) continue
+    const currentArgs = server.args
+    const nextArgs = currentArgs.map((arg) => (arg === AST_GREP_MCP_SOURCE_ARG ? AST_GREP_MCP_PLUGIN_ARG : arg))
+    if (nextArgs.some((arg, index) => arg !== currentArgs[index])) {
+      server.args = nextArgs
+      changed = true
+    }
+  }
+  if (changed) await writeFile(manifestPath, `${JSON.stringify(parsed, null, "\t")}\n`)
 }
 
 function shouldCopyPluginPath(path: string, root: string): boolean {

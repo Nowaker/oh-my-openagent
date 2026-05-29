@@ -49,7 +49,7 @@ describe("install-codex", () => {
     expect(binDir).toBe(explicitBinDir)
   })
 
-  test("installs vendored plugin into codex home and stays idempotent", async () => {
+  test("#given codex installer #when installing omo #then registers git marketplace and cached plugin", async () => {
     // given
     const codexHome = await mkdtemp(join(tmpdir(), "omo-codex-home-"))
     const binDir = await mkdtemp(join(tmpdir(), "omo-codex-bin-"))
@@ -68,9 +68,10 @@ describe("install-codex", () => {
     const configContent = await readFile(join(codexHome, "config.toml"), "utf8")
     expect(configContent).toContain("[features]")
     expect(configContent).toContain("[marketplaces.sisyphuslabs]")
-    expect(configContent).toContain('source_type = "local"')
-    expect(configContent).toContain(`source = "${join(codexHome, "plugins", "cache", "sisyphuslabs")}"`)
-    expect(configContent).not.toContain('ref = "main"')
+    expect(configContent).toContain('source_type = "git"')
+    expect(configContent).toContain('source = "https://github.com/code-yeongyu/lazycodex.git"')
+    expect(configContent).toContain('ref = "main"')
+    expect(configContent).not.toContain(`source = "${join(codexHome, "plugins", "cache", "sisyphuslabs")}"`)
     expect(configContent).toContain("[plugins.\"omo@sisyphuslabs\"]")
     expect(configContent).toContain("[hooks.state.")
     expect(configContent).toContain("[agents.explorer]")

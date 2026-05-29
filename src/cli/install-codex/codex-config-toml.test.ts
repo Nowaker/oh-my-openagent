@@ -1,3 +1,6 @@
+/// <reference path="../../../bun-test.d.ts" />
+/// <reference types="bun-types" />
+
 import { describe, expect, test } from "bun:test"
 import { mkdtemp, readFile, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
@@ -115,6 +118,17 @@ describe("codex-config-toml", () => {
         '[hooks.state."omo@code-yeongyu-codex-plugins:hooks/hooks.json:post_tool_use:0:0"]',
         'trusted_hash = "sha256:old"',
         "",
+        "[marketplaces.lazycodex]",
+        'last_updated = "2026-05-10T00:00:00Z"',
+        'source_type = "local"',
+        'source = "/tmp/stale-lazycodex-cache"',
+        "",
+        '[plugins."omo@lazycodex"]',
+        "enabled = true",
+        "",
+        '[hooks.state."omo@lazycodex:hooks/hooks.json:post_tool_use:0:0"]',
+        'trusted_hash = "sha256:stale"',
+        "",
       ].join("\n"),
     )
 
@@ -172,6 +186,8 @@ describe("codex-config-toml", () => {
     expect(content).toContain("[agents.plan]")
     expect(content).toContain('config_file = "./agents/plan.toml"')
     expect(content).not.toContain("[marketplaces.lazycodex]")
+    expect(content).not.toContain("omo@lazycodex")
+    expect(content).not.toContain("/tmp/stale-lazycodex-cache")
     expect(content).not.toContain("code-yeongyu-codex-plugins")
     expect(content).not.toContain('source_type = "local"')
   })

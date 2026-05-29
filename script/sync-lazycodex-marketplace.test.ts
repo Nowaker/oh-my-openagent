@@ -20,13 +20,23 @@ async function writePluginFixture(sourceRoot: string): Promise<void> {
     name: "omo",
     version: "1.2.3",
   })
+  await writeJson(join(sourceRoot, "packages", "omo-codex", "plugin", ".mcp.json"), {
+    mcpServers: {
+      ast_grep: { command: "node", args: ["../../ast-grep-mcp/dist/cli.js", "mcp"], cwd: "." },
+      lsp: { command: "node", args: ["./components/lsp/dist/cli.js", "mcp"], cwd: "." },
+    },
+  })
   await writeFile(join(sourceRoot, "packages", "omo-codex", "plugin", "README.md"), "omo\n")
+  await mkdir(join(sourceRoot, "packages", "omo-codex", "plugin", "components", "lsp", "dist"), { recursive: true })
+  await writeFile(join(sourceRoot, "packages", "omo-codex", "plugin", "components", "lsp", "dist", "cli.js"), "#!/usr/bin/env node\n")
+  await mkdir(join(sourceRoot, "packages", "ast-grep-mcp", "dist"), { recursive: true })
+  await writeFile(join(sourceRoot, "packages", "ast-grep-mcp", "dist", "cli.js"), "#!/usr/bin/env node\n")
   await mkdir(join(sourceRoot, "packages", "omo-codex", "plugin", "node_modules", "ignored"), { recursive: true })
   await writeFile(join(sourceRoot, "packages", "omo-codex", "plugin", "node_modules", "ignored", "file.txt"), "ignored\n")
 }
 
 describe("sync-lazycodex-marketplace", () => {
-  test("copies the Codex marketplace manifest and clean plugin bundle", async () => {
+  test("#given marketplace sync #when copying plugin bundle #then emits self-contained mcp paths", async () => {
     // given
     const sourceRoot = await mkdtemp(join(tmpdir(), "omo-sync-source-"))
     const lazycodexRoot = await mkdtemp(join(tmpdir(), "omo-sync-lazycodex-"))
@@ -41,7 +51,17 @@ describe("sync-lazycodex-marketplace", () => {
     expect(marketplace.plugins[0].source).toBe("./plugins/omo")
     const manifest = JSON.parse(await readFile(join(lazycodexRoot, "plugins", "omo", ".codex-plugin", "plugin.json"), "utf8"))
     expect(manifest).toMatchObject({ name: "omo", version: "1.2.3" })
-    await expect(stat(join(lazycodexRoot, "plugins", "omo", "node_modules"))).rejects.toThrow()
+    const mcpManifest = JSON.parse(await readFile(join(lazycodexRoot, "plugins", "omo", ".mcp.json"), "utf8"))
+    expect(mcpManifest.mcpServers.ast_grep.args[0]).toBe("./components/ast-grep-mcp/dist/cli.js")
+    expect(mcpManifest.mcpServers.lsp.args[0]).toBe("./components/lsp/dist/cli.js")
+    expect((await stat(join(lazycodexRoot, "plugins", "omo", "components", "ast-grep-mcp", "dist", "cli.js"))).isFile()).toBe(true)
+    let nodeModulesMissing = false
+    try {
+      await stat(join(lazycodexRoot, "plugins", "omo", "node_modules"))
+    } catch (error) {
+      nodeModulesMissing = error instanceof Error
+    }
+    expect(nodeModulesMissing).toBe(true)
   })
 
   test("rejects a source tree without a Codex plugin manifest", async () => {
@@ -53,7 +73,15 @@ describe("sync-lazycodex-marketplace", () => {
       plugins: [{ name: "omo", source: "./plugins/omo" }],
     })
 
-    // when / then
-    await expect(syncLazycodexMarketplace({ sourceRoot, lazycodexRoot })).rejects.toThrow("missing Codex plugin manifest")
+    // when
+    let message = ""
+    try {
+      await syncLazycodexMarketplace({ sourceRoot, lazycodexRoot })
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error)
+    }
+
+    // then
+    expect(message).toContain("missing Codex plugin manifest")
   })
 })
