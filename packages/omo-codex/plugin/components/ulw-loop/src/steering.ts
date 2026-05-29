@@ -1,5 +1,6 @@
 // biome-ignore-all format: compact steering module must stay below the 240 pure-LOC budget
 import { isUlwLoopDone } from "./goal-status.js";
+import type { UlwLoopScope } from "./paths.js";
 import { appendLedger, readSteeringLedgerEntries, readUlwLoopPlan, withUlwLoopMutationLock, writePlan } from "./plan-io.js";
 import type {
 	SteerUlwLoopResult,
@@ -236,19 +237,19 @@ export function parseUlwLoopSteeringDirective(text: string): UlwLoopSteeringProp
 	}
 }
 
-export async function steerUlwLoop(repoRoot: string, proposal: UlwLoopSteeringProposal): Promise<SteerUlwLoopResult> {
-	return withUlwLoopMutationLock(repoRoot, async () => {
-		const plan = await readUlwLoopPlan(repoRoot);
+export async function steerUlwLoop(repoRoot: string, proposal: UlwLoopSteeringProposal, scope?: UlwLoopScope): Promise<SteerUlwLoopResult> {
+	return withUlwLoopMutationLock(repoRoot, scope, async () => {
+		const plan = await readUlwLoopPlan(repoRoot, scope);
 		const key = proposal.idempotencyKey ?? proposal.promptSignature;
-		const prior = key === undefined ? undefined : (await readSteeringLedgerEntries(repoRoot)).find((entry) => entry.steering?.invariant.accepted === true && (entry.idempotencyKey === key || entry.steering.idempotencyKey === key || entry.steering.promptSignature === key));
+		const prior = key === undefined ? undefined : (await readSteeringLedgerEntries(repoRoot, scope)).find((entry) => entry.steering?.invariant.accepted === true && (entry.idempotencyKey === key || entry.steering.idempotencyKey === key || entry.steering.promptSignature === key));
 		if (prior?.steering !== undefined) return { plan, accepted: true, audit: { ...prior.steering, deduped: true }, rejectedReasons: [], deduped: true };
 		const audit = validateUlwLoopSteeringProposal(plan, proposal);
 		const accepted = audit.invariant.accepted;
 		const next = accepted ? applySteeringMutation(plan, proposal, audit) : plan;
 		const finalAudit: UlwLoopSteeringAudit = { ...audit, before: plan };
 		if (accepted) finalAudit.after = next;
-		if (accepted) await writePlan(repoRoot, next);
-		await appendLedger(repoRoot, ledgerEntry(proposal, finalAudit, proposal.now?.toISOString() ?? iso()));
+		if (accepted) await writePlan(repoRoot, next, scope);
+		await appendLedger(repoRoot, ledgerEntry(proposal, finalAudit, proposal.now?.toISOString() ?? iso()), scope);
 		return { plan: next, accepted, audit: finalAudit, rejectedReasons: audit.invariant.rejectedReasons, deduped: false };
 	});
 }

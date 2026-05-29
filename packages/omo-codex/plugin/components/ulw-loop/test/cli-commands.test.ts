@@ -9,11 +9,20 @@ import { ULW_LOOP_AGGREGATE_CODEX_OBJECTIVE } from "../src/goal-status.js";
 let testDir: string;
 let out: string[];
 let err: string[];
+let originalCodexSessionId: string | undefined;
+let originalCodexThreadId: string | undefined;
+let originalOmoSessionId: string | undefined;
 
 beforeEach(async () => {
 	testDir = await mkdtemp(join(tmpdir(), "ug-cli-"));
 	out = [];
 	err = [];
+	originalCodexSessionId = process.env["CODEX_SESSION_ID"];
+	originalCodexThreadId = process.env["CODEX_THREAD_ID"];
+	originalOmoSessionId = process.env["OMO_ULW_LOOP_SESSION_ID"];
+	delete process.env["CODEX_SESSION_ID"];
+	delete process.env["CODEX_THREAD_ID"];
+	delete process.env["OMO_ULW_LOOP_SESSION_ID"];
 	vi.spyOn(process, "cwd").mockReturnValue(testDir);
 	vi.spyOn(process.stdout, "write").mockImplementation((chunk: string | Uint8Array): boolean => {
 		out.push(chunk.toString());
@@ -27,6 +36,12 @@ beforeEach(async () => {
 
 afterEach(async () => {
 	vi.restoreAllMocks();
+	if (originalCodexSessionId === undefined) delete process.env["CODEX_SESSION_ID"];
+	else process.env["CODEX_SESSION_ID"] = originalCodexSessionId;
+	if (originalCodexThreadId === undefined) delete process.env["CODEX_THREAD_ID"];
+	else process.env["CODEX_THREAD_ID"] = originalCodexThreadId;
+	if (originalOmoSessionId === undefined) delete process.env["OMO_ULW_LOOP_SESSION_ID"];
+	else process.env["OMO_ULW_LOOP_SESSION_ID"] = originalOmoSessionId;
 	await rm(testDir, { recursive: true, force: true });
 });
 
@@ -84,6 +99,48 @@ describe("ulwLoopCommand create-goals", () => {
 		expect(await readFile(join(testDir, ".omo/ulw-loop/brief.md"), "utf8")).toContain("Goal A");
 		expect(await readFile(join(testDir, ".omo/ulw-loop/goals.json"), "utf8")).toContain("successCriteria");
 		expect(await readFile(join(testDir, ".omo/ulw-loop/ledger.jsonl"), "utf8")).toContain("plan_created");
+	});
+
+	it("#given two session ids #when creating goals #then writes isolated session-scoped plans", async () => {
+		expect(await ulwLoopCommand(["create-goals", "--session-id", "session-A", "--brief", "- Alpha", "--json"])).toBe(
+			0,
+		);
+		resetOutput();
+
+		expect(await ulwLoopCommand(["create-goals", "--session-id", "session-B", "--brief", "- Beta", "--json"])).toBe(
+			0,
+		);
+		resetOutput();
+
+		expect(await readFile(join(testDir, ".omo/ulw-loop/session-A/goals.json"), "utf8")).toContain("Alpha");
+		expect(await readFile(join(testDir, ".omo/ulw-loop/session-B/goals.json"), "utf8")).toContain("Beta");
+
+		expect(await ulwLoopCommand(["status", "--session-id", "session-A", "--json"])).toBe(0);
+		expect(stdoutJson()).toMatchObject({
+			plan: { goalsPath: ".omo/ulw-loop/session-A/goals.json", goals: [{ title: "Alpha" }] },
+		});
+		expect(out.join("")).not.toContain("Beta");
+	});
+
+	it("#given Codex thread env #when creating goals #then uses the thread as the session scope", async () => {
+		process.env["CODEX_THREAD_ID"] = "thread-123";
+
+		expect(await ulwLoopCommand(["create-goals", "--brief", "- Thread scoped", "--json"])).toBe(0);
+		resetOutput();
+
+		expect(await readFile(join(testDir, ".omo/ulw-loop/thread-123/goals.json"), "utf8")).toContain("Thread scoped");
+		expect(await ulwLoopCommand(["status", "--json"])).toBe(0);
+		expect(stdoutJson()).toHaveProperty("plan.goalsPath", ".omo/ulw-loop/thread-123/goals.json");
+	});
+
+	it("#given Codex thread env and explicit session id #when creating goals #then the explicit session wins", async () => {
+		process.env["CODEX_THREAD_ID"] = "thread-123";
+
+		expect(
+			await ulwLoopCommand(["create-goals", "--session-id", "manual-456", "--brief", "- Manual scoped", "--json"]),
+		).toBe(0);
+
+		expect(await readFile(join(testDir, ".omo/ulw-loop/manual-456/goals.json"), "utf8")).toContain("Manual scoped");
 	});
 });
 

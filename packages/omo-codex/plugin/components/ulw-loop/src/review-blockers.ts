@@ -2,6 +2,7 @@
 
 import { readCodexGoalSnapshotInput, reconcileCodexGoalSnapshot } from "./codex-goal-snapshot.js";
 import { codexGoalMode, compatibleCodexObjectives, expectedCodexObjective, isFinalRunCompletionCandidate } from "./goal-status.js";
+import type { UlwLoopScope } from "./paths.js";
 import { seedDefaultSuccessCriteria } from "./plan-crud.js";
 import { appendLedger, readUlwLoopPlan, withUlwLoopMutationLock, writePlan } from "./plan-io.js";
 import type { UlwLoopItem, UlwLoopLedgerEntry, UlwLoopPlan } from "./types.js";
@@ -43,9 +44,10 @@ function appendBlockerGoal(plan: UlwLoopPlan, args: RecordFinalReviewBlockersArg
 export async function recordFinalReviewBlockers(
 	repoRoot: string,
 	args: RecordFinalReviewBlockersArgs,
+	scope?: UlwLoopScope,
 ): Promise<RecordFinalReviewBlockersResult> {
-	return withUlwLoopMutationLock(repoRoot, async () => {
-		const plan = await readUlwLoopPlan(repoRoot);
+	return withUlwLoopMutationLock(repoRoot, scope, async () => {
+		const plan = await readUlwLoopPlan(repoRoot, scope);
 		const goal = plan.goals.find((candidate) => candidate.id === args.goalId);
 		if (goal === undefined) ulwLoopError(`Unknown ulw-loop id: ${args.goalId}`, "ulw_loop_goal_not_found");
 		if (goal.status !== "in_progress") ulwLoopError(`${goal.id} is ${goal.status}.`, "ulw_loop_goal_not_in_progress");
@@ -72,8 +74,8 @@ export async function recordFinalReviewBlockers(
 		const summaryEntry: UlwLoopLedgerEntry = { at: now, kind: "goal_review_blocked", goalId: goal.id, status: goal.status, evidence: args.evidence, codexGoal, message: `Review blockers recorded; appended ${newGoal.id}.` };
 		Reflect.set(summaryEntry, "kind", "blocker_recorded");
 		const ledgerEntries = [blockedEntry, addedEntry, summaryEntry];
-		await writePlan(repoRoot, plan);
-		for (const entry of ledgerEntries) await appendLedger(repoRoot, entry);
+		await writePlan(repoRoot, plan, scope);
+		for (const entry of ledgerEntries) await appendLedger(repoRoot, entry, scope);
 		return { plan, blockedGoal: goal, newGoal, ledgerEntries };
 	});
 }

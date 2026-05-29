@@ -1,5 +1,6 @@
 // biome-ignore-all format: keep this module under the mandated pure LOC budget.
 import { hasAllCriteriaPass } from "./goal-status.js";
+import type { UlwLoopScope } from "./paths.js";
 import { appendLedger, readUlwLoopPlan, withUlwLoopMutationLock, writePlan } from "./plan-io.js";
 import type { UlwLoopItem, UlwLoopLedgerEntry, UlwLoopPlan, UlwLoopSuccessCriterion } from "./types.js";
 import { iso, UlwLoopError } from "./types.js";
@@ -34,9 +35,9 @@ function findCriterion(goal: UlwLoopItem, criterionId: string): UlwLoopSuccessCr
 
 function nonEmptyEvidence(evidence: string): string { const trimmed = evidence.trim(); return trimmed || ulwLoopFail("Evidence must be a non-empty string.", "ULW_LOOP_EVIDENCE_REQUIRED", {}); }
 
-export async function recordEvidence(repoRoot: string, args: RecordEvidenceArgs): Promise<{ plan: UlwLoopPlan; goal: UlwLoopItem; criterion: UlwLoopSuccessCriterion; ledgerEntry: UlwLoopLedgerEntry }> {
-	return withUlwLoopMutationLock(repoRoot, async () => {
-		const plan = await readUlwLoopPlan(repoRoot);
+export async function recordEvidence(repoRoot: string, args: RecordEvidenceArgs, scope?: UlwLoopScope): Promise<{ plan: UlwLoopPlan; goal: UlwLoopItem; criterion: UlwLoopSuccessCriterion; ledgerEntry: UlwLoopLedgerEntry }> {
+	return withUlwLoopMutationLock(repoRoot, scope, async () => {
+		const plan = await readUlwLoopPlan(repoRoot, scope);
 		const goal = findGoal(plan, args.goalId);
 		const criterion = findCriterion(goal, args.criterionId);
 		const evidence = nonEmptyEvidence(args.evidence);
@@ -49,7 +50,7 @@ export async function recordEvidence(repoRoot: string, args: RecordEvidenceArgs)
 		if (args.notes !== undefined) criterion.notes = args.notes;
 		goal.updatedAt = capturedAt;
 		plan.updatedAt = capturedAt;
-		await writePlan(repoRoot, plan);
+		await writePlan(repoRoot, plan, scope);
 		const ledgerEntry: UlwLoopLedgerEntry = {
 			at: capturedAt,
 			kind,
@@ -61,14 +62,14 @@ export async function recordEvidence(repoRoot: string, args: RecordEvidenceArgs)
 			before: { status: prevStatus },
 			after: { goalId: goal.id, criterionId: criterion.id, status: args.status, evidence, capturedAt, prevStatus },
 		};
-		await appendLedger(repoRoot, ledgerEntry);
+		await appendLedger(repoRoot, ledgerEntry, scope);
 		return { plan, goal, criterion, ledgerEntry };
 	});
 }
 
-export async function markCriteriaPendingResetForGoal(repoRoot: string, goalId: string): Promise<{ plan: UlwLoopPlan; resetCount: number }> {
-	return withUlwLoopMutationLock(repoRoot, async () => {
-		const plan = await readUlwLoopPlan(repoRoot);
+export async function markCriteriaPendingResetForGoal(repoRoot: string, goalId: string, scope?: UlwLoopScope): Promise<{ plan: UlwLoopPlan; resetCount: number }> {
+	return withUlwLoopMutationLock(repoRoot, scope, async () => {
+		const plan = await readUlwLoopPlan(repoRoot, scope);
 		const goal = findGoal(plan, goalId);
 		const now = iso();
 		const before = goal.successCriteria.map((criterion) => ({ id: criterion.id, status: criterion.status, capturedEvidence: criterion.capturedEvidence, capturedAt: criterion.capturedAt ?? null }));
@@ -80,8 +81,8 @@ export async function markCriteriaPendingResetForGoal(repoRoot: string, goalId: 
 		}
 		goal.updatedAt = now;
 		plan.updatedAt = now;
-		await writePlan(repoRoot, plan);
-		await appendLedger(repoRoot, { at: now, kind: "criteria_revised", goalId, message: `Reset ${goal.successCriteria.length} criteria to pending.`, before, after: { resetCount: goal.successCriteria.length } });
+		await writePlan(repoRoot, plan, scope);
+		await appendLedger(repoRoot, { at: now, kind: "criteria_revised", goalId, message: `Reset ${goal.successCriteria.length} criteria to pending.`, before, after: { resetCount: goal.successCriteria.length } }, scope);
 		return { plan, resetCount: goal.successCriteria.length };
 	});
 }

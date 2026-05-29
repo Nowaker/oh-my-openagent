@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 import { formatCodexGoalReconciliation, readCodexGoalSnapshotInput, reconcileCodexGoalSnapshot } from "./codex-goal-snapshot.js";
 import { requireAllCriteriaPass } from "./evidence.js";
 import { codexGoalMode, compatibleCodexObjectives, expectedCodexObjective, isFinalRunCompletionCandidate } from "./goal-status.js";
-import { ulwLoopBriefPath } from "./paths.js";
+import { type UlwLoopScope, ulwLoopBriefPath } from "./paths.js";
 import { appendLedger, readUlwLoopPlan, withUlwLoopMutationLock, writePlan } from "./plan-io.js";
 import { classifyExternalAuthorizationBlocker, clearGoalBlockerFields, sameBlockerOccurrences, validateQualityGate } from "./quality-gate.js";
 import type { UlwLoopAggregateCompletion, UlwLoopItem, UlwLoopLedgerEntry, UlwLoopPlan, UlwLoopQualityGate } from "./types.js";
@@ -32,12 +32,12 @@ function textHasCompletionValidationEvidence(value: string | undefined): boolean
 	return done && verified;
 }
 
-async function snapshotObjectiveMapsToUlwLoopPlan(repoRoot: string, snapshotObjective: string): Promise<boolean> {
+async function snapshotObjectiveMapsToUlwLoopPlan(repoRoot: string, snapshotObjective: string, scope?: UlwLoopScope): Promise<boolean> {
 	const actual = normalizeObjective(snapshotObjective).toLowerCase();
 	if (textMentionsUlwLoopPlanArtifact(actual)) return true;
-	if (actual.length < 24 || !existsSync(ulwLoopBriefPath(repoRoot))) return false;
+	if (actual.length < 24 || !existsSync(ulwLoopBriefPath(repoRoot, scope))) return false;
 	try {
-		const brief = normalizeObjective(await readFile(ulwLoopBriefPath(repoRoot), "utf8")).toLowerCase();
+		const brief = normalizeObjective(await readFile(ulwLoopBriefPath(repoRoot, scope), "utf8")).toLowerCase();
 		return brief.length >= 24 && (brief.includes(actual) || actual.includes(brief));
 	} catch (error) {
 		if (error instanceof Error) return false;
@@ -45,13 +45,13 @@ async function snapshotObjectiveMapsToUlwLoopPlan(repoRoot: string, snapshotObje
 	}
 }
 
-async function canReconcileCompletedTaskScopedAggregateSnapshot(repoRoot: string, plan: UlwLoopPlan, goal: UlwLoopItem, snapshotObjective: string, evidence: string): Promise<boolean> {
+async function canReconcileCompletedTaskScopedAggregateSnapshot(repoRoot: string, plan: UlwLoopPlan, goal: UlwLoopItem, snapshotObjective: string, evidence: string, scope?: UlwLoopScope): Promise<boolean> {
 	if (codexGoalMode(plan) !== "aggregate") return false;
 	if (goal.status !== "in_progress" || plan.activeGoalId !== goal.id) return false;
-	if (isFinalRunCompletionCandidate(plan, goal)) return snapshotObjectiveMapsToUlwLoopPlan(repoRoot, snapshotObjective);
+	if (isFinalRunCompletionCandidate(plan, goal)) return snapshotObjectiveMapsToUlwLoopPlan(repoRoot, snapshotObjective, scope);
 	if (!textMentionsUlwLoopPlanArtifact(evidence) || !textMentionsGoalId(evidence, goal.id)) return false;
 	if (!textHasCompletionValidationEvidence(evidence)) return false;
-	return snapshotObjectiveMapsToUlwLoopPlan(repoRoot, snapshotObjective);
+	return snapshotObjectiveMapsToUlwLoopPlan(repoRoot, snapshotObjective, scope);
 }
 
 function buildCompletedLegacyGoalRemediation(goal: UlwLoopItem): string {
@@ -112,9 +112,9 @@ function buildLedger(now: string, args: CheckpointUlwLoopArgs, goal: UlwLoopItem
 	return entry;
 }
 
-export async function checkpointUlwLoop(repoRoot: string, args: CheckpointUlwLoopArgs): Promise<CheckpointUlwLoopResult> {
-	return withUlwLoopMutationLock(repoRoot, async () => {
-		const plan = await readUlwLoopPlan(repoRoot);
+export async function checkpointUlwLoop(repoRoot: string, args: CheckpointUlwLoopArgs, scope?: UlwLoopScope): Promise<CheckpointUlwLoopResult> {
+	return withUlwLoopMutationLock(repoRoot, scope, async () => {
+		const plan = await readUlwLoopPlan(repoRoot, scope);
 		const goal = findGoal(plan, args.goalId);
 		if (args.status === "complete") requireAllCriteriaPass(goal);
 		const evidence = nonEmptyEvidence(args.evidence);
@@ -130,7 +130,7 @@ export async function checkpointUlwLoop(repoRoot: string, args: CheckpointUlwLoo
 			codexGoal = reconciliation.snapshot.raw;
 			if (!reconciliation.ok) {
 				const objective = snapshot?.objective;
-				const taskScoped = snapshot?.available === true && snapshot.status === "complete" && objective !== undefined && normalizeObjective(objective) !== normalizeObjective(expectedCodexObjective(plan, goal)) && await canReconcileCompletedTaskScopedAggregateSnapshot(repoRoot, plan, goal, objective, evidence);
+				const taskScoped = snapshot?.available === true && snapshot.status === "complete" && objective !== undefined && normalizeObjective(objective) !== normalizeObjective(expectedCodexObjective(plan, goal)) && await canReconcileCompletedTaskScopedAggregateSnapshot(repoRoot, plan, goal, objective, evidence, scope);
 				if (!taskScoped) throw new UlwLoopError(`${formatCodexGoalReconciliation(reconciliation)}${aggregate && snapshot?.status === "complete" && objective !== undefined ? buildTaskScopedAggregateReconciliationHint(goal, final) : ""}`, "ulw_loop_codex_snapshot_mismatch");
 				aggregateCompletion = makeAggregateCompletion(now, evidence, codexGoal);
 			}
@@ -147,9 +147,9 @@ export async function checkpointUlwLoop(repoRoot: string, args: CheckpointUlwLoo
 		goal.updatedAt = now;
 		if (aggregateCompletion !== undefined) plan.aggregateCompletion = aggregateCompletion;
 		plan.updatedAt = now;
-		await writePlan(repoRoot, plan);
+		await writePlan(repoRoot, plan, scope);
 		const ledgerEntry = buildLedger(now, args, goal, qualityGate, codexGoal, aggregateCompletion);
-		await appendLedger(repoRoot, ledgerEntry);
+		await appendLedger(repoRoot, ledgerEntry, scope);
 		return aggregateCompletion === undefined ? { plan, goal, ledgerEntry } : { plan, goal, ledgerEntry, aggregateCompletion };
 	});
 }
