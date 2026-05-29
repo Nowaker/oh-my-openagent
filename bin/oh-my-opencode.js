@@ -6,7 +6,11 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { basename } from "node:path";
-import { getPlatformPackageCandidates, getBinaryPath } from "./platform.js";
+import {
+  getPlatformPackageCandidates,
+  getBinaryPath,
+  resolvePlatformPackageBaseName,
+} from "./platform.js";
 
 const require = createRequire(import.meta.url);
 
@@ -75,7 +79,7 @@ function getSignalExitCode(signal) {
 function getPackageBaseName() {
   try {
     const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
-    return packageJson.name || "oh-my-opencode";
+    return resolvePlatformPackageBaseName(packageJson.name || "oh-my-opencode");
   } catch {
     return "oh-my-opencode";
   }

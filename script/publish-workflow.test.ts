@@ -86,4 +86,22 @@ describe("test workflows", () => {
     expect(gatesLazycodexMarketplaceSync, "LazyCodex marketplace push must require publish_lazycodex=true").toBe(true)
     expect(requiresLazycodexSyncToken, "release must require a cross-repo token for LazyCodex push").toBe(true)
   })
+
+  test("keeps lazycodex platform dependencies aligned with shim resolution", () => {
+    // #given
+    const workflow = readFileSync(new URL("../.github/workflows/publish.yml", import.meta.url), "utf8")
+    const platformResolver = readFileSync(new URL("../bin/platform.js", import.meta.url), "utf8")
+
+    // #when
+    const lazycodexStepOnlyRenamesWrapper = workflow.includes('.name = "lazycodex" |') &&
+      workflow.includes('.version = $v')
+    const lazycodexStepDoesNotRenameOptionalDeps = !workflow.includes('sub("^oh-my-opencode-"; "lazycodex-")')
+    const shimMapsLazycodexToPublishedPlatformFamily =
+      platformResolver.includes("lazycodex") && platformResolver.includes("oh-my-opencode")
+
+    // #then
+    expect(lazycodexStepOnlyRenamesWrapper, "lazycodex publish step should only rename wrapper metadata").toBe(true)
+    expect(lazycodexStepDoesNotRenameOptionalDeps, "lazycodex publish step must keep optionalDependencies on published platform packages").toBe(true)
+    expect(shimMapsLazycodexToPublishedPlatformFamily, "platform resolver must map lazycodex to the real published platform package family").toBe(true)
+  })
 })
