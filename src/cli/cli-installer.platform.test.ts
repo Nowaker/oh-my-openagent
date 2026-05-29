@@ -108,6 +108,18 @@ describe("runCliInstaller platform branching", () => {
     expect(codexSpy).toHaveBeenCalledTimes(1)
   })
 
+  test("passes Codex autonomous selection into Codex installer", async () => {
+    // given
+    const codexSpy = spyOn(codexInstaller, "runCodexInstaller").mockResolvedValue(codexResult)
+
+    // when
+    const result = await runCliInstaller({ tui: false, platform: "codex", codexAutonomous: true }, "3.4.0")
+
+    // then
+    expect(result).toBe(0)
+    expect(codexSpy).toHaveBeenCalledWith({ autonomousPermissions: true })
+  })
+
   test("runs OpenCode and Codex installation for platform=both", async () => {
     // given
     stubOpenCodeSuccess()
@@ -144,5 +156,20 @@ describe("runCliInstaller platform branching", () => {
 
     // then
     expect(result).toBe(0)
+  })
+
+  test("prints star commands for OpenAgent and LazyCodex", async () => {
+    // given
+    stubOpenCodeSuccess()
+    spyOn(codexInstaller, "runCodexInstaller").mockResolvedValue(codexResult)
+
+    // when
+    const result = await runCliInstaller(createOpenCodeArgs("both"), "3.4.0")
+
+    // then
+    const output = console.log.mock.calls.map((call) => call.join(" ")).join("\n")
+    expect(result).toBe(0)
+    expect(output).toContain("/user/starred/code-yeongyu/oh-my-openagent")
+    expect(output).toContain("/user/starred/code-yeongyu/lazycodex")
   })
 })

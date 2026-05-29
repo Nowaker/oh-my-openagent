@@ -54,9 +54,12 @@ export async function promptInstallPlatform(
 export async function promptInstallConfig(
   detected: DetectedConfig,
   platform: InstallPlatform,
+  codexAutonomousOverride?: boolean,
 ): Promise<InstallConfig | null> {
   const hasOpenCode = platform === "opencode" || platform === "both"
   const hasCodex = platform === "codex" || platform === "both"
+  const codexAutonomous = await resolveCodexAutonomous(hasCodex, codexAutonomousOverride)
+  if (codexAutonomous === null) return null
 
   if (!hasOpenCode) {
     return {
@@ -73,6 +76,7 @@ export async function promptInstallConfig(
       hasKimiForCoding: false,
       hasOpencodeGo: false,
       hasVercelAiGateway: false,
+      codexAutonomous,
     }
   }
 
@@ -183,5 +187,23 @@ export async function promptInstallConfig(
     hasKimiForCoding: kimiForCoding === "yes",
     hasOpencodeGo: opencodeGo === "yes",
     hasVercelAiGateway: vercelAiGateway === "yes",
+    codexAutonomous,
   }
+}
+
+async function resolveCodexAutonomous(
+  hasCodex: boolean,
+  override: boolean | undefined,
+): Promise<boolean | null> {
+  if (!hasCodex) return false
+  if (override !== undefined) return override
+
+  return selectOrCancel<boolean>({
+    message: "Configure Codex for autonomous full-permissions mode?",
+    options: [
+      { value: true, label: "Yes", hint: "Recommended: approval never, danger-full-access, network enabled" },
+      { value: false, label: "No", hint: "Leave existing Codex permissions unchanged" },
+    ],
+    initialValue: true,
+  })
 }

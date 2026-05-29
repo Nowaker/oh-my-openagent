@@ -26,6 +26,17 @@ describe("install platform resolution", () => {
     expect(args.platform).toBe("codex")
   })
 
+  test("preserves explicit Codex autonomous install flag", () => {
+    // given
+    const invocationName = "omo"
+
+    // when
+    const args = resolveInstallArgs({ tui: true, platform: "codex", codexAutonomous: true }, invocationName)
+
+    // then
+    expect(args.codexAutonomous).toBe(true)
+  })
+
   test("resolves explicit --platform=both", () => {
     // given
     const invocationName = "omo"
@@ -103,5 +114,7 @@ describe("install platform resolution", () => {
     expect(installBlock).not.toBeNull()
     expect(installBlock?.[1]).toContain('new Option("--platform <platform>"')
     expect(installBlock?.[1]).toContain('.choices(["opencode", "codex", "both"])')
+    expect(installBlock?.[1]).toContain("--codex-autonomous")
+    expect(installBlock?.[1]).toContain("--no-codex-autonomous")
   })
 })

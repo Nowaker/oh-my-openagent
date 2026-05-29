@@ -113,7 +113,7 @@ Pick the edition(s) you want.
 | You want | Run | What lands on disk |
 | :--- | :--- | :--- |
 | **Ultimate** (OpenCode) | `bunx omo install` (TUI walks you through it) | Plugin registered in `opencode.json` + agent/model config + provider auth prompts |
-| **Light** (Codex CLI) | `bunx omo install --platform=codex` or `bunx lazycodex install` | `~/.codex/plugins/cache/sisyphuslabs/omo/` + `~/.codex/config.toml` marketplace/plugin blocks + `~/.local/bin/omo-*` |
+| **Light** (Codex CLI) | `bunx omo install --platform=codex` or `bunx lazycodex install` | `~/.codex/plugins/cache/sisyphuslabs/omo/` + `~/.codex/config.toml` marketplace/plugin blocks + optional autonomous permissions + `~/.local/bin/omo-*` |
 | **Both** | `bunx omo install --platform=both` | Both of the above |
 
 `--platform` defaults to `opencode` (Ultimate). The `bunx lazycodex install` alias is a shortcut for `bunx omo install --platform=codex`; use whichever reads cleaner.
@@ -129,12 +129,14 @@ Install and configure oh-my-openagent by following the instructions here:
 https://raw.githubusercontent.com/code-yeongyu/oh-my-openagent/refs/heads/dev/docs/guide/installation.md
 ```
 
-If you only want the **Light edition** (Codex CLI), the installer asks no questions and you can run it yourself in one line:
+If you only want the **Light edition** (Codex CLI), the installer asks whether to configure Codex for autonomous full-permissions mode. You can run it yourself in one line:
 
 ```bash
 bunx omo install --platform=codex
 # equivalent:
 bunx lazycodex install
+# non-interactive recommended mode:
+bunx lazycodex install --no-tui --codex-autonomous
 ```
 
 > **Do not** use `npm install -g`, `bun add -g`, or `bun install -g`. Global installation is not officially supported — oh-my-openagent is a plugin that must resolve from where OpenCode/Codex loads plugins. Always invoke via `bunx`.

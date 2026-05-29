@@ -14,6 +14,7 @@ export async function updateCodexConfig(input: {
   readonly pluginNames: readonly string[]
   readonly trustedHookStates?: readonly TrustedHookState[]
   readonly agentConfigs?: readonly CodexAgentConfig[]
+  readonly autonomousPermissions?: boolean
 }): Promise<void> {
   await mkdir(dirname(input.configPath), { recursive: true })
   let config = ""
@@ -30,6 +31,7 @@ export async function updateCodexConfig(input: {
   config = ensureFeatureEnabled(config, "plugins")
   config = ensureFeatureEnabled(config, "plugin_hooks")
   config = ensureCodexMultiAgentV2Config(config)
+  if (input.autonomousPermissions === true) config = ensureAutonomousPermissions(config)
   config = ensureMarketplaceBlock(config, input.marketplaceName, input.marketplaceSource)
   for (const pluginName of input.pluginNames) {
     config = ensurePluginEnabled(config, `${pluginName}@${input.marketplaceName}`)
@@ -81,6 +83,41 @@ function ensureFeatureEnabled(config: string, featureName: string): string {
   const section = findTomlSection(config, "features")
   if (!section) return appendBlock(config, `[features]\n${featureName} = true\n`)
   return replaceOrInsertSetting(config, section, featureName, "true")
+}
+
+function ensureAutonomousPermissions(config: string): string {
+  let next = replaceOrInsertRootSetting(config, "approval_policy", JSON.stringify("never"))
+  next = replaceOrInsertRootSetting(next, "sandbox_mode", JSON.stringify("danger-full-access"))
+  next = replaceOrInsertRootSetting(next, "network_access", JSON.stringify("enabled"))
+  next = ensureNoticeEnabled(next, "hide_full_access_warning")
+  return ensureNoticeEnabled(next, "hide_world_writable_warning")
+}
+
+function ensureNoticeEnabled(config: string, key: string): string {
+  const section = findTomlSection(config, "notice")
+  if (!section) return appendBlock(config, `[notice]\n${key} = true\n`)
+  return replaceOrInsertSetting(config, section, key, "true")
+}
+
+function replaceOrInsertRootSetting(config: string, key: string, value: string): string {
+  const sectionStart = findFirstTableStart(config)
+  const root = config.slice(0, sectionStart)
+  const suffix = config.slice(sectionStart)
+  const linePattern = new RegExp(`^${escapeRegExp(key)}\\s*=.*$`, "m")
+  const replacement = linePattern.test(root)
+    ? root.replace(linePattern, `${key} = ${value}`)
+    : `${root.trimEnd()}${root.trimEnd().length > 0 ? "\n" : ""}${key} = ${value}\n`
+  if (suffix.length === 0) return replacement
+  return `${replacement.trimEnd()}\n\n${suffix.trimStart()}`
+}
+
+function findFirstTableStart(config: string): number {
+  const match = config.match(/^[[].*$/m)
+  return match?.index ?? config.length
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
 
 function ensureMarketplaceBlock(config: string, marketplaceName: string, source: CodexMarketplaceSource): string {

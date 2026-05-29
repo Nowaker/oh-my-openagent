@@ -18,6 +18,7 @@ import {
   isLazycodexPublishingEnabled,
   platformRequiresLazycodex,
 } from "./lazycodex-feature-flag"
+import { STAR_REPOSITORIES, formatGitHubStarCommand } from "./star-request"
 
 export async function runTuiInstaller(args: InstallArgs, version: string): Promise<number> {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
@@ -82,7 +83,7 @@ export async function runTuiInstaller(args: InstallArgs, version: string): Promi
     }
   }
 
-  const config = await promptInstallConfig(detected, selectedPlatform)
+  const config = await promptInstallConfig(detected, selectedPlatform, args.codexAutonomous)
   if (!config) return 1
 
   if (config.hasOpenCode) {
@@ -121,7 +122,7 @@ export async function runTuiInstaller(args: InstallArgs, version: string): Promi
   if (config.hasCodex) {
     spinner.start("Installing Codex harness adapter")
     try {
-      const codexResult = await runCodexInstaller()
+      const codexResult = await runCodexInstaller({ autonomousPermissions: config.codexAutonomous })
       spinner.stop(`Codex plugin installed to ${color.cyan(codexResult.configPath)}`)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -150,9 +151,9 @@ export async function runTuiInstaller(args: InstallArgs, version: string): Promi
   )
 
   p.log.message(`${color.yellow("★")} If you found this helpful, consider starring the repo!`)
-  p.log.message(
-    `  ${color.dim("gh api --silent --method PUT /user/starred/code-yeongyu/oh-my-openagent >/dev/null 2>&1 || true")}`,
-  )
+  for (const repository of STAR_REPOSITORIES) {
+    p.log.message(`  ${color.dim(formatGitHubStarCommand(repository))}`)
+  }
 
   p.outro(color.green("oMoMoMoMo... Enjoy!"))
 

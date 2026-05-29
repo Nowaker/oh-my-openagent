@@ -110,4 +110,28 @@ describe("install-codex", () => {
     }
     expect(legacyCacheMissing).toBe(true)
   })
+
+  test("#given autonomous permissions requested #when installing omo #then writes Codex autonomy settings", async () => {
+    // given
+    const codexHome = await mkdtemp(join(tmpdir(), "omo-codex-autonomous-home-"))
+    const binDir = await mkdtemp(join(tmpdir(), "omo-codex-autonomous-bin-"))
+    const repoRoot = process.cwd()
+
+    // when
+    await runCodexInstaller({
+      codexHome,
+      binDir,
+      repoRoot,
+      runCommand: async () => undefined,
+      autonomousPermissions: true,
+    })
+
+    // then
+    const configContent = await readFile(join(codexHome, "config.toml"), "utf8")
+    expect(configContent).toContain('approval_policy = "never"')
+    expect(configContent).toContain('sandbox_mode = "danger-full-access"')
+    expect(configContent).toContain('network_access = "enabled"')
+    expect(configContent).toContain("hide_full_access_warning = true")
+    expect(configContent).toContain("hide_world_writable_warning = true")
+  })
 })

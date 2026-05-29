@@ -39,6 +39,9 @@ export function formatConfigSummary(config: InstallConfig): string {
   lines.push(color.bold(color.white("Configuration Summary")))
   lines.push("")
   lines.push(`  ${SYMBOLS.info} Platform: ${config.platform}`)
+  if (config.hasCodex) {
+    lines.push(`  ${SYMBOLS.info} Codex autonomous mode: ${config.codexAutonomous ? "enabled" : "disabled"}`)
+  }
   lines.push("")
 
   const claudeDetail = config.hasClaude ? (config.isMax20 ? "max20" : "standard") : undefined
@@ -222,6 +225,7 @@ export function argsToConfig(args: InstallArgs): InstallConfig {
     hasKimiForCoding: hasOpenCode && args.kimiForCoding === "yes",
     hasOpencodeGo: hasOpenCode && args.opencodeGo === "yes",
     hasVercelAiGateway: hasOpenCode && args.vercelAiGateway === "yes",
+    codexAutonomous: hasCodex && args.codexAutonomous === true,
   }
 }
 

@@ -60,6 +60,7 @@ export interface CodexInstallOptions {
   readonly codexHome?: string
   readonly binDir?: string
   readonly repoRoot?: string
+  readonly autonomousPermissions?: boolean
   readonly runCommand?: RunCommand
   readonly log?: (message: string) => void
 }

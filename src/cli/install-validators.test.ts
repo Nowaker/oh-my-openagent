@@ -38,7 +38,7 @@ describe("argsToConfig", () => {
 
   test("enables only Codex when platform is codex", () => {
     // #given
-    const args = createArgs({ platform: "codex" })
+    const args = createArgs({ platform: "codex", codexAutonomous: true })
 
     // #when
     const config = argsToConfig(args)
@@ -47,6 +47,19 @@ describe("argsToConfig", () => {
     expect(config.platform).toBe("codex")
     expect(config.hasOpenCode).toBe(false)
     expect(config.hasCodex).toBe(true)
+    expect(config.codexAutonomous).toBe(true)
+  })
+
+  test("ignores Codex autonomous mode when Codex is not installed", () => {
+    // #given
+    const args = createArgs({ platform: "opencode", codexAutonomous: true })
+
+    // #when
+    const config = argsToConfig(args)
+
+    // #then
+    expect(config.hasCodex).toBe(false)
+    expect(config.codexAutonomous).toBe(false)
   })
 
   test("enables both harnesses when platform is both", () => {

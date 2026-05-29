@@ -57,6 +57,7 @@ describe("runTuiInstaller", () => {
         hasKimiForCoding: false,
         hasOpencodeGo: false,
         hasVercelAiGateway: false,
+        codexAutonomous: false,
       }),
       spyOn(configManager, "isOpenCodeInstalled").mockResolvedValue(true),
       spyOn(configManager, "getOpenCodeVersion").mockResolvedValue("1.3.9"),
@@ -131,6 +132,7 @@ describe("runTuiInstaller", () => {
         hasKimiForCoding: false,
         hasOpencodeGo: false,
         hasVercelAiGateway: false,
+        codexAutonomous: false,
       }),
       spyOn(configManager, "isOpenCodeInstalled").mockResolvedValue(true),
       spyOn(configManager, "getOpenCodeVersion").mockResolvedValue("1.4.0"),
@@ -148,6 +150,7 @@ describe("runTuiInstaller", () => {
         hasKimiForCoding: false,
         hasOpencodeGo: false,
         hasVercelAiGateway: false,
+        codexAutonomous: false,
       }),
       spyOn(configManager, "addPluginToOpenCodeConfig").mockResolvedValue({
         success: true,

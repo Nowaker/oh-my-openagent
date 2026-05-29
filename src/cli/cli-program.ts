@@ -29,6 +29,7 @@ type InstallCommandOptions = {
   readonly kimiForCoding?: InstallArgs["kimiForCoding"]
   readonly opencodeGo?: InstallArgs["opencodeGo"]
   readonly vercelAiGateway?: InstallArgs["vercelAiGateway"]
+  readonly codexAutonomous?: InstallArgs["codexAutonomous"]
   readonly skipAuth?: boolean
 }
 
@@ -53,6 +54,7 @@ export function resolveInstallArgs(
     kimiForCoding: options.kimiForCoding,
     opencodeGo: options.opencodeGo,
     vercelAiGateway: options.vercelAiGateway,
+    codexAutonomous: options.codexAutonomous,
     skipAuth: options.skipAuth ?? false,
   }
 }
@@ -79,13 +81,15 @@ program
   .option("--kimi-for-coding <value>", "Kimi For Coding subscription: no, yes (default: no)")
   .option("--opencode-go <value>", "OpenCode Go subscription: no, yes (default: no)")
   .option("--vercel-ai-gateway <value>", "Vercel AI Gateway: no, yes (default: no)")
+  .option("--codex-autonomous", "Configure Codex with approval never, full filesystem access, and network enabled")
+  .option("--no-codex-autonomous", "Leave existing Codex permission settings unchanged")
   .option("--skip-auth", "Skip authentication setup hints")
 .addHelpText("after", `
 Examples:
   $ bunx oh-my-opencode install
   $ bunx lazycodex install --no-tui
   $ bunx oh-my-opencode install --no-tui --platform=both --claude=max20 --openai=yes --gemini=yes --copilot=no
-  $ omo install --platform=codex
+  $ omo install --platform=codex --codex-autonomous
   $ bunx oh-my-opencode install --no-tui --claude=no --gemini=no --copilot=yes --opencode-zen=yes
 
 Model Providers (Priority: Native > Copilot > OpenCode Zen > Z.ai > Kimi > Vercel):

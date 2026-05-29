@@ -107,6 +107,7 @@ export async function runCodexInstaller(options: CodexInstallOptions = {}): Prom
     pluginNames: marketplace.plugins.map((plugin) => plugin.name),
     trustedHookStates,
     agentConfigs: [...agentConfigs.values()].sort((left, right) => left.name.localeCompare(right.name)),
+    autonomousPermissions: options.autonomousPermissions === true,
   })
 
   await trackCodexInstallTelemetry()
@@ -193,8 +194,8 @@ async function trackCodexInstallTelemetry(): Promise<void> {
     const posthog = createInstallPostHog()
     posthog.trackActive(getPostHogDistinctId(), "install_completed")
     await posthog.shutdown()
-  } catch {
-    // no-excuse-ok: catch
-    // telemetry must never break installs
+  } catch (error) {
+    if (error instanceof Error) return
+    return
   }
 }

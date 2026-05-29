@@ -24,6 +24,7 @@ import {
 } from "./install-validators"
 import { getUnsupportedOpenCodeVersionMessage } from "./minimum-opencode-version"
 import { runCodexInstaller } from "./install-codex"
+import { STAR_REPOSITORIES, formatGitHubStarCommand } from "./star-request"
 
 export async function runCliInstaller(args: InstallArgs, version: string): Promise<number> {
   const validation = validateNonTuiArgs(args)
@@ -141,7 +142,7 @@ export async function runCliInstaller(args: InstallArgs, version: string): Promi
   if (config.hasCodex) {
     printInfo("Installing Codex harness adapter...")
     try {
-      const codexResult = await runCodexInstaller()
+      const codexResult = await runCodexInstaller({ autonomousPermissions: config.codexAutonomous })
       printSuccess(`Codex plugin installed ${SYMBOLS.arrow} ${color.dim(codexResult.configPath)}`)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -168,9 +169,9 @@ export async function runCliInstaller(args: InstallArgs, version: string): Promi
   )
 
   console.log(`${SYMBOLS.star} ${color.yellow("If you found this helpful, consider starring the repo!")}`)
-  console.log(
-    `  ${color.dim("gh api --silent --method PUT /user/starred/code-yeongyu/oh-my-openagent >/dev/null 2>&1 || true")}`,
-  )
+  for (const repository of STAR_REPOSITORIES) {
+    console.log(`  ${color.dim(formatGitHubStarCommand(repository))}`)
+  }
   console.log()
   console.log(color.dim("oMoMoMoMo... Enjoy!"))
   console.log()
