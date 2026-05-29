@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 type PackageJson = {
@@ -7,6 +7,7 @@ type PackageJson = {
 	readonly packageManager: string;
 	readonly bin: Record<string, string>;
 	readonly dependencies: Record<string, string>;
+	readonly scripts: Record<string, string>;
 };
 
 type HookCommand = {
@@ -49,12 +50,13 @@ function readMcpJson(path: string): McpJson {
 }
 
 describe("plugin package metadata", () => {
-	it("#given packaged component files #when validating entrypoints #then hook and MCP commands use the lazy LSP proxy", () => {
+	it("#given packaged component files #when validating entrypoints #then hook command stays local and MCP command references the package", () => {
 		// given
 		const packageJson = readPackageJson("package.json");
 		const hooksJson = readHooksJson("hooks/hooks.json");
 		const mcpJson = readMcpJson(".mcp.json");
 		const cliSource = readFileSync("src/cli.ts", "utf8");
+		const sourceFiles = readdirSync("src");
 
 		// when
 		const command = hooksJson.hooks["PostToolUse"]?.[0]?.hooks[0]?.command;
@@ -69,11 +71,16 @@ describe("plugin package metadata", () => {
 		});
 		expect(packageJson.bin["omo-lsp"]).toBe("./dist/cli.js");
 		expect(packageJson.bin["codex-lsp"]).toBeUndefined();
+		expect(packageJson.scripts["build"]).toBe("node scripts/clean-dist.mjs && tsc -p tsconfig.build.json");
 		expect(cliSource.startsWith("#!/usr/bin/env node")).toBe(true);
 		expect(cliSource).toContain("Usage: omo-lsp [mcp | hook post-tool-use]");
 		expect(command).toBe(`node "${pluginRoot}/dist/cli.js" hook post-tool-use`);
 		expect(lspServer?.command).toBe("node");
-		expect(lspServer?.args).toEqual(["./dist/cli.js", "mcp"]);
+		expect(lspServer?.args).toEqual(["../../../../lsp-tools-mcp/dist/cli.js", "mcp"]);
+		expect(cliSource).not.toContain("./lazy-lsp-mcp.js");
+		expect(cliSource).not.toContain("@code-yeongyu/lsp-tools-mcp");
+		expect(cliSource).toContain("../../../../../lsp-tools-mcp/dist/cli.js");
+		expect(sourceFiles.filter((name) => name.startsWith("lazy-mcp") || name === "lazy-lsp-mcp.ts")).toEqual([]);
 	});
 
 	it("#given LSP skill guidance #when validating MCP tool instructions #then tool names are not framed as shell commands", () => {
@@ -97,7 +104,8 @@ function isPackageJson(value: unknown): value is PackageJson {
 		value["type"] === "module" &&
 		value["packageManager"] === "npm@11.12.1" &&
 		isStringRecord(value["bin"]) &&
-		isStringRecord(value["dependencies"])
+		isStringRecord(value["dependencies"]) &&
+		isStringRecord(value["scripts"])
 	);
 }
 

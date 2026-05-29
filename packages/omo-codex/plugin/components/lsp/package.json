@@ -38,7 +38,7 @@
 	"scripts": {
 		"bootstrap": "node scripts/build-lsp-tools.mjs",
 		"prebuild": "node scripts/build-lsp-tools.mjs",
-		"build": "tsc -p tsconfig.build.json",
+		"build": "node scripts/clean-dist.mjs && tsc -p tsconfig.build.json",
 		"pretest": "node scripts/build-lsp-tools.mjs",
 		"test": "vitest --run",
 		"test:watch": "vitest",

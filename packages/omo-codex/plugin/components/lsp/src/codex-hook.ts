@@ -1,5 +1,6 @@
 import { stdin as processStdin } from "node:process";
 
+import { disposeDefaultLspManager } from "@code-yeongyu/lsp-tools-mcp/dist/lsp/manager.js";
 import { executeLspDiagnostics } from "@code-yeongyu/lsp-tools-mcp/dist/tools.js";
 
 export type DiagnosticsRunner = (filePath: string) => Promise<string>;
@@ -128,12 +129,16 @@ export function extractMutatedFilePaths(input: CodexPostToolUseInput): string[] 
 }
 
 export async function runPostToolUseHookCli(stdin: NodeJS.ReadStream = processStdin): Promise<void> {
-	const raw = await readStdin(stdin);
-	if (!raw.trim()) return;
-	const parsed: unknown = JSON.parse(raw);
-	const input = isRecord(parsed) ? parsed : {};
-	const output = await runLspPostToolUseHook(input);
-	if (output) process.stdout.write(output);
+	try {
+		const raw = await readStdin(stdin);
+		if (!raw.trim()) return;
+		const parsed: unknown = JSON.parse(raw);
+		const input = isRecord(parsed) ? parsed : {};
+		const output = await runLspPostToolUseHook(input);
+		if (output) process.stdout.write(output);
+	} finally {
+		await disposeDefaultLspManager();
+	}
 }
 
 function isMutationTool(value: unknown): boolean {

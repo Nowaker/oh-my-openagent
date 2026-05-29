@@ -156,10 +156,11 @@ test("#given aggregate OMO plugin is enabled #when hooks are inspected #then ulw
 	assert.deepEqual(preToolUseGroups.map((group) => group.matcher), ["^create_goal$"]);
 });
 
-test("#given aggregate MCP config #when inspected #then LSP is lazy while non-lazy code MCPs reuse root packages", async () => {
+test("#given aggregate MCP config #when inspected #then code MCPs reference package runtimes without package names", async () => {
 	// given
 	const packageJson = await readJson("package.json");
 	const mcp = await readJson(".mcp.json");
+	const lspSources = await readdir(join(root, "components", "lsp", "src"));
 
 	// when
 	const lspServer = mcp.mcpServers.lsp;
@@ -167,18 +168,36 @@ test("#given aggregate MCP config #when inspected #then LSP is lazy while non-la
 	const codeMcpNames = Object.keys(mcp.mcpServers)
 		.filter((name) => name === "lsp" || name === "ast_grep")
 		.sort();
+	const componentLocalMcpSources = lspSources.filter((name) => name.startsWith("lazy-mcp") || name === "lazy-lsp-mcp.ts");
 
 	// then
 	assert.deepEqual(codeMcpNames, ["ast_grep", "lsp"]);
 	assert.equal(packageJson.workspaces.includes("components/lsp/packages/lsp-tools-mcp"), false);
 	assert.equal(packageJson.workspaces.includes("components/ast-grep/packages/ast-grep-mcp"), false);
+	assert.equal(packageJson.dependencies, undefined);
 	assert.match(packageJson.scripts.build, /ast-grep-mcp/);
 	assert.equal(lspServer.command, "node");
-	assert.deepEqual(lspServer.args, ["./components/lsp/dist/cli.js", "mcp"]);
+	assert.deepEqual(lspServer.args, ["../../lsp-tools-mcp/dist/cli.js", "mcp"]);
 	assert.equal(lspServer.cwd, ".");
 	assert.equal(astGrepServer.command, "node");
 	assert.deepEqual(astGrepServer.args, ["../../ast-grep-mcp/dist/cli.js", "mcp"]);
 	assert.equal(astGrepServer.cwd, ".");
+	assert.deepEqual(componentLocalMcpSources, []);
+});
+
+test("#given package-level MCP CLIs #when package metadata is inspected #then bin names use the omo prefix", async () => {
+	// given
+	const lspPackageJson = await readJson("../../lsp-tools-mcp/package.json");
+	const astGrepPackageJson = await readJson("../../ast-grep-mcp/package.json");
+
+	// when
+	const binNames = [...Object.keys(lspPackageJson.bin ?? {}), ...Object.keys(astGrepPackageJson.bin ?? {})].sort();
+
+	// then
+	assert.deepEqual(binNames, ["omo-ast-grep", "omo-lsp"]);
+	for (const name of binNames) {
+		assert.match(name, /^omo-/);
+	}
 });
 
 test("#given aggregate plugin build script #when inspected #then telemetry sync runs before workspace builds", async () => {

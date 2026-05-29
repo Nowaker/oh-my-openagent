@@ -7,7 +7,7 @@
 		},
 		"lsp": {
 			"command": "node",
-			"args": ["./components/lsp/dist/cli.js", "mcp"],
+			"args": ["../../lsp-tools-mcp/dist/cli.js", "mcp"],
 			"cwd": "."
 		}
 	}
