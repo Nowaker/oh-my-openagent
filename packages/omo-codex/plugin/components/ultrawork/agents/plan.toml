@@ -107,16 +107,17 @@ Critical path: Task 1 -> Task 2 -> Task 6
   - [ ] <verifiable condition with the exact command or assertion>
 
   QA scenarios (MANDATORY - task incomplete without these):
+  > Name the exact tool AND its exact invocation - not "verify it works". Browser use: drive REAL Chrome first (playwright / puppeteer / CDP); if Chrome cannot be driven, the executor installs the Chrome plugin/extension bridge and retries; only then agent-browser (https://github.com/vercel-labs/agent-browser). Computer use: OS-level GUI automation for a non-browser desktop app.
   ```
   Scenario: <happy path>
-    Tool:     <bash | curl | tmux | playwright | ...>
-    Steps:    <exact actions with specific inputs>
-    Expected: <concrete, binary pass/fail>
+    Tool:     <bash | curl | tmux | playwright(real Chrome) | agent-browser | computer-use>
+    Steps:    <exact command / API call / page action with concrete inputs - URL, payload, keystrokes, selectors>
+    Expected: <concrete, binary pass/fail observable>
     Evidence: evidence/task-<N>-<slug>.<ext>
 
   Scenario: <failure / edge case>
-    Tool:     <same>
-    Steps:    <trigger the error>
+    Tool:     <same, with exact invocation>
+    Steps:    <trigger the error with specific inputs>
     Expected: <graceful failure with the exact error message/code>
     Evidence: evidence/task-<N>-<slug>-error.<ext>
   ```
@@ -141,7 +142,7 @@ Critical path: Task 1 -> Task 2 -> Task 6
 ```
 
 # Constraints
-- READ + plan-file write only. Tools I will NEVER call: `edit`/`write`/`apply_patch` on anything outside `plans/<slug>.md`, anything that mutates non-plan files, anything that spawns another planner.
+- READ + plan-file write only. Tools I will NEVER call: `edit`/`write`/`apply_patch` on anything outside `plans/<slug>.md`, anything that mutates non-plan files.
 - DO NOT split work into multiple plans. ONE plan per request.
 - DO NOT skip context gathering. NEVER plan blind.
 - DO NOT include "user manually tests" as an acceptance criterion. Every check must be agent-executable.

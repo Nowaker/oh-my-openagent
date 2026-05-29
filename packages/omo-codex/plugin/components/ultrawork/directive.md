@@ -31,11 +31,28 @@ The full test suite being green is NEVER verification on its own.
   2. tmux — `tmux new-session -d -s ulw-qa-<criterion>`, drive with
      `send-keys`, dump via `tmux capture-pane -pS -E -`; transcript
      is the artifact.
-  3. Browser use — drive the real page via Playwright / puppeteer /
-     Chromium; capture action log + screenshot path.
-  4. Computer use — OS-level GUI automation (computer-use agent,
+  3. Browser use — drive the REAL page and capture action log +
+     screenshot path. Pick the surface in this fixed order:
+       a. Real Chrome — drive an actual Chrome/Chromium via Playwright
+          or puppeteer (or CDP against a running Chrome). PREFERRED.
+       b. If Chrome cannot be driven here, tell the user to install
+          the Chrome plugin/extension bridge, then retry (a).
+       c. If that is still unavailable, fall back to agent-browser
+          (https://github.com/vercel-labs/agent-browser).
+     Never downgrade to a non-browser surface for a browser-facing
+     criterion — climb the ladder until one rung runs.
+  4. Computer use — when the surface is a desktop/GUI app rather than a
+     page, drive it via OS-level automation (a computer-use agent,
      AppleScript, xdotool, etc.) against the running app; capture
-     action log + screenshot.
+     action log + screenshot. USE THIS for any non-browser GUI
+     criterion; do not substitute a CLI dump for it.
+
+For EVERY scenario name the exact tool and the exact invocation
+upfront: the literal command / API call / page action with its concrete
+inputs (URL, payload, keystrokes, selectors) and the single binary
+observable that decides PASS vs FAIL. "run the endpoint", "open the
+page", "check it works" are NOT scenarios — write the `curl ...`, the
+`send-keys ...`, the `page.click(...)`, the expected status/text.
 
 Auxiliary surfaces (pure CLI stdout / DB state diff / parsed config
 dump) are valid evidence when the criterion is genuinely CLI- or
@@ -43,7 +60,22 @@ data-shaped, but they do NOT replace a channel scenario for any
 user-facing behavior. `--dry-run`, printing the command, "should
 respond", and "looks correct" never count.
 
-# Bootstrap (DO ALL THREE BEFORE ANY OTHER WORK — NO SKIPPING)
+# Bootstrap (DO ALL FOUR BEFORE ANY OTHER WORK — NO SKIPPING)
+
+## 0. Survey the skills, then size the work
+First, enumerate every skill available in this system (the loaded skill
+list / skills directory) and read the description of each one that is
+even loosely relevant. Decide deliberately and explicitly which skills
+this task will use, and prefer to USE as many genuinely-applicable
+skills as apply rather than working raw — name them in the notepad with
+a one-line reason each. Skipping a skill that fits the task is a defect.
+Then size the scope: count the distinct surfaces, files, and steps. If
+the task is non-trivial (2+ steps, multi-file, unclear scope, or any
+architecture decision), spawn the `plan` agent with the gathered
+context and let IT decide ordering and parallelism; follow the plan
+agent's wave order and parallel grouping exactly, and run the
+verification it specifies. Only a genuinely trivial single-step change
+may skip the plan agent — justify that skip in the notepad.
 
 ## 1. Create the goal with binding success criteria
 Call `create_goal` (or open your reply with a `# Goal` block treated as
@@ -135,7 +167,11 @@ Until every success-criteria scenario PASSES with BOTH evidence pieces:
    the top). Actually invoke it end-to-end — the unit suite being
    green is NEVER substitute. Paste the artifact path into the
    notepad.
-5. CLEANUP (PAIRED — NEVER SKIP): every runtime artifact the QA
+5. CLEANUP (PAIRED — NEVER SKIP): the moment a QA scenario spawns any
+   resource, register its teardown as its own todo (e.g.
+   `cleanup: kill server pid for criterion 2 — verify kill -0 fails`)
+   so no QA asset — scripts, tmux assets, browsers / agent-browser
+   sessions, PIDs — is ever forgotten. Every runtime artifact the QA
    spawned in step 4 MUST be torn down before this step completes:
    server PIDs (`kill <pid>`; verify `kill -0` fails), `tmux` sessions
    (`tmux kill-session -t ulw-qa-<criterion>`; verify with `tmux ls`),

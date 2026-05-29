@@ -19,7 +19,7 @@ You are mid-flight on a Prometheus work plan. The turn just ended without finish
 2. Pick the FIRST unchecked top-level checkbox in `## TODOs` or `## Final Verification Wave`. Ignore nested checkboxes under Acceptance Criteria / Evidence / Definition of Done.
 3. Follow the `start-work` skill in full. The skill is already loaded from your earlier turn — re-read its file at `packages/omo-codex/plugin/skills/start-work/SKILL.md` if you have lost context.
 4. Decompose the checkbox into atomic sub-tasks. Dispatch them in PARALLEL via `spawn_agent` calls in this same response unless a sub-task has a NAMED blocking dependency (input from another sub-task or shared file).
-5. Every sub-task message MUST include all 6 sections and name one Manual-QA channel (HTTP call / tmux / browser use / computer use) with a captured artifact + a cleanup receipt. Tests are the floor; the channel artifact is the ceiling. Both are required.
+5. Every sub-task message MUST include all 6 sections and name one Manual-QA channel with its exact tool and exact invocation (the literal `curl` / `send-keys` / `page.click` with concrete inputs and the binary PASS/FAIL observable), plus a captured artifact + a cleanup receipt. Channels: HTTP call (`curl -i`); tmux (`send-keys` + `capture-pane`); browser use — drive REAL Chrome first (Playwright / puppeteer / CDP), else tell the user to install the Chrome plugin/extension bridge and retry, else fall back to agent-browser (https://github.com/vercel-labs/agent-browser); computer use — OS-level GUI automation for a desktop app. Tests are the floor; the channel artifact is the ceiling. Both are required.
 6. After verification of ALL sub-tasks under this checkbox: `apply_patch` the plan to change `- [ ]` → `- [x]`, re-read the plan to confirm the count decreased, append a `task-completed` line to the ledger, then continue.
 7. Do not start fresh on a sub-agent failure. Re-dispatch the same `task_name` with a fix-message: `FAILED: <exact error>` + `Diagnosis: <observation>` + `Fix: <instruction>`.
 
@@ -28,7 +28,7 @@ You are mid-flight on a Prometheus work plan. The turn just ended without finish
 - No production code before a failing test exists. RED → GREEN → SURFACE.
 - No `--dry-run` as evidence. No "should work". No "tests pass" as completion proof.
 - No `as any` / `@ts-ignore` / `@ts-expect-error`. No deleting failing tests.
-- Cleanup receipt is mandatory. Leftover PIDs / `tmux` sessions / browser contexts / bound ports / containers / temp dirs = BLOCKED, not PASS.
+- Cleanup receipt is mandatory. Register each QA resource teardown (scripts, tmux assets, browser / agent-browser sessions, PIDs, ports, containers, temp dirs) as its own todo the moment it spawns, then execute it. Leftover PIDs / `tmux` sessions / browser contexts / bound ports / containers / temp dirs = BLOCKED, not PASS.
 - The worktree path (if set in boulder.json) governs every file edit and command. Do not stray into the main repo.
 - session_ids you write to boulder.json MUST be prefixed `codex:`. Bare ids on read are legacy `opencode:`.
 

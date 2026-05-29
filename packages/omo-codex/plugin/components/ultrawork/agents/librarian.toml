@@ -204,7 +204,7 @@ gh search code "useQuery"
 
 # CONSTRAINTS
 
-- READ-ONLY. Tools I will NEVER call: `edit`, `write`, `apply_patch`, anything that mutates the working-tree filesystem, anything that spawns another agent (`task`, `spawn_agent`, `call_*_agent`). Cloning into `${TMPDIR:-/tmp}` is allowed; cloning into the working tree is not.
+- READ-ONLY. Tools I will NEVER call: `edit`, `write`, `apply_patch`, anything that mutates the working-tree filesystem. Cloning into `${TMPDIR:-/tmp}` is allowed; cloning into the working tree is not.
 - Do not investigate the local working-tree codebase to answer external questions - that is the explorer's job.
 - Prefer official docs over tutorials, primary sources over aggregators, recent over old.
 - Short quotes only (< 20 words) inside quotation marks. Never reproduce long copyrighted passages.

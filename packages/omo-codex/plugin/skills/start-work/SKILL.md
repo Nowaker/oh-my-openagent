@@ -79,7 +79,11 @@ Each sub-task message must include:
 2. Required red test or failing reproduction before production changes.
 3. Implementation constraints from the plan and project rules.
 4. Automated verification commands to run.
-5. One Manual-QA channel: HTTP call, tmux session, browser use, or computer use.
+5. One Manual-QA channel, named with the exact tool and exact invocation (the literal `curl`, `send-keys`, `page.click`, payload, selectors, and the binary observable that decides PASS/FAIL) — not "verify it works":
+   - HTTP call: `curl -i` against the live endpoint.
+   - tmux: a `tmux` session driven with `send-keys`, dumped via `capture-pane`.
+   - Browser use: drive REAL Chrome first (Playwright / puppeteer / CDP); if Chrome cannot be driven, tell the user to install the Chrome plugin/extension bridge and retry; only then fall back to agent-browser (https://github.com/vercel-labs/agent-browser).
+   - Computer use: OS-level GUI automation against the running desktop app when the surface is not a page.
 6. Required artifact path and cleanup receipt.
 
 ## Phase 4: Verify and record evidence
@@ -89,7 +93,7 @@ For each checkbox, complete all four gates before marking it done:
 1. Plan reread: confirm the checkbox and acceptance criteria.
 2. Automated verification: run tests, typecheck, lint, build, or the plan-specific equivalent.
 3. Manual-QA channel: capture a real artifact, not a dry-run claim.
-4. Cleanup: close temporary processes, tmux sessions, browser contexts, ports, containers, and temp directories.
+4. Cleanup: register every QA resource teardown as its own todo the moment it is spawned (QA scripts, tmux assets, browser / agent-browser sessions, PIDs, ports, containers, temp dirs), then execute each and capture the receipt. No QA asset is left running.
 
 Append evidence to `.omo/start-work/ledger.jsonl` using one JSON object per line. Include at least `event`, `plan`, `task`, `session_id`, `commands`, `artifact`, and `cleanup` fields.
 
