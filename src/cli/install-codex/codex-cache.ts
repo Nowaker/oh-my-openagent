@@ -1,5 +1,6 @@
 import { cp, lstat, mkdir, readFile, readdir, readlink, rename, rm, symlink, writeFile } from "node:fs/promises"
 import { basename, dirname, join, sep } from "node:path"
+import { copyBundledMcpRuntimeDists, resolveBundledMcpRuntimeArg } from "./codex-cache-bundled-mcps"
 import { rewriteCachedPackageLocalFileDependencies } from "./codex-cache-local-dependencies"
 import { resolveCachedRuntimePath } from "./codex-cache-paths"
 import type { InstalledPlugin, RunCommand } from "./types"
@@ -22,6 +23,7 @@ export async function installCachedPlugin(input: {
   const targetPath = join(input.codexHome, "plugins", "cache", input.marketplaceName, input.name, input.version)
   await replaceDirectory(input.sourcePath, targetPath)
   await rewriteCachedPackageLocalFileDependencies(targetPath, input.sourcePath)
+  await copyBundledMcpRuntimeDists({ pluginRoot: targetPath, sourceRoot: input.sourcePath })
   await maybeRunNpmInstall(targetPath, input.runCommand, ["install", "--omit=dev"])
   await rewriteCachedMcpManifest(targetPath, input.sourcePath)
   return { name: input.name, version: input.version, path: targetPath }
@@ -105,6 +107,8 @@ export async function rewriteCachedMcpManifest(pluginRoot: string, sourceRoot = 
     if (!Array.isArray(currentArgs)) continue
     const nextArgs = currentArgs.map((arg) => {
       if (typeof arg !== "string") return arg
+      const bundledMcpRuntimeArg = resolveBundledMcpRuntimeArg(pluginRoot, arg)
+      if (bundledMcpRuntimeArg !== null) return bundledMcpRuntimeArg
       if (arg.startsWith("./") || arg.startsWith("../")) return resolveCachedRuntimePath(pluginRoot, sourceRoot, arg)
       return arg
     })

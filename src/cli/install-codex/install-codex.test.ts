@@ -89,9 +89,11 @@ describe("install-codex", () => {
     const stats = await stat(pluginPath ?? "")
     expect(stats.isDirectory()).toBe(true)
     const mcpManifest = JSON.parse(await readFile(join(pluginPath ?? "", ".mcp.json"), "utf8")) as {
-      mcpServers: { lsp: { args: string[] } }
+      mcpServers: { ast_grep: { args: string[] }; lsp: { args: string[] } }
     }
-    expect(mcpManifest.mcpServers.lsp.args[0]).toBe(join(pluginPath ?? "", "components", "lsp", "dist", "cli.js"))
+    expect(mcpManifest.mcpServers.ast_grep.args[0]).toBe(join(pluginPath ?? "", "components", "ast-grep-mcp", "dist", "cli.js"))
+    expect((await stat(mcpManifest.mcpServers.ast_grep.args[0] ?? "")).isFile()).toBe(true)
+    expect(mcpManifest.mcpServers.lsp.args[0]?.startsWith(pluginPath ?? "")).toBe(true)
     expect((await stat(mcpManifest.mcpServers.lsp.args[0] ?? "")).isFile()).toBe(true)
     expect((await stat(join(codexHome, "agents", "explorer.toml"))).isFile()).toBe(true)
     expect((await stat(join(codexHome, "agents", "librarian.toml"))).isFile()).toBe(true)
@@ -100,6 +102,12 @@ describe("install-codex", () => {
       await readFile(join(codexHome, "plugins", "cache", "sisyphuslabs", ".agents", "plugins", "marketplace.json"), "utf8"),
     ) as { plugins: Array<{ name: string; source: { source: string; path: string } }> }
     expect(marketplace.plugins).toEqual([{ name: "omo", source: { source: "local", path: "./omo/0.1.0" } }])
-    await expect(stat(join(codexHome, "plugins", "cache", "code-yeongyu-codex-plugins", "omo"))).rejects.toThrow()
+    let legacyCacheMissing = false
+    try {
+      await stat(join(codexHome, "plugins", "cache", "code-yeongyu-codex-plugins", "omo"))
+    } catch (error) {
+      legacyCacheMissing = error instanceof Error
+    }
+    expect(legacyCacheMissing).toBe(true)
   })
 })

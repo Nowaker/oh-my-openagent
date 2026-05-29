@@ -69,6 +69,10 @@ describe("test workflows", () => {
       workflow.includes('description: "Publish lazycodex npm alias and sync Codex marketplace"') &&
       workflow.includes("default: false")
     const syncsLazycodexMarketplace = workflow.includes("bun run script/sync-lazycodex-marketplace.ts")
+    const syncBuildsMcpDists =
+      workflow.includes("bun run build:ast-grep-mcp") &&
+      workflow.includes("bun run build:lsp-tools-mcp") &&
+      workflow.indexOf("bun run build:lsp-tools-mcp") < workflow.indexOf("bun run script/sync-lazycodex-marketplace.ts")
     const pushesLazycodexMarketplace = workflow.includes("code-yeongyu/lazycodex")
     const gatesLazycodexNpmPublish = workflow.includes("name: Publish lazycodex") &&
       workflow.includes("if: inputs.publish_lazycodex == true && steps.check-lazycodex.outputs.skip != 'true'")
@@ -81,6 +85,7 @@ describe("test workflows", () => {
     expect(appliesCodexPluginVersion, "release must version the Codex plugin manifest before marketplace sync").toBe(true)
     expect(flagDefaultsOff, "LazyCodex deployment must default to disabled").toBe(true)
     expect(syncsLazycodexMarketplace, "release must sync the LazyCodex marketplace bundle").toBe(true)
+    expect(syncBuildsMcpDists, "release must build bundled MCP dists before LazyCodex marketplace sync").toBe(true)
     expect(pushesLazycodexMarketplace, "release must target the LazyCodex repository").toBe(true)
     expect(gatesLazycodexNpmPublish, "lazycodex npm publish must require publish_lazycodex=true").toBe(true)
     expect(gatesLazycodexMarketplaceSync, "LazyCodex marketplace push must require publish_lazycodex=true").toBe(true)

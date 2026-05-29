@@ -4,11 +4,33 @@ import { dirname, join, resolve, sep } from "node:path"
 const MARKETPLACE_SOURCE_PATH = join("packages", "omo-codex", "marketplace.json")
 const PLUGIN_SOURCE_PATH = join("packages", "omo-codex", "plugin")
 const AST_GREP_MCP_DIST_SOURCE_PATH = join("packages", "ast-grep-mcp", "dist")
+const LSP_TOOLS_MCP_DIST_SOURCE_PATH = join("packages", "lsp-tools-mcp", "dist")
 const MARKETPLACE_DESTINATION_PATH = join(".agents", "plugins", "marketplace.json")
 const PLUGIN_DESTINATION_PATH = join("plugins", "omo")
 const AST_GREP_MCP_DIST_DESTINATION_PATH = join(PLUGIN_DESTINATION_PATH, "components", "ast-grep-mcp", "dist")
+const LSP_TOOLS_MCP_DIST_DESTINATION_PATH = join(PLUGIN_DESTINATION_PATH, "components", "lsp-tools-mcp", "dist")
 const AST_GREP_MCP_SOURCE_ARG = "../../ast-grep-mcp/dist/cli.js"
 const AST_GREP_MCP_PLUGIN_ARG = "./components/ast-grep-mcp/dist/cli.js"
+const LSP_TOOLS_MCP_SOURCE_ARG = "../../lsp-tools-mcp/dist/cli.js"
+const LSP_TOOLS_MCP_PLUGIN_ARG = "./components/lsp-tools-mcp/dist/cli.js"
+
+const BUNDLED_MCP_DISTS = [
+  {
+    label: "ast-grep MCP",
+    sourcePath: AST_GREP_MCP_DIST_SOURCE_PATH,
+    destinationPath: AST_GREP_MCP_DIST_DESTINATION_PATH,
+  },
+  {
+    label: "LSP MCP",
+    sourcePath: LSP_TOOLS_MCP_DIST_SOURCE_PATH,
+    destinationPath: LSP_TOOLS_MCP_DIST_DESTINATION_PATH,
+  },
+] as const
+
+const MCP_ARG_REWRITES = [
+  [AST_GREP_MCP_SOURCE_ARG, AST_GREP_MCP_PLUGIN_ARG],
+  [LSP_TOOLS_MCP_SOURCE_ARG, LSP_TOOLS_MCP_PLUGIN_ARG],
+] as const
 
 export interface SyncLazycodexMarketplaceInput {
   readonly sourceRoot: string
@@ -52,7 +74,7 @@ export async function syncLazycodexMarketplace(input: SyncLazycodexMarketplaceIn
     recursive: true,
     filter: (path) => shouldCopyPluginPath(path, pluginRoot),
   })
-  await copyAstGrepMcpDist(sourceRoot, lazycodexRoot)
+  await copyBundledMcpDists(sourceRoot, lazycodexRoot)
   await rewritePluginMcpManifest(destinationPluginRoot)
 }
 
@@ -96,12 +118,22 @@ async function isDirectory(path: string): Promise<boolean> {
   }
 }
 
-async function copyAstGrepMcpDist(sourceRoot: string, lazycodexRoot: string): Promise<void> {
-  const sourcePath = join(sourceRoot, AST_GREP_MCP_DIST_SOURCE_PATH)
-  if (!(await isDirectory(sourcePath))) {
-    throw new Error(`missing built ast-grep MCP dist at ${sourcePath}`)
+async function copyBundledMcpDists(sourceRoot: string, lazycodexRoot: string): Promise<void> {
+  for (const mcpDist of BUNDLED_MCP_DISTS) {
+    await copyBundledMcpDist(sourceRoot, lazycodexRoot, mcpDist)
   }
-  const destinationPath = join(lazycodexRoot, AST_GREP_MCP_DIST_DESTINATION_PATH)
+}
+
+async function copyBundledMcpDist(
+  sourceRoot: string,
+  lazycodexRoot: string,
+  mcpDist: (typeof BUNDLED_MCP_DISTS)[number],
+): Promise<void> {
+  const sourcePath = join(sourceRoot, mcpDist.sourcePath)
+  if (!(await isDirectory(sourcePath))) {
+    throw new Error(`missing built ${mcpDist.label} dist at ${sourcePath}`)
+  }
+  const destinationPath = join(lazycodexRoot, mcpDist.destinationPath)
   await mkdir(dirname(destinationPath), { recursive: true })
   await cp(sourcePath, destinationPath, { recursive: true })
 }
@@ -116,13 +148,19 @@ async function rewritePluginMcpManifest(pluginRoot: string): Promise<void> {
   for (const server of Object.values(parsed.mcpServers)) {
     if (!isRecord(server) || !Array.isArray(server.args)) continue
     const currentArgs = server.args
-    const nextArgs = currentArgs.map((arg) => (arg === AST_GREP_MCP_SOURCE_ARG ? AST_GREP_MCP_PLUGIN_ARG : arg))
+    const nextArgs = currentArgs.map(rewriteMcpArg)
     if (nextArgs.some((arg, index) => arg !== currentArgs[index])) {
       server.args = nextArgs
       changed = true
     }
   }
   if (changed) await writeFile(manifestPath, `${JSON.stringify(parsed, null, "\t")}\n`)
+}
+
+function rewriteMcpArg(arg: unknown): unknown {
+  if (typeof arg !== "string") return arg
+  const rewrite = MCP_ARG_REWRITES.find(([sourceArg]) => sourceArg === arg)
+  return rewrite?.[1] ?? arg
 }
 
 function shouldCopyPluginPath(path: string, root: string): boolean {

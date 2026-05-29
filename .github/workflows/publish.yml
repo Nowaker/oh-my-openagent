@@ -481,6 +481,8 @@ jobs:
         env:
           VERSION: ${{ needs.publish-main.outputs.version }}
         run: |
+          bun run build:ast-grep-mcp
+          bun run build:lsp-tools-mcp
           bun run script/sync-lazycodex-marketplace.ts "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/lazycodex-marketplace"
           cd "$GITHUB_WORKSPACE/lazycodex-marketplace"
           git config user.email "github-actions[bot]@users.noreply.github.com"
