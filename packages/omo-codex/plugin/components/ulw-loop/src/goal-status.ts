@@ -1,3 +1,4 @@
+import { type UlwLoopScope, ulwLoopGoalsRelativePath, ulwLoopLedgerRelativePath } from "./paths.js";
 import type {
 	UlwLoopCodexGoalMode,
 	UlwLoopItem,
@@ -6,8 +7,11 @@ import type {
 	UlwLoopSuccessCriterion,
 } from "./types.js";
 
-export const ULW_LOOP_AGGREGATE_CODEX_OBJECTIVE: string =
-	"Complete the durable ulw-loop plan in .omo/ulw-loop/goals.json, including later accepted/appended stories, under the original brief constraints; use .omo/ulw-loop/ledger.jsonl as the audit trail.";
+export const ULW_LOOP_AGGREGATE_CODEX_OBJECTIVE: string = aggregateCodexObjectiveForScope();
+
+export function aggregateCodexObjectiveForScope(scope?: UlwLoopScope): string {
+	return `Complete the durable ulw-loop plan in ${ulwLoopGoalsRelativePath(scope)}, including later accepted/appended stories, under the original brief constraints; use ${ulwLoopLedgerRelativePath(scope)} as the audit trail.`;
+}
 
 export function codexGoalMode(plan: UlwLoopPlan): UlwLoopCodexGoalMode {
 	return plan.codexGoalMode ?? "per_story";
