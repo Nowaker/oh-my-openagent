@@ -84,18 +84,22 @@ Each sub-task message must include:
    - tmux: a `tmux` session driven with `send-keys`, dumped via `capture-pane`.
    - Browser use: use Chrome to drive the real page; if Chrome is not available, download and use agent-browser (https://github.com/vercel-labs/agent-browser).
    - Computer use: OS-level GUI automation against the running desktop app when the surface is not a page.
-6. Required artifact path and cleanup receipt.
+6. The adversarial classes that apply to this sub-task (from the 9 ultraqa classes) and how each is probed.
+7. Required artifact path and cleanup receipt.
+
+Apply ultraqa's 9 adversarial classes where relevant to each checkbox: malformed input, prompt injection, cancel/resume, stale state, dirty worktree, hung or long commands, flaky tests, misleading success output, repeated interruptions. A checkbox whose behavior is user-visible MUST probe every class that plausibly applies; record which classes were exercised and which were ruled not-applicable with a one-line reason.
 
 ## Phase 4: Verify and record evidence
 
-For each checkbox, complete all four gates before marking it done:
+For each checkbox, complete all five gates before marking it done:
 
 1. Plan reread: confirm the checkbox and acceptance criteria.
 2. Automated verification: run tests, typecheck, lint, build, or the plan-specific equivalent.
 3. Manual-QA channel: capture a real artifact, not a dry-run claim.
-4. Cleanup: register every QA resource teardown as its own todo the moment it is spawned (QA scripts, tmux assets, browser / agent-browser sessions, PIDs, ports, containers, temp dirs), then execute each and capture the receipt. No QA asset is left running.
+4. Adversarial QA: exercise every applicable ultraqa class (malformed input, prompt injection, cancel/resume, stale state, dirty worktree, hung or long commands, flaky tests, misleading success output, repeated interruptions) and capture the observable result for each. "Tests pass" and a clean happy-path artifact are NOT sufficient when an adversarial class applies and was not probed.
+5. Cleanup: register every QA resource teardown as its own todo the moment it is spawned (QA scripts, tmux assets, browser / agent-browser sessions, PIDs, ports, containers, temp dirs), then execute each and capture the receipt. No QA asset is left running.
 
-Append evidence to `.omo/start-work/ledger.jsonl` using one JSON object per line. Include at least `event`, `plan`, `task`, `session_id`, `commands`, `artifact`, and `cleanup` fields.
+Append evidence to `.omo/start-work/ledger.jsonl` using one JSON object per line. Include at least `event`, `plan`, `task`, `session_id`, `commands`, `artifact`, `adversarial_classes`, and `cleanup` fields. `adversarial_classes` lists each probed class with its observable result and each ruled-out class with a one-line reason.
 
 ## Phase 5: Mark progress
 
@@ -120,5 +124,6 @@ When all top-level checkboxes in `## TODOs` and `## Final Verification Wave` are
 - No production change before a failing test or reproduction exists.
 - No `--dry-run` as completion evidence.
 - No tests-only completion claim. A Manual-QA artifact is required.
+- No completion claim while an applicable ultraqa adversarial class was never probed. Each applicable class needs a captured observable result; each skipped class needs a one-line not-applicable reason in the ledger.
 - No unprefixed session ids in Boulder state. Codex sessions are always `codex:<session_id>`.
 - No stale-memory execution. The plan and ledger are the durable source of truth.

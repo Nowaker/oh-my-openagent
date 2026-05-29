@@ -19,7 +19,7 @@ You are mid-flight on a Prometheus work plan. The turn just ended without finish
 2. Pick the FIRST unchecked top-level checkbox in `## TODOs` or `## Final Verification Wave`. Ignore nested checkboxes under Acceptance Criteria / Evidence / Definition of Done.
 3. Follow the `start-work` skill in full. The skill is already loaded from your earlier turn — re-read its file at `packages/omo-codex/plugin/skills/start-work/SKILL.md` if you have lost context.
 4. Decompose the checkbox into atomic sub-tasks. Dispatch them in PARALLEL via `spawn_agent` calls in this same response unless a sub-task has a NAMED blocking dependency (input from another sub-task or shared file).
-5. Every sub-task message MUST include all 6 sections and name one Manual-QA channel with its exact tool and exact invocation (the literal `curl` / `send-keys` / `page.click` with concrete inputs and the binary PASS/FAIL observable), plus a captured artifact + a cleanup receipt. Channels: HTTP call (`curl -i`); tmux (`send-keys` + `capture-pane`); browser use — use Chrome to drive the page, else download and use agent-browser (https://github.com/vercel-labs/agent-browser); computer use — OS-level GUI automation for a desktop app. Tests are the floor; the channel artifact is the ceiling. Both are required.
+5. Every sub-task message MUST include all 7 sections and name one Manual-QA channel with its exact tool and exact invocation (the literal `curl` / `send-keys` / `page.click` with concrete inputs and the binary PASS/FAIL observable), plus the applicable ultraqa adversarial classes, a captured artifact, and a cleanup receipt. Channels: HTTP call (`curl -i`); tmux (`send-keys` + `capture-pane`); browser use — use Chrome to drive the page, else download and use agent-browser (https://github.com/vercel-labs/agent-browser); computer use — OS-level GUI automation for a desktop app. Tests are the floor; the channel artifact plus probed adversarial classes are the ceiling. All are required.
 6. After verification of ALL sub-tasks under this checkbox: `apply_patch` the plan to change `- [ ]` → `- [x]`, re-read the plan to confirm the count decreased, append a `task-completed` line to the ledger, then continue.
 7. Do not start fresh on a sub-agent failure. Re-dispatch the same `task_name` with a fix-message: `FAILED: <exact error>` + `Diagnosis: <observation>` + `Fix: <instruction>`.
 
@@ -28,13 +28,14 @@ You are mid-flight on a Prometheus work plan. The turn just ended without finish
 - No production code before a failing test exists. RED → GREEN → SURFACE.
 - No `--dry-run` as evidence. No "should work". No "tests pass" as completion proof.
 - No `as any` / `@ts-ignore` / `@ts-expect-error`. No deleting failing tests.
+- Probe every applicable ultraqa adversarial class (malformed input, prompt injection, cancel/resume, stale state, dirty worktree, hung or long commands, flaky tests, misleading success output, repeated interruptions) and capture the observable for each. A clean happy-path artifact alone is NOT a PASS when an applicable class went unprobed; record skipped classes with a one-line not-applicable reason.
 - Cleanup receipt is mandatory. Register each QA resource teardown (scripts, tmux assets, browser / agent-browser sessions, PIDs, ports, containers, temp dirs) as its own todo the moment it spawns, then execute it. Leftover PIDs / `tmux` sessions / browser contexts / bound ports / containers / temp dirs = BLOCKED, not PASS.
 - The worktree path (if set in boulder.json) governs every file edit and command. Do not stray into the main repo.
 - session_ids you write to boulder.json MUST be prefixed `codex:`. Bare ids on read are legacy `opencode:`.
 
 # Stop conditions for THIS turn
 
-- A top-level checkbox flipped to `- [x]` after the 4-phase QA gate (Phase 1 read, Phase 2 automated, Phase 3 channel scenario, Phase 4 gate decision). Then the Stop hook will re-evaluate; if more checkboxes remain you will be continued again.
+- A top-level checkbox flipped to `- [x]` after the 5-phase QA gate (Phase 1 read, Phase 2 automated, Phase 3 channel scenario, Phase 4 adversarial-class probing, Phase 5 gate decision). Then the Stop hook will re-evaluate; if more checkboxes remain you will be continued again.
 - 3 same-failure cycles on one sub-task → escalate via `spawn_agent(agent_type="codex-ultrawork-reviewer", ...)` and stop dispatch.
 - Safety boundary (destructive command, secret exfiltration, production write) → stop and surface a safe substitute.
 - All top-level checkboxes `- [x]` AND (if gate triggered) `codex-ultrawork-reviewer` approved unconditionally → print the ORCHESTRATION COMPLETE block and end.
