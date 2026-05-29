@@ -1,5 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { dirname } from "node:path"
+import { ensureCodexMultiAgentV2Config } from "./codex-multi-agent-v2-config"
+import { appendBlock, findTomlSection, replaceOrInsertSetting } from "./toml-section-editor"
 import type { CodexAgentConfig, CodexMarketplaceSource, TrustedHookState } from "./types"
 
 const SISYPHUS_LEGACY_MARKETPLACES = ["lazycodex", "code-yeongyu-codex-plugins"] as const
@@ -27,6 +29,7 @@ export async function updateCodexConfig(input: {
   config = removeStaleMarketplaceHookStateBlocks(config, input.marketplaceName, pluginSet)
   config = ensureFeatureEnabled(config, "plugins")
   config = ensureFeatureEnabled(config, "plugin_hooks")
+  config = ensureCodexMultiAgentV2Config(config)
   config = ensureMarketplaceBlock(config, input.marketplaceName, input.marketplaceSource)
   for (const pluginName of input.pluginNames) {
     config = ensurePluginEnabled(config, `${pluginName}@${input.marketplaceName}`)
@@ -153,39 +156,6 @@ function splitTomlSections(config: string): Array<{ header: string | null; text:
   return sections
 }
 
-function findTomlSection(config: string, header: string): { start: number; end: number; text: string } | null {
-  const headerLine = `[${header}]`
-  const lines = config.match(/[^\n]*\n?|$/g) ?? []
-  let offset = 0
-  let start = -1
-  for (const line of lines) {
-    if (line.length === 0) break
-    const trimmed = line.trim()
-    if (start === -1) {
-      if (trimmed === headerLine) start = offset
-    } else if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
-      return { start, end: offset, text: config.slice(start, offset) }
-    }
-    offset += line.length
-  }
-  if (start === -1) return null
-  return { start, end: config.length, text: config.slice(start) }
-}
-
-function replaceOrInsertSetting(config: string, section: { start: number; end: number; text: string }, key: string, value: string): string {
-  const linePattern = new RegExp(`^${escapeRegExp(key)}\\s*=.*$`, "m")
-  const replacement = linePattern.test(section.text)
-    ? section.text.replace(linePattern, `${key} = ${value}`)
-    : insertSetting(section.text, key, value)
-  return config.slice(0, section.start) + replacement + config.slice(section.end)
-}
-
-function insertSetting(sectionText: string, key: string, value: string): string {
-  const lines = sectionText.split("\n")
-  lines.splice(1, 0, `${key} = ${value}`)
-  return lines.join("\n")
-}
-
 function parseTomlHeader(line: string): string | null {
   const trimmed = line.trim()
   if (!trimmed.startsWith("[") || !trimmed.endsWith("]") || trimmed.startsWith("[[")) return null
@@ -224,15 +194,6 @@ function parseJsonString(value: string): string | null {
     if (error instanceof Error) return null
     return null
   }
-}
-
-function appendBlock(config: string, block: string): string {
-  const prefix = config.trimEnd()
-  return `${prefix}${prefix.length > 0 ? "\n\n" : ""}${block.trimEnd()}\n`
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
 
 async function exists(path: string): Promise<boolean> {

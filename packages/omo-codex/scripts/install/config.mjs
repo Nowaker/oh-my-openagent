@@ -1,6 +1,8 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
+import { ensureCodexMultiAgentV2Config } from "./multi-agent-v2-config.mjs";
+import { appendBlock, findTomlSection, replaceOrInsertSetting } from "./toml-editor.mjs";
 import { exists } from "./utils.mjs";
 
 const SISYPHUS_MARKETPLACE_SOURCE = {
@@ -33,6 +35,7 @@ export async function updateCodexConfig({
 	config = removeStaleMarketplaceHookStateBlocks(config, marketplaceName, new Set(pluginNames));
 	config = ensureFeatureEnabled(config, "plugins");
 	config = ensureFeatureEnabled(config, "plugin_hooks");
+	config = ensureCodexMultiAgentV2Config(config);
 	config = ensureMarketplaceBlock(config, marketplaceName, marketplaceSource);
 	for (const pluginName of pluginNames) {
 		config = ensurePluginEnabled(config, `${pluginName}@${marketplaceName}`);
@@ -161,39 +164,6 @@ function splitTomlSections(config) {
 	return sections;
 }
 
-function findTomlSection(config, header) {
-	const headerLine = `[${header}]`;
-	const lines = config.match(/[^\n]*\n?|$/g) ?? [];
-	let offset = 0;
-	let start = -1;
-	for (const line of lines) {
-		if (line.length === 0) break;
-		const trimmed = line.trim();
-		if (start === -1) {
-			if (trimmed === headerLine) start = offset;
-		} else if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
-			return { start, end: offset, text: config.slice(start, offset) };
-		}
-		offset += line.length;
-	}
-	if (start === -1) return null;
-	return { start, end: config.length, text: config.slice(start) };
-}
-
-function replaceOrInsertSetting(config, section, key, value) {
-	const linePattern = new RegExp(`^${escapeRegExp(key)}\\s*=.*$`, "m");
-	const replacement = linePattern.test(section.text)
-		? section.text.replace(linePattern, `${key} = ${value}`)
-		: insertSetting(section.text, key, value);
-	return config.slice(0, section.start) + replacement + config.slice(section.end);
-}
-
-function insertSetting(sectionText, key, value) {
-	const lines = sectionText.split("\n");
-	lines.splice(1, 0, `${key} = ${value}`);
-	return lines.join("\n");
-}
-
 function parseTomlHeader(line) {
 	const trimmed = line.trim();
 	if (!trimmed.startsWith("[") || !trimmed.endsWith("]")) return null;
@@ -232,13 +202,4 @@ function parseJsonString(value) {
 	} catch {
 		return null;
 	}
-}
-
-function appendBlock(config, block) {
-	const prefix = config.trimEnd();
-	return `${prefix}${prefix.length > 0 ? "\n\n" : ""}${block.trimEnd()}\n`;
-}
-
-function escapeRegExp(value) {
-	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

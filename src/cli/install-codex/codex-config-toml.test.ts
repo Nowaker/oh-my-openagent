@@ -5,6 +5,95 @@ import { join } from "node:path"
 import { updateCodexConfig } from "./codex-config-toml"
 
 describe("codex-config-toml", () => {
+  test("#given empty Codex config #when updating config #then enables MultiAgentV2 with ten thousand session threads", async () => {
+    // given
+    const root = await mkdtemp(join(tmpdir(), "omo-codex-config-multi-agent-"))
+    const configPath = join(root, "config.toml")
+
+    // when
+    await updateCodexConfig({
+      configPath,
+      repoRoot: "/repo/packages/omo-codex",
+      marketplaceName: "debug",
+      marketplaceSource: { sourceType: "local", source: "/repo/packages/omo-codex" },
+      pluginNames: ["omo"],
+    })
+
+    // then
+    const content = await readFile(configPath, "utf8")
+    expect(content).toContain("[features.multi_agent_v2]")
+    expect(content).toContain("enabled = true")
+    expect(content).toContain("max_concurrent_threads_per_session = 10000")
+  })
+
+  test("#given existing MultiAgentV2 table #when updating config #then preserves unrelated tuning while setting ten thousand session threads", async () => {
+    // given
+    const root = await mkdtemp(join(tmpdir(), "omo-codex-config-multi-agent-existing-"))
+    const configPath = join(root, "config.toml")
+    await writeFile(
+      configPath,
+      [
+        "[features.multi_agent_v2]",
+        "enabled = false",
+        "usage_hint_enabled = false",
+        "max_concurrent_threads_per_session = 4",
+        "",
+      ].join("\n"),
+    )
+
+    // when
+    await updateCodexConfig({
+      configPath,
+      repoRoot: "/repo/packages/omo-codex",
+      marketplaceName: "debug",
+      marketplaceSource: { sourceType: "local", source: "/repo/packages/omo-codex" },
+      pluginNames: ["omo"],
+    })
+
+    // then
+    const content = await readFile(configPath, "utf8")
+    expect(content).toContain("[features.multi_agent_v2]")
+    expect(content).toContain("enabled = true")
+    expect(content).toContain("usage_hint_enabled = false")
+    expect(content).toContain("max_concurrent_threads_per_session = 10000")
+    expect(content).not.toContain("max_concurrent_threads_per_session = 4")
+  })
+
+  test("#given legacy boolean MultiAgentV2 flag and table #when updating config #then normalizes to table config", async () => {
+    // given
+    const root = await mkdtemp(join(tmpdir(), "omo-codex-config-multi-agent-legacy-"))
+    const configPath = join(root, "config.toml")
+    await writeFile(
+      configPath,
+      [
+        "[features]",
+        "multi_agent_v2 = true",
+        "plugins = false",
+        "",
+        "[features.multi_agent_v2]",
+        "usage_hint_enabled = false",
+        "",
+      ].join("\n"),
+    )
+
+    // when
+    await updateCodexConfig({
+      configPath,
+      repoRoot: "/repo/packages/omo-codex",
+      marketplaceName: "debug",
+      marketplaceSource: { sourceType: "local", source: "/repo/packages/omo-codex" },
+      pluginNames: ["omo"],
+    })
+
+    // then
+    const content = await readFile(configPath, "utf8")
+    expect(content).not.toMatch(/^multi_agent_v2\s*=/m)
+    expect(content).toContain("[features.multi_agent_v2]")
+    expect(content).toContain("enabled = true")
+    expect(content).toContain("usage_hint_enabled = false")
+    expect(content).toContain("max_concurrent_threads_per_session = 10000")
+  })
+
   test("writes config blocks and stays idempotent", async () => {
     // given
     const root = await mkdtemp(join(tmpdir(), "omo-codex-config-"))
