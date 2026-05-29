@@ -1,5 +1,5 @@
+import { createRequire } from "node:module";
 import { env, execPath, stderr } from "node:process";
-import { fileURLToPath } from "node:url";
 
 import { LSP_MCP_TOOLS } from "@code-yeongyu/lsp-tools-mcp/dist/tools.js";
 import {
@@ -14,6 +14,7 @@ import { type LazyMcpLifecycleLog, runLazyMcpStdioServer } from "./lazy-mcp-stdi
 
 const BACKEND_CONFIG_ENV = "CODEX_LSP_LAZY_BACKEND";
 const IDLE_TIMEOUT_ENV = "CODEX_LSP_LAZY_IDLE_TIMEOUT_MS";
+const requireFromModule = createRequire(import.meta.url);
 
 export interface LazyLspIdleTimeoutResolution {
 	readonly value: number;
@@ -46,7 +47,7 @@ export async function runLazyLspMcpServer(
 export function defaultLazyLspBackendConfig(): LazyMcpBackendProcessConfig {
 	return {
 		command: execPath,
-		args: [fileURLToPath(new URL("../../../mcp/lsp/cli.js", import.meta.url)), "mcp"],
+		args: [requireFromModule.resolve("@code-yeongyu/lsp-tools-mcp/dist/cli.js"), "mcp"],
 	};
 }
 

@@ -137,6 +137,13 @@ class LazyMcpProxyState implements LazyMcpProxy {
 		return this.activeConnection !== undefined;
 	}
 
+	private clearConnectionIfActive(connection: LazyMcpConnection): boolean {
+		if (this.activeConnection !== connection) return false;
+		this.activeConnection = undefined;
+		this.clearIdleTimer();
+		return true;
+	}
+
 	private initialize(id: JsonRpcId, params: unknown): JsonRpcResponse {
 		return successResponse(id, {
 			capabilities: { tools: { listChanged: false } },
@@ -147,17 +154,27 @@ class LazyMcpProxyState implements LazyMcpProxy {
 
 	private async handleToolCall(id: JsonRpcId, request: Record<string, unknown>): Promise<JsonRpcResponse> {
 		try {
-			const connection = await this.getConnection();
-			const response = await connection.request({
-				jsonrpc: "2.0",
-				id,
-				method: "tools/call",
-				params: request["params"],
-			});
-			this.armIdleTimer();
-			return response === undefined
-				? errorResponse(id, -32603, "Lazy MCP backend returned no response")
-				: withId(response, id);
+			let connection = await this.getConnection();
+			let retried = false;
+			while (true) {
+				try {
+					const response = await connection.request({
+						jsonrpc: "2.0",
+						id,
+						method: "tools/call",
+						params: request["params"],
+					});
+					this.armIdleTimer();
+					return response === undefined
+						? errorResponse(id, -32603, "Lazy MCP backend returned no response")
+						: withId(response, id);
+				} catch (error) {
+					if (retried) throw error;
+					retried = true;
+					this.clearConnectionIfActive(connection);
+					connection = await this.getConnection();
+				}
+			}
 		} catch (error) {
 			return successResponse(id, {
 				content: [{ type: "text", text: messageFromError(error) }],
@@ -196,12 +213,11 @@ class LazyMcpProxyState implements LazyMcpProxy {
 	private observeClose(connection: LazyMcpConnection): void {
 		void connection.closed.then(
 			() => {
-				if (this.activeConnection !== connection) return;
-				this.activeConnection = undefined;
-				this.clearIdleTimer();
+				if (!this.clearConnectionIfActive(connection)) return;
 				this.log("lazy_backend_stopped");
 			},
 			(error: unknown) => {
+				this.clearConnectionIfActive(connection);
 				this.log("lazy_backend_close_error", { message: messageFromError(error) });
 			},
 		);

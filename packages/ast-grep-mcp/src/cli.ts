@@ -14,7 +14,7 @@ async function main(): Promise<void> {
     });
     return;
   }
-  stderr.write("Usage: ast-grep-mcp [mcp]\n");
+  stderr.write("Usage: omo-ast-grep [mcp]\n");
   process.exitCode = 2;
 }
 

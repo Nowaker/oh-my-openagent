@@ -19,7 +19,7 @@ async function main(): Promise<void> {
 			return;
 		}
 
-		stderr.write("Usage: codex-lsp [mcp | hook post-tool-use]\n");
+		stderr.write("Usage: omo-lsp [mcp | hook post-tool-use]\n");
 		process.exitCode = 2;
 	} finally {
 		await disposeDefaultLspManager();

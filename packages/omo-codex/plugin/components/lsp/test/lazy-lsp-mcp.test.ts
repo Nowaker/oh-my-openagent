@@ -1,6 +1,6 @@
 import { PassThrough } from "node:stream";
 import { describe, expect, it } from "vitest";
-import { resolveLazyLspIdleTimeoutMs, runLazyLspMcpServer } from "../src/lazy-lsp-mcp.js";
+import { defaultLazyLspBackendConfig, resolveLazyLspIdleTimeoutMs, runLazyLspMcpServer } from "../src/lazy-lsp-mcp.js";
 import { DEFAULT_LAZY_MCP_IDLE_TIMEOUT_MS } from "../src/lazy-mcp-proxy.js";
 
 describe("lazy LSP MCP config", () => {
@@ -18,6 +18,19 @@ describe("lazy LSP MCP config", () => {
 		expect(valid).toEqual({ value: 25 });
 		expect(malformed.value).toBe(fallback);
 		expect(malformed.warning).toContain("Ignoring malformed lazy MCP idle timeout");
+	});
+
+	it("#given no backend override #when resolving the default lazy LSP backend #then it reuses the shared LSP MCP package", () => {
+		// given
+		const sharedPackageCli = "packages/lsp-tools-mcp/dist/cli.js";
+
+		// when
+		const config = defaultLazyLspBackendConfig();
+
+		// then
+		expect(config.args).toHaveLength(2);
+		expect(config.args.at(0)?.replaceAll("\\", "/")).toContain(sharedPackageCli);
+		expect(config.args.at(1)).toBe("mcp");
 	});
 
 	it("#given missing lazy backend config #when metadata requests are served #then the server stays usable without starting a backend", async () => {

@@ -76,7 +76,7 @@
       "name": "@oh-my-opencode/ast-grep-mcp",
       "version": "0.0.0",
       "bin": {
-        "ast-grep-mcp": "dist/cli.js",
+        "omo-ast-grep": "dist/cli.js",
       },
       "dependencies": {
         "@ast-grep/cli": "^0.41.1",

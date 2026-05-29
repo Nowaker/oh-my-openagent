@@ -67,8 +67,10 @@ describe("plugin package metadata", () => {
 		expect(packageJson.dependencies).toEqual({
 			"@code-yeongyu/lsp-tools-mcp": "file:../../../../lsp-tools-mcp",
 		});
-		expect(packageJson.bin["codex-lsp"]).toBe("./dist/cli.js");
+		expect(packageJson.bin["omo-lsp"]).toBe("./dist/cli.js");
+		expect(packageJson.bin["codex-lsp"]).toBeUndefined();
 		expect(cliSource.startsWith("#!/usr/bin/env node")).toBe(true);
+		expect(cliSource).toContain("Usage: omo-lsp [mcp | hook post-tool-use]");
 		expect(command).toBe(`node "${pluginRoot}/dist/cli.js" hook post-tool-use`);
 		expect(lspServer?.command).toBe("node");
 		expect(lspServer?.args).toEqual(["./dist/cli.js", "mcp"]);
