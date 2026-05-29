@@ -25,7 +25,7 @@ You are mid-flight on a Prometheus work plan. The turn just ended without finish
 
 # Hard constraints
 
-- No production code before a failing test exists. RED → GREEN → SURFACE.
+- No production code before a failing test exists. When the change touches existing behavior, PIN it first: write a baseline characterization test that passes on the unchanged code, with exact inputs, exact observable, and exact assertion. PIN → RED → GREEN → SURFACE.
 - No `--dry-run` as evidence. No "should work". No "tests pass" as completion proof.
 - No `as any` / `@ts-ignore` / `@ts-expect-error`. No deleting failing tests.
 - Probe every applicable ultraqa adversarial class (malformed input, prompt injection, cancel/resume, stale state, dirty worktree, hung or long commands, flaky tests, misleading success output, repeated interruptions) and capture the observable for each. A clean happy-path artifact alone is NOT a PASS when an applicable class went unprobed; record skipped classes with a one-line not-applicable reason.

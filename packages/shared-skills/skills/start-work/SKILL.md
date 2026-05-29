@@ -76,10 +76,14 @@ If `--worktree` is set, verify the path with `git worktree list --porcelain` or 
 Each sub-task message must include:
 
 1. Goal and exact files or directories in scope.
-2. Required red test or failing reproduction before production changes.
+2. When the task touches existing behavior: a baseline characterization test, written first, that asserts current observable behavior and passes on the unchanged code. Then the red test or failing reproduction for the new behavior before production changes. Pin the baseline as rigorously as the new test: exact inputs, exact observable, exact assertion.
 3. Implementation constraints from the plan and project rules.
 4. Automated verification commands to run.
-5. One Manual-QA channel: HTTP call, tmux session, browser use, or computer use.
+5. One Manual-QA channel, named with the exact tool and exact invocation (the literal `curl`, `send-keys`, `page.click`, payload, selectors, and the binary observable that decides PASS/FAIL), not "verify it works":
+   - HTTP call: `curl -i` against the live endpoint.
+   - tmux: a `tmux` session driven with `send-keys`, dumped via `capture-pane`.
+   - Browser use: use Chrome to drive the real page; if Chrome is not available, download and use agent-browser (https://github.com/vercel-labs/agent-browser).
+   - Computer use: OS-level GUI automation against the running desktop app when the surface is not a page.
 6. The adversarial classes that apply to this sub-task (from the 9 ultraqa classes) and how each is probed.
 7. Required artifact path and cleanup receipt.
 
@@ -93,7 +97,7 @@ For each checkbox, complete all five gates before marking it done:
 2. Automated verification: run tests, typecheck, lint, build, or the plan-specific equivalent.
 3. Manual-QA channel: capture a real artifact, not a dry-run claim.
 4. Adversarial QA: exercise every applicable ultraqa class (malformed input, prompt injection, cancel/resume, stale state, dirty worktree, hung or long commands, flaky tests, misleading success output, repeated interruptions) and capture the observable result for each. "Tests pass" and a clean happy-path artifact are NOT sufficient when an adversarial class applies and was not probed.
-5. Cleanup: close temporary processes, tmux sessions, browser contexts, ports, containers, and temp directories.
+5. Cleanup: register every QA resource teardown as its own todo the moment it is spawned (QA scripts, tmux assets, browser / agent-browser sessions, PIDs, ports, containers, temp dirs), then execute each and capture the receipt. No QA asset is left running.
 
 Append evidence to `.omo/start-work/ledger.jsonl` using one JSON object per line. Include at least `event`, `plan`, `task`, `session_id`, `commands`, `artifact`, `adversarial_classes`, and `cleanup` fields. `adversarial_classes` lists each probed class with its observable result and each ruled-out class with a one-line reason.
 
@@ -117,7 +121,7 @@ When all top-level checkboxes in `## TODOs` and `## Final Verification Wave` are
 
 ## Hard rules
 
-- No production change before a failing test or reproduction exists.
+- No production change before a failing test or reproduction exists, and no change to existing behavior before a baseline characterization test pins the current behavior and passes on the unchanged code.
 - No `--dry-run` as completion evidence.
 - No tests-only completion claim. A Manual-QA artifact is required.
 - No completion claim while an applicable ultraqa adversarial class was never probed. Each applicable class needs a captured observable result; each skipped class needs a one-line not-applicable reason in the ledger.
