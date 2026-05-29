@@ -7,7 +7,7 @@ declare const Bun: {
   file(path: string): { text(): Promise<string> }
 }
 
-const TARGET_SKILLS = ["ai-slop-remover", "review-work", "frontend-ui-ux", "init-deep"] as const
+const TARGET_SKILLS = ["remove-ai-slops", "review-work", "frontend-ui-ux", "init-deep"] as const
 
 type TargetSkill = (typeof TARGET_SKILLS)[number]
 
@@ -28,8 +28,8 @@ function getRequiredMatch(source: string, pattern: RegExp, label: string): RegEx
 async function readSkillSource(name: TargetSkill): Promise<SkillSource> {
   let skill: BuiltinSkill
   switch (name) {
-    case "ai-slop-remover":
-      skill = (await import("./skills/ai-slop-remover")).aiSlopRemoverSkill
+    case "remove-ai-slops":
+      skill = (await import("./skills/remove-ai-slops")).removeAiSlopsSkill
       break
     case "review-work":
       skill = (await import("./skills/review-work")).reviewWorkSkill

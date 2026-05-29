@@ -7,7 +7,6 @@ import { fileURLToPath } from "node:url";
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 
 const expectedSkills = [
-	"ai-slop-remover",
 	"comment-checker",
 	"debugging",
 	"frontend-ui-ux",

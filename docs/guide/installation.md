@@ -523,7 +523,7 @@ Built-in skills load automatically when their description matches your task. The
 | `git-master` | Ultimate | Atomic commits, rebases, history search |
 | `frontend-ui-ux` | Ultimate | UI/UX implementation work |
 | `review-work` | Ultimate | Post-implementation code review |
-| `ai-slop-remover` | Ultimate | Cleaning AI-generated code smells |
+| `$omo:remove-ai-slops` | Ultimate | Cleaning AI-generated code smells |
 | `team-mode` | Ultimate | Loaded only when `team_mode.enabled` |
 
 Add custom skills under `.opencode/skills/<name>/SKILL.md` (project scope) or `~/.config/opencode/skills/<name>/SKILL.md` (user scope). Each `SKILL.md` declares a description that the agent matches against your message.

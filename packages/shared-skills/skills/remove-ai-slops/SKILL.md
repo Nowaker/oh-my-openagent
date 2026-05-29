@@ -1,6 +1,6 @@
 ---
 name: remove-ai-slops
-description: Remove AI-generated code smells (slop) from branch changes or an explicit file list. Locks behavior with regression tests FIRST, then runs categorized cleanup via parallel `deep` agents in batches of 5, then verifies with quality gates. Covers 10 slop categories including performance equivalences, excessive complexity (object annotations, if/elif variant chains), and oversized modules (250+ pure LOC with mandatory modular refactoring). MUST USE when the user asks to "remove slop", "clean AI code", "deslop", "clean up AI-generated code", "remove AI slop", or wants to clean up AI-generated patterns from recent changes. Triggers - "remove ai slops", "clean ai code", "deslop", "cleanup AI generated", "remove AI slop", "clean up AI-generated code", "strip slop", "ai-slop cleanup".
+description: "Remove AI-generated code smells (slop) from branch changes or an explicit file list. Locks behavior with regression tests FIRST, then runs categorized cleanup via parallel `deep` agents in batches of 5, then verifies with quality gates. Covers 10 slop categories including performance equivalences, excessive complexity (object annotations, if/elif variant chains), and oversized modules (250+ pure LOC with mandatory modular refactoring). MUST USE when the user asks to \"remove slop\", \"clean AI code\", \"deslop\", \"clean up AI-generated code\", \"remove AI slop\", or wants to clean up AI-generated patterns from recent changes. Triggers - \"remove ai slops\", \"clean ai code\", \"deslop\", \"cleanup AI generated\", \"remove AI slop\", \"clean up AI-generated code\", \"strip slop\", \"ai-slop cleanup\"."
 ---
 
 # Remove AI Slops Skill
@@ -146,7 +146,7 @@ Order rule (safest → riskiest): comments → dead code → defensive → dupli
 
 ### Phase 4: Parallel slop removal via `deep` agents in batches of 5
 
-Files are processed by `deep` category agents with the `ai-slop-remover` skill loaded, **batched 5 at a time in parallel**. The `deep` category gives the agent enough thoroughness to correctly evaluate the 9 categories and respect the KEEP rules without slipping into surface fixes; the 5-wide batch is the sweet spot — more than 5 creates result-merging noise and context contention, fewer wastes parallelism.
+Files are processed by `deep` category agents with the `$omo:remove-ai-slops` skill loaded, **batched 5 at a time in parallel**. The executable skill name is `remove-ai-slops`. The `deep` category gives the agent enough thoroughness to correctly evaluate the 9 categories and respect the KEEP rules without slipping into surface fixes; the 5-wide batch is the sweet spot — more than 5 creates result-merging noise and context contention, fewer wastes parallelism.
 
 **Batching protocol** (strict):
 
@@ -164,7 +164,7 @@ Files are processed by `deep` category agents with the `ai-slop-remover` skill l
 ```
 task(
   category="deep",
-  load_skills=["ai-slop-remover"],
+  load_skills=["remove-ai-slops"],
   run_in_background=true,
   description="Slop removal: {filename}",
   prompt="""

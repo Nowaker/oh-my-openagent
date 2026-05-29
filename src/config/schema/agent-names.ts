@@ -21,7 +21,7 @@ export const BuiltinSkillNameSchema = z.enum([
   "frontend-ui-ux",
   "git-master",
   "review-work",
-  "ai-slop-remover",
+  "remove-ai-slops",
   "init-deep",
   "team-mode",
 ])
