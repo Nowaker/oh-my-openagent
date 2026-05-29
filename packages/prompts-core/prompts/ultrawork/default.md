@@ -250,7 +250,7 @@ Tests are the FLOOR (always required). Surface artifact is the CEILING (also req
 | Adds/modifies a CLI command | Run the command with Bash. Show the output. |
 | Changes build output | Run the build. Verify the output files exist and are correct. |
 | Modifies API behavior | Call the endpoint. Show the response. |
-| Changes UI rendering | Drive the REAL page: real Chrome first (Playwright / puppeteer / CDP); if Chrome cannot be driven, tell the user to install the Chrome plugin/extension bridge and retry; only then fall back to agent-browser (https://github.com/vercel-labs/agent-browser). Capture screenshot + action log. |
+| Changes UI rendering | Use Chrome to drive the REAL page; if Chrome is not available, download and use agent-browser (https://github.com/vercel-labs/agent-browser). Capture screenshot + action log. |
 | Changes a desktop/GUI (non-page) surface | Computer use: OS-level GUI automation against the running app. Capture action log + screenshot. |
 | Adds a new tool/hook/feature | Test it end-to-end in a real scenario. |
 | Modifies config handling | Load the config. Verify it parses correctly. |

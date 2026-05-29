@@ -153,7 +153,7 @@ lsp_diagnostics catches type errors only. Logic bugs, missing behavior, broken f
 | Adds/modifies a CLI command | Run it with Bash. Show output. |
 | Changes build output | Run build. Verify output files. |
 | Modifies API behavior | Call the endpoint. Show response. |
-| Renders/changes a page | Drive REAL Chrome (Playwright / puppeteer / CDP); if Chrome can't be driven, have the user install the Chrome plugin bridge and retry; else agent-browser (https://github.com/vercel-labs/agent-browser). Screenshot + action log. |
+| Renders/changes a page | Use Chrome to drive the page; if Chrome is not available, download and use agent-browser (https://github.com/vercel-labs/agent-browser). Screenshot + action log. |
 | Drives a desktop GUI | Computer use: OS-level GUI automation against the running app. Action log + screenshot. |
 | Adds tool/hook/feature | Test end-to-end in a real scenario. |
 | Modifies config handling | Load config. Verify parsed shape. |

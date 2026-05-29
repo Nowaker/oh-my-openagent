@@ -20,7 +20,7 @@ For every criterion, build a real-usage scenario through ONE of these four chann
 
 1. **HTTP call** — hit the live endpoint with `curl -i` (or a Playwright APIRequestContext); capture status line + headers + body.
 2. **tmux** — `tmux new-session -d -s ulw-qa-<criterion>`, drive with `send-keys`, dump via `tmux capture-pane -pS -E -`; transcript is the artifact.
-3. **Browser use** — drive the REAL page and capture action log + screenshot path, climbing this ladder in order: (a) real Chrome/Chromium via Playwright / puppeteer / CDP — PREFERRED; (b) if Chrome cannot be driven here, tell the user to install the Chrome plugin/extension bridge, then retry (a); (c) only then fall back to agent-browser (https://github.com/vercel-labs/agent-browser). Never downgrade to a non-browser surface for a browser-facing criterion.
+3. **Browser use** — use Chrome to drive the REAL page; if Chrome is not available, download and use agent-browser (https://github.com/vercel-labs/agent-browser). Capture action log + screenshot path. Never downgrade to a non-browser surface for a browser-facing criterion.
 4. **Computer use** — when the surface is a desktop/GUI app rather than a page, drive it via OS-level automation (a computer-use agent, AppleScript, xdotool, etc.) against the running app; capture action log + screenshot. Use this for any non-browser GUI criterion.
 
 Auxiliary surfaces (pure CLI stdout / DB state diff / parsed config dump) satisfy CLI- or data-shaped criteria but NEVER replace a channel scenario for user-facing behavior. `--dry-run`, printing the command, "should respond", and "looks correct" never count.

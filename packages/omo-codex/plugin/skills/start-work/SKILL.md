@@ -82,7 +82,7 @@ Each sub-task message must include:
 5. One Manual-QA channel, named with the exact tool and exact invocation (the literal `curl`, `send-keys`, `page.click`, payload, selectors, and the binary observable that decides PASS/FAIL) — not "verify it works":
    - HTTP call: `curl -i` against the live endpoint.
    - tmux: a `tmux` session driven with `send-keys`, dumped via `capture-pane`.
-   - Browser use: drive REAL Chrome first (Playwright / puppeteer / CDP); if Chrome cannot be driven, tell the user to install the Chrome plugin/extension bridge and retry; only then fall back to agent-browser (https://github.com/vercel-labs/agent-browser).
+   - Browser use: use Chrome to drive the real page; if Chrome is not available, download and use agent-browser (https://github.com/vercel-labs/agent-browser).
    - Computer use: OS-level GUI automation against the running desktop app when the surface is not a page.
 6. Required artifact path and cleanup receipt.
 

@@ -31,16 +31,11 @@ The full test suite being green is NEVER verification on its own.
   2. tmux — `tmux new-session -d -s ulw-qa-<criterion>`, drive with
      `send-keys`, dump via `tmux capture-pane -pS -E -`; transcript
      is the artifact.
-  3. Browser use — drive the REAL page and capture action log +
-     screenshot path. Pick the surface in this fixed order:
-       a. Real Chrome — drive an actual Chrome/Chromium via Playwright
-          or puppeteer (or CDP against a running Chrome). PREFERRED.
-       b. If Chrome cannot be driven here, tell the user to install
-          the Chrome plugin/extension bridge, then retry (a).
-       c. If that is still unavailable, fall back to agent-browser
-          (https://github.com/vercel-labs/agent-browser).
-     Never downgrade to a non-browser surface for a browser-facing
-     criterion — climb the ladder until one rung runs.
+  3. Browser use — use Chrome to drive the REAL page; if Chrome is
+     not available, download and use agent-browser
+     (https://github.com/vercel-labs/agent-browser). Capture action
+     log + screenshot path. Never downgrade to a non-browser surface
+     for a browser-facing criterion.
   4. Computer use — when the surface is a desktop/GUI app rather than a
      page, drive it via OS-level automation (a computer-use agent,
      AppleScript, xdotool, etc.) against the running app; capture
