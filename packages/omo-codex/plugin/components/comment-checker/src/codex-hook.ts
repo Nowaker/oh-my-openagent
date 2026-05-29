@@ -51,7 +51,7 @@ export async function runCommentCheckerPostToolUse(
 		const result = await runner(toHookInput(request, context));
 		if (result.status === "missing" || result.status === "pass") continue;
 		if (result.status === "error") continue;
-		const message = result.message.trim();
+		const message = normalizeHookText(result.message);
 		if (message.length > 0) {
 			warnings.push({ filePath: request.filePath, message });
 		}
@@ -126,6 +126,10 @@ function formatWarnings(warnings: Array<{ filePath: string; message: string }>):
 	return warnings
 		.map((warning) => `comment-checker found issues in ${warning.filePath}:\n${warning.message}`)
 		.join("\n\n");
+}
+
+function normalizeHookText(value: string): string {
+	return value.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
 }
 
 function isCodexPostToolUseInput(value: unknown): value is CodexPostToolUseInput {
