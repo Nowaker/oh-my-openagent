@@ -6,7 +6,8 @@
 					{
 						"type": "command",
 						"command": "node \"${PLUGIN_ROOT}/components/start-work-continuation/dist/cli.js\" hook stop",
-						"timeout": 10
+						"timeout": 10,
+						"statusMessage": "checking start-work continuation"
 					}
 				]
 			}
@@ -17,7 +18,8 @@
 					{
 						"type": "command",
 						"command": "node \"${PLUGIN_ROOT}/components/start-work-continuation/dist/cli.js\" hook subagent-stop",
-						"timeout": 10
+						"timeout": 10,
+						"statusMessage": "checking start-work continuation"
 					}
 				]
 			}

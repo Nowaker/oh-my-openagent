@@ -10,6 +10,44 @@ async function readJson(relativePath) {
 	return JSON.parse(await readFile(join(root, relativePath), "utf8"));
 }
 
+async function readComponentHookManifests() {
+	const components = await readdir(join(root, "components"), { withFileTypes: true });
+	const manifests = [];
+	for (const entry of components) {
+		if (!entry.isDirectory()) continue;
+		const source = join("components", entry.name, "hooks", "hooks.json");
+		manifests.push({ source, hooks: await readJson(source) });
+	}
+	return manifests.sort((left, right) => left.source.localeCompare(right.source));
+}
+
+function collectCommandHooks(hooks, source) {
+	const config = hooks.hooks;
+	if (typeof config !== "object" || config === null || Array.isArray(config)) {
+		throw new TypeError(`Invalid hooks manifest: ${source}`);
+	}
+	const commandHooks = [];
+	for (const [eventName, groups] of Object.entries(config)) {
+		if (!Array.isArray(groups)) {
+			throw new TypeError(`Invalid hook groups in ${source}:${eventName}`);
+		}
+		groups.forEach((group, groupIndex) => {
+			if (typeof group !== "object" || group === null || !Array.isArray(group.hooks)) {
+				throw new TypeError(`Invalid hook group in ${source}:${eventName}:${groupIndex}`);
+			}
+			group.hooks.forEach((handler, handlerIndex) => {
+				if (typeof handler !== "object" || handler === null || handler.type !== "command") return;
+				commandHooks.push({ source, eventName, groupIndex, handlerIndex, handler });
+			});
+		});
+	}
+	return commandHooks;
+}
+
+function hookLocation({ source, eventName, groupIndex, handlerIndex, handler }) {
+	return `${source}:${eventName}:${groupIndex}:${handlerIndex}:${handler.command}`;
+}
+
 function findSpawnAgentTypes(content) {
 	const agentTypes = new Set();
 	const regex = /spawn_agent\(agent_type="([^"]+)"/g;
@@ -56,6 +94,52 @@ test("#given isolated components #when hooks are inspected #then commands stay i
 		assert.match(text, new RegExp(marker.replaceAll("/", "\\/")));
 	}
 	assert.doesNotMatch(text, /codex-(comment-checker|lsp|rules|telemetry|ulw-loop|ultrawork)@/);
+});
+
+test("#given aggregate hook commands #when inspected #then every command exposes a Codex status message", async () => {
+	// given
+	const hooks = await readJson("hooks/hooks.json");
+
+	// when
+	const commandHooks = collectCommandHooks(hooks, "hooks/hooks.json");
+	const missingStatusMessages = commandHooks
+		.filter(({ handler }) => typeof handler.statusMessage !== "string" || handler.statusMessage.trim() === "")
+		.map(hookLocation);
+
+	// then
+	assert.deepEqual(missingStatusMessages, []);
+});
+
+test("#given component hook commands #when inspected #then standalone packages expose Codex status messages", async () => {
+	// given
+	const componentHooks = await readComponentHookManifests();
+
+	// when
+	const missingStatusMessages = componentHooks
+		.flatMap(({ source, hooks }) => collectCommandHooks(hooks, source))
+		.filter(({ handler }) => typeof handler.statusMessage !== "string" || handler.statusMessage.trim() === "")
+		.map(hookLocation);
+
+	// then
+	assert.deepEqual(missingStatusMessages, []);
+});
+
+test("#given hook status messages #when inspected #then labels describe OMO responsibilities instead of the hook runner", async () => {
+	// given
+	const aggregateHooks = await readJson("hooks/hooks.json");
+	const componentHooks = await readComponentHookManifests();
+
+	// when
+	const commandHooks = [
+		...collectCommandHooks(aggregateHooks, "hooks/hooks.json"),
+		...componentHooks.flatMap(({ source, hooks }) => collectCommandHooks(hooks, source)),
+	];
+	const genericStatusMessages = commandHooks
+		.filter(({ handler }) => typeof handler.statusMessage !== "string" || /\bhook\b/i.test(handler.statusMessage))
+		.map(hookLocation);
+
+	// then
+	assert.deepEqual(genericStatusMessages, []);
 });
 
 test("#given aggregate OMO plugin is enabled #when hooks are inspected #then ulw-loop guards budgeted create_goal calls", async () => {
