@@ -50,7 +50,7 @@ describe("codex rules post-compaction context budget", () => {
 		expect(firstContext.length).toBeGreaterThan(20_000);
 		expect(postCompactContext.length).toBeLessThan(firstContext.length);
 		expect(postCompactContext.length).toBeLessThan(14_000);
-		expect(postCompactContext).toContain("[Rule truncated. Read full rule:");
+		expect(postCompactContext).toContain("[Truncated. Full:");
 		expect(postCompactContext).toContain("Instructions from:");
 	});
 });

@@ -236,7 +236,7 @@ describe("plugin bundled rules", () => {
 
 		// then
 		expect(output).toContain(tailMarker);
-		expect(output).not.toContain("[Rule truncated. Read full rule:");
+		expect(output).not.toContain("[Truncated. Full:");
 	});
 
 	it("#given project rule body exceeds per-rule cap #when SessionStart runs #then project body is truncated", async () => {
@@ -262,7 +262,7 @@ describe("plugin bundled rules", () => {
 		});
 
 		// then
-		expect(output).toContain("[Rule truncated. Read full rule: .omo/rules/oversized.md]");
+		expect(output).toContain("[Truncated. Full: .omo/rules/oversized.md]");
 		expect(output).not.toContain(tailMarker);
 	});
 });

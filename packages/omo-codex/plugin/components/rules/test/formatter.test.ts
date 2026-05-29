@@ -100,6 +100,30 @@ describe("rules formatter hook context", () => {
 		expect(block).not.toContain("/repo/packages/AGENTS.md");
 	});
 
+	it("#given multiple oversized rules #when formatting under a tight result budget #then every rule receives a fair truncated share with a read-full guide", () => {
+		// given
+		const rules = [
+			loadedRule({ path: "/repo/alpha.md", relativePath: "alpha.md", body: `alpha-${"A".repeat(500)}` }),
+			loadedRule({ path: "/repo/beta.md", relativePath: "beta.md", body: `beta-${"B".repeat(500)}` }),
+			loadedRule({ path: "/repo/gamma.md", relativePath: "gamma.md", body: `gamma-${"C".repeat(500)}` }),
+		];
+
+		// when
+		const block = formatDynamicBlock(rules, "src/app.ts", {
+			maxRuleChars: 10_000,
+			maxResultChars: 900,
+		});
+
+		// then
+		expect(block).toContain("Instructions from: /repo/alpha.md");
+		expect(block).toContain("Instructions from: /repo/beta.md");
+		expect(block).toContain("Instructions from: /repo/gamma.md");
+		expect(block).toContain("[Truncated. Full: alpha.md]");
+		expect(block).toContain("[Truncated. Full: beta.md]");
+		expect(block).toContain("[Truncated. Full: gamma.md]");
+		expect(occurrenceCount(block, "[Truncated. Full:")).toBe(3);
+	});
+
 	it("#given no matching rules #when formatting hook context #then it emits no context", () => {
 		// given
 		const rules: LoadedRule[] = [];

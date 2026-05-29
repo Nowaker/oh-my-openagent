@@ -92,14 +92,14 @@ export const DEFAULT_MAX_SCAN_FILES = 1000;
  */
 export const DEFAULT_MAX_RESULT_CHARS = 40000;
 
-export const DEFAULT_POST_COMPACT_MAX_RULE_CHARS = 6000;
+export const DEFAULT_POST_COMPACT_MAX_RULE_CHARS = 3500;
 
-export const DEFAULT_POST_COMPACT_MAX_RESULT_CHARS = 12000;
+export const DEFAULT_POST_COMPACT_MAX_RESULT_CHARS = 4000;
 
 /**
  * Truncation marker template. `{path}` is replaced with the relative path.
  */
-export const TRUNCATION_NOTICE = "\n\n[Rule truncated. Read full rule: {path}]";
+export const TRUNCATION_NOTICE = "\n\n[Truncated. Full: {path}]";
 
 /**
  * Directories excluded by the recursive scanner regardless of glob settings.
