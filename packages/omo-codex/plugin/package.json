@@ -14,6 +14,9 @@
 		"components/ulw-loop",
 		"components/ultrawork"
 	],
+	"dependencies": {
+		"@oh-my-opencode/shared-skills": "file:../../shared-skills"
+	},
 	"scripts": {
 		"build": "bun run --cwd ../../ast-grep-mcp build && node scripts/sync-skills.mjs && node ../scripts/sync-telemetry-component.mjs && npm run build --workspaces --if-present",
 		"check": "npm run build && npm test",

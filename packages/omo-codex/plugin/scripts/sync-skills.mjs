@@ -2,9 +2,10 @@
 import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { sharedSkillsRootPath } from "@oh-my-opencode/shared-skills";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
-const sharedSkillsRoot = join(root, "..", "..", "shared-skills", "skills");
+const sharedSkillsRoot = sharedSkillsRootPath();
 const skillsRoot = join(root, "skills");
 const skillSources = [
 	["comment-checker", "components/comment-checker/skills/comment-checker"],

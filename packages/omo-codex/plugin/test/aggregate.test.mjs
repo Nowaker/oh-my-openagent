@@ -174,7 +174,7 @@ test("#given aggregate MCP config #when inspected #then code MCPs reference pack
 	assert.deepEqual(codeMcpNames, ["ast_grep", "lsp"]);
 	assert.equal(packageJson.workspaces.includes("components/lsp/packages/lsp-tools-mcp"), false);
 	assert.equal(packageJson.workspaces.includes("components/ast-grep/packages/ast-grep-mcp"), false);
-	assert.equal(packageJson.dependencies, undefined);
+	assert.deepEqual(packageJson.dependencies, { "@oh-my-opencode/shared-skills": "file:../../shared-skills" });
 	assert.match(packageJson.scripts.build, /ast-grep-mcp/);
 	assert.equal(lspServer.command, "node");
 	assert.deepEqual(lspServer.args, ["../../lsp-tools-mcp/dist/cli.js", "mcp"]);
