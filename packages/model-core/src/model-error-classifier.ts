@@ -92,6 +92,11 @@ const RETRYABLE_MESSAGE_PATTERNS = [
  * These take precedence over RETRYABLE_MESSAGE_PATTERNS.
  */
 const STOP_MESSAGE_PATTERNS = [
+  // Deterministic prefill-contract failures: never transient, so retrying
+  // them drives the model-fallback abort+re-dispatch loop (abort emits
+  // session.idle which wipes the fallback dedupe state). Must stay non-retryable.
+  "assistant message prefill",
+  "conversation must end with a user message",
   "quota will reset after",
   "quota exceeded",
   "free usage limit",
