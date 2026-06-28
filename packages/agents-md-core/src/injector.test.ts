@@ -35,7 +35,7 @@ describe("processFilePathForAgentsInjection", () => {
     storageBackfill.clear();
   });
 
-  it("injects AGENTS.md chain in root-skipping order with unchanged context format", async () => {
+  it("injects AGENTS.md chain in root-skipping order with explicit end markers", async () => {
     // given
     rootDirectory = join(tmpdir(), `agents-md-core-injector-${randomUUID()}`);
     const srcDirectory = join(rootDirectory, "src");
@@ -61,8 +61,8 @@ describe("processFilePathForAgentsInjection", () => {
     const nestedAgentsPath = join(nestedDirectory, "AGENTS.md");
     const expectedOutput =
       "base output" +
-      `\n\n[Directory Context: ${srcAgentsPath}]\n${srcAgents}` +
-      `\n\n[Directory Context: ${nestedAgentsPath}]\n${nestedAgents}`;
+      `\n\n[Directory Context: ${srcAgentsPath}]\n${srcAgents}\n<!-- OMO_DIRECTORY_CONTEXT_END -->\n` +
+      `\n\n[Directory Context: ${nestedAgentsPath}]\n${nestedAgents}\n<!-- OMO_DIRECTORY_CONTEXT_END -->\n`;
 
     // when
     await processFilePathForAgentsInjection({
