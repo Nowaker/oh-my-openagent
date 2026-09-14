@@ -8,6 +8,7 @@ import type { ContextLimitModelCacheState } from "../../shared/context-limit-res
 import { getAgentConfigKey } from "../../shared/agent-display-names"
 import { resolveSessionEventID } from "../../shared/event-session-id"
 import { isRealUserTextPart } from "../../shared"
+import { generatePartId } from "../../features/hook-message-injector/id-generation"
 
 type ChatMessageInput = {
   readonly sessionID: string
@@ -21,7 +22,7 @@ type OutputPart = {
 }
 
 type ChatMessageOutput = {
-  readonly message: Record<string, unknown>
+  readonly message: { readonly id: string; readonly [key: string]: unknown }
   readonly parts: OutputPart[]
 }
 
@@ -88,7 +89,14 @@ export function createHephaestusAgentsMdInjectorHook(
       }))
     }
 
-    textPart.text = `${contextBlocks.join("")}\n\n---\n\n${textPart.text ?? ""}`
+    output.parts.splice(output.parts.indexOf(textPart), 0, {
+      id: generatePartId(),
+      messageID: output.message.id,
+      sessionID: input.sessionID,
+      type: "text",
+      synthetic: true,
+      text: `${contextBlocks.join("")}\n\n---\n\n`,
+    })
     injectedSessions.add(input.sessionID)
   }
 

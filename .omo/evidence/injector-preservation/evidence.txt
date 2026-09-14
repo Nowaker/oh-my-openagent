@@ -1,0 +1,53 @@
+Scope: Hephaestus directory injection preserves the submitted text part.
+Canonical fork: /home/nowaker/projekty/nowaker/oh-my-openagent (origin Nowaker/oh-my-openagent).
+Task worktree: /home/nowaker/projekty/nowaker/omo-injector-context-part
+Branch: fix/hephaestus-context-part
+Base: upstream/release/v4.19.4-source-state cee71e03d05fb10347303720800ce5143c72e81a
+Reason for release base: deployed npm package is oh-my-openagent 4.19.4; current upstream/dev is a later major prerelease. No integration checkout moved.
+
+Supported OpenCode boundary:
+- packages/opencode/src/session/prompt.ts invokes chat.message before updateMessage/updatePart.
+- packages/opencode/src/session/message-v2.ts:422 passes non-ignored text to the model regardless of synthetic.
+- Actual isolated synthetic probe persisted one synthetic text part and one genuine text part; model capture contained the synthetic-only sentinel.
+- OMO plugin/chat-message.ts classifies synthetic-only messages before the Hephaestus injector, which runs last after agent compatibility hooks.
+
+Failing-first evidence:
+- preservation.test.ts failed original object equality: directory content was prepended to original.text.
+- Real source injector red run returned toolSucceeded=false, exactOriginalMatches=0, syntheticParts=0; modelSawContext=true.
+- The synthetic probe initially reused a fixed part ID across messages. Correcting the fixture to unique IDs established persistence; production uses the existing generatePartId helper.
+- A preliminary resumed fixture selected the wrong default agent and did not inject. The reproducible fixture now sets isolated default_agent=hephaestus explicitly.
+
+Green evidence:
+- bun test packages/omo-opencode/src/hooks/hephaestus-agents-md-injector/ packages/omo-opencode/src/plugin/chat-message.test.ts
+  39 pass, 0 fail, 88 assertions.
+- Actual source hook compiled via plugin.ts; runtime.ts loads only that real hook and the retained Vibeterm plugin, not a mimic of injection logic.
+- Real public buildPromptTool through tmux: toolSucceeded=true, exactOriginalMatches=1, syntheticParts=1, genuineParts=1, classifiedSyntheticOnly=false, modelSawExactSyntheticContext=true.
+- Original submitted metadata body includes a forged Directory Context header. It remains original content, not a normalization rule; ACK matcher is unchanged.
+- Unit regression preserves exact original object including whitespace, id, messageID and sessionID. Synthetic-only input remains unchanged.
+- Retained tools matcher suite: bun test _lib/vibeterm-tmux/paste-summary-ack.test.ts _lib/vibeterm-tmux/exact-message-ack.test.ts: 19 pass, 0 fail, including unrelated prefix, changed metadata/body/internal whitespace, and additional trailing characters. No matcher code was changed.
+- Provider capture is in memory only; outputs contain booleans/counts/IDs, not prompt, instructions or credentials.
+- Sandbox uses separate HOME/config/data with a local fixture provider and no live auth link. Existing harness tears down only its throwaway socket and namespaced processes.
+
+Reproduction (from this worktree):
+bun install --frozen-lockfile --ignore-scripts
+bun build .omo/evidence/injector-preservation/plugin.ts --target bun --format esm --external zod --outfile .omo/evidence/injector-preservation/plugin.js
+TOOLS_REPO=/home/nowaker/projekty/nowaker/opencode-tools-transport-readiness bun run .omo/evidence/injector-preservation/runtime.ts .omo/evidence/injector-preservation/plugin.js green
+
+Canonical adapter build (the index and node-require-shim nodes of script/build.ts):
+bun build packages/omo-opencode/src/index.ts --outdir dist --target bun --format esm --external zod
+bun run script/patch-node-require-shim.ts
+Observed: 1977 modules, 5.74 MB; require shim patched successfully.
+Whole-product bun install lifecycle started bun run build and exceeded the command deadline in unrelated upstream materialization; no full multi-harness release-build success is claimed.
+Scoped tsc has one inherited dependency error: packages/utils/src/runtime/file.ts:35 ArrayBuffer | SharedArrayBuffer vs ArrayBuffer. No changed-file diagnostics reported. Do not silently modify unrelated dependency code.
+LSP tool refused the task worktree as outside the request cwd; this is not a clean LSP claim.
+
+Dependencies: @opencode-ai/plugin 1.15.13; @opencode-ai/sdk 1.15.13; zod ^4.4.3; workspace agents-md-core, rules-engine, utils. No dependency or version changes.
+
+DEPLOYMENT GATE (not executed):
+Live artifact inspected: /home/nowaker/.cache/opencode/packages/oh-my-openagent@latest/node_modules/oh-my-openagent/dist/index.js, package oh-my-openagent 4.19.4.
+Do not overwrite installed dist. Parent must review and integrate/package the source fix, decide the versioned package/fork installation through the existing package manager, then explicitly authorize activation.
+Runtime plugin entry remains package-managed; global CLI installation under ~/.npm-global is separate from OpenCode's plugin cache and must not be mistaken for plugin activation.
+Each affected OpenCode process loads hooks once; a package update alone does not change already-running processes. Coordinator must individually reload only intended owner processes after approval, never the default tmux server or coordinator implicitly.
+No install, push, primary merge, production prompt/replay, profile change, or OpenCode core build/install occurred.
+
+Remaining review: retained Oracle and parent review required before integration. Existing directory truncation remains unchanged; original data already prefixed in historical rows is not rewritten.

@@ -14,8 +14,9 @@ const SISYPHUS_DISPLAY = getAgentDisplayName("sisyphus")
 let temporaryDirectory = ""
 
 function createOutput(text = "Implement the thing") {
+  const message: { id: string; agent?: string } = { id: "msg_fixture" }
   return {
-    message: {},
+    message,
     parts: [{ type: "text", text }],
   }
 }
@@ -47,7 +48,7 @@ describe("hephaestus agents md injector hook", () => {
     // then
     expect(output.parts[0]?.text).toContain(`[Directory Context: ${realpathSync(join(temporaryDirectory, "AGENTS.md"))}]`)
     expect(output.parts[0]?.text).toContain("Always force-load this rule.")
-    expect(output.parts[0]?.text).toEndWith("Implement the thing")
+    expect(output.parts[1]?.text).toBe("Implement the thing")
   })
 
   test("does not inject AGENTS.md for non-Hephaestus agents", async () => {

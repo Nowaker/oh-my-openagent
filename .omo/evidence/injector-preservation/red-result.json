@@ -1,0 +1,11 @@
+{
+  "mode": "red",
+  "toolSucceeded": false,
+  "exactOriginalMatches": 0,
+  "syntheticParts": 0,
+  "genuineParts": 1,
+  "classifiedSyntheticOnly": false,
+  "modelSawContext": true,
+  "originalForgedHeaderRetained": false,
+  "isolatedDb": true
+}

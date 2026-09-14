@@ -1,0 +1,10 @@
+{
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": { "rootDir": "../../.." },
+  "include": [
+    "../../../packages/omo-opencode/src/hooks/hephaestus-agents-md-injector/hook.ts",
+    "../../../packages/omo-opencode/src/hooks/hephaestus-agents-md-injector/preservation.test.ts",
+    "../../../packages/omo-opencode/src/hooks/hephaestus-agents-md-injector/index.test.ts",
+    "plugin.ts"
+  ]
+}
