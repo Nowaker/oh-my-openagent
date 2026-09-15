@@ -6,12 +6,13 @@ import { formatAgentsMdContextBlock } from "@oh-my-opencode/agents-md-core"
 import { isRealUserTextPart, isSyntheticOrInternalOnlyTextParts } from "@oh-my-opencode/utils"
 import { unsafeTestValue } from "../../../../../test-support/unsafe-test-value"
 import { createHephaestusAgentsMdInjectorHook } from "./hook"
+import { Database } from "bun:sqlite"
 
 test("preserves original user part while adding equivalent synthetic directory context", async () => {
   // Given: metadata-bearing input with significant whitespace and independent directory content.
   const root = mkdtempSync(join(tmpdir(), "omo-preserve-"))
   const content = "directory-context-fixture\n"
-  const original = { type: "text", text: "[vibeterm_metadata]\ncall: fixture\n[/vibeterm_metadata]\n\n---\n\n  body\twith  spaces \n", id: "prt_original", messageID: "msg_original", sessionID: "ses_original" }
+  const original = { type: "text", text: "[vibeterm_metadata]\ncall: fixture\n[/vibeterm_metadata]\n\n---\n\n  body\twith  spaces \n", id: "prt_000000000001AAAAAAAAAAAAAA", messageID: "msg_original", sessionID: "ses_original" }
   const snapshot = { ...original }
   const output: { message: { id: string; sessionID: string }; parts: { type: string; text?: string; synthetic?: boolean; id?: string; messageID?: string; sessionID?: string }[] } = { message: { id: "msg_original", sessionID: "ses_original" }, parts: [original] }
   try {
@@ -28,6 +29,14 @@ test("preserves original user part while adding equivalent synthetic directory c
       type: "text", synthetic: true, messageID: "msg_original", sessionID: "ses_original",
       text: formatAgentsMdContextBlock({ agentsPath: join(root, "AGENTS.md"), content, truncated: false }) + "\n\n---\n\n",
     })])
+    const db = new Database(":memory:")
+    try {
+      db.run("CREATE TABLE part(id TEXT PRIMARY KEY, data TEXT)")
+      for (const part of output.parts) db.run("INSERT INTO part VALUES(?,?)", [part.id ?? "", JSON.stringify(part)])
+      const hydrated = db.query<{ synthetic: number | null }, []>("SELECT json_extract(data,'$.synthetic') AS synthetic FROM part ORDER BY id").all()
+      expect(hydrated[0]?.synthetic).toBe(1)
+      expect(hydrated[1]?.synthetic).toBeNull()
+    } finally { db.close() }
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
 

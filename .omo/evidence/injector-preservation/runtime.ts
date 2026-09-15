@@ -58,17 +58,29 @@ try {
   await waitFor(() => captured.length > baselineRequests, { timeoutMs: 30000, intervalMs: 100, label: "captured model context" })
   const db = new Database(rig.dbPath, { readonly: true })
   try {
-    const parts = db.query<{ data: string }, [string, number]>("SELECT p.data FROM part p JOIN message m ON m.id=p.message_id WHERE m.session_id=? AND m.time_created>=? AND json_extract(m.data,'$.role')='user' AND json_extract(p.data,'$.type')='text'").all(sid, started).map((row) => z.object({ text: z.string(), type: z.string(), synthetic: z.boolean().optional(), id: z.string().optional() }).parse(JSON.parse(row.data)))
+    const parts = db.query<{ data: string }, [string, number]>("SELECT p.data FROM part p JOIN message m ON m.id=p.message_id WHERE m.session_id=? AND m.time_created>=? AND json_extract(m.data,'$.role')='user' AND json_extract(p.data,'$.type')='text' ORDER BY p.message_id,p.id").all(sid, started).map((row) => z.object({ text: z.string(), type: z.string(), synthetic: z.boolean().optional(), id: z.string().optional() }).parse(JSON.parse(row.data)))
+    const synthetic = parts.find((part) => part.synthetic)
+    const currentUserContents = captured.slice(baselineRequests).flatMap((text) =>
+      z.array(z.object({ role: z.string(), content: z.unknown() })).parse(JSON.parse(text))
+        .filter((message) => message.role === "user")
+        .map((message) => JSON.stringify(message.content))
+        .filter((content) => content.includes(JSON.stringify(expected + " ").slice(1, -1))))
+    const modelOrder = synthetic !== undefined && currentUserContents.some((text) => {
+      const contextAt = text.indexOf(JSON.stringify(synthetic.text).slice(1, -1))
+      const originalAt = text.indexOf(JSON.stringify(expected + " ").slice(1, -1))
+      return contextAt >= 0 && originalAt > contextAt
+    })
     const report = { mode, toolSucceeded: !result.startsWith("error:"), exactOriginalMatches: parts.filter((p) => p.text === expected + " ").length,
       syntheticParts: parts.filter((p) => p.synthetic).length, genuineParts: parts.filter(isRealUserTextPart).length,
       classifiedSyntheticOnly: isSyntheticOrInternalOnlyTextParts(parts), modelSawContext: captured.slice(baselineRequests).some((text) => text.includes(mode === "probe" ? "SYNTHETIC_ONLY_SENTINEL" : "INJECTOR_CONTEXT_SENTINEL")),
       originalForgedHeaderRetained: parts.some((p) => p.text === expected + " "), isolatedDb: rig.dbPath.startsWith(rig.root),
       modelSawExactSyntheticContext: parts.filter((p) => p.synthetic).some((p) => captured.slice(baselineRequests).some((text) => text.includes(JSON.stringify(p.text).slice(1, -1)))),
+      hydrationContextFirst: parts[0]?.synthetic === true, modelContextBeforeOriginal: modelOrder,
     }
     writeFileSync(join(import.meta.dir, `${mode}-result.json`), JSON.stringify(report, null, 2))
     console.log(JSON.stringify(report))
     if (mode !== "probe") console.log(readFileSync(join(rig.dataHome, "injector-proof.jsonl"), "utf8"))
-    if (!report.toolSucceeded || report.exactOriginalMatches !== 1 || report.syntheticParts !== 1 || !report.modelSawExactSyntheticContext || report.classifiedSyntheticOnly) process.exitCode = 1
+    if (!report.toolSucceeded || report.exactOriginalMatches !== 1 || report.syntheticParts !== 1 || !report.modelSawExactSyntheticContext || report.classifiedSyntheticOnly || !report.hydrationContextFirst || !report.modelContextBeforeOriginal) process.exitCode = 1
   } finally { db.close() }
 } finally {
   if (previousSocket === undefined) delete process.env["VIBETERM_TMUX_SOCKET"]; else process.env["VIBETERM_TMUX_SOCKET"] = previousSocket

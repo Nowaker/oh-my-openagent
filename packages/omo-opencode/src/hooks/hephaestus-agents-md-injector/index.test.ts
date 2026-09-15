@@ -17,7 +17,7 @@ function createOutput(text = "Implement the thing") {
   const message: { id: string; agent?: string } = { id: "msg_fixture" }
   return {
     message,
-    parts: [{ type: "text", text }],
+    parts: [{ type: "text", text, id: "prt_0a0000000001AAAAAAAAAAAAAA" }],
   }
 }
 

@@ -51,4 +51,14 @@ Runtime plugin entry remains package-managed; global CLI installation under ~/.n
 Each affected OpenCode process loads hooks once; a package update alone does not change already-running processes. Coordinator must individually reload only intended owner processes after approval, never the default tmux server or coordinator implicitly.
 No install, push, primary merge, production prompt/replay, profile change, or OpenCode core build/install occurred.
 
+Ordering review correction:
+- OpenCode message-v2.ts:314-330 hydrates ORDER BY message_id,part.id; array splice alone did not preserve order.
+- Ordering-red real run: ACK and context presence passed, but hydrationContextFirst=false and modelContextBeforeOriginal=false. Random-prefix synthetic IDs sorted after native original IDs.
+- Context IDs now use the native 12-hex time/counter and 14-base62 random suffix contract, with the time/counter field one less than the original. Existing IDs are never changed. Cryptographic suffixes retain collision resistance and candidate collisions against existing parts are rejected.
+- Unsupported/non-native and zero-field IDs fail explicitly rather than invent invalid ordering. This boundary requires retained reviewer approval.
+- Ordering-green actual source runtime: one original match, one synthetic part, genuine classification unchanged, hydrationContextFirst=true, modelContextBeforeOriginal=true. Model order is checked within the current request's user content, not against prior history.
+- Unit suite: 43 pass, 395 assertions, including deterministic minimal native original ID and SQL hydration, 100 unique IDs, existing relative order, and unsupported-ID refusal.
+- Latest canonical full build retry again stalled in upstream materialization and was terminated at 600000ms. Previous declaration blockers remain; no complete package artifact or deployment approval is claimed.
+- Adapter index rebuild: 1978 modules, 5.75 MB; require shim succeeded.
+
 Remaining review: retained Oracle and parent review required before integration. Existing directory truncation remains unchanged; original data already prefixed in historical rows is not rewritten.

@@ -8,7 +8,7 @@ import type { ContextLimitModelCacheState } from "../../shared/context-limit-res
 import { getAgentConfigKey } from "../../shared/agent-display-names"
 import { resolveSessionEventID } from "../../shared/event-session-id"
 import { isRealUserTextPart } from "../../shared"
-import { generatePartId } from "../../features/hook-message-injector/id-generation"
+import { createContextPartId } from "./context-part-id"
 
 type ChatMessageInput = {
   readonly sessionID: string
@@ -67,7 +67,7 @@ export function createHephaestusAgentsMdInjectorHook(
     if (injectedSessions.has(input.sessionID)) return
     if (getAgentConfigKey(getEffectiveAgent(input, output)) !== "hephaestus") return
 
-    const textPart = output.parts.find(isRealUserTextPart)
+    const textPart = output.parts.find((part): boolean => isRealUserTextPart(part))
     if (!textPart) return
     const messageID = output.message.id
     if (typeof messageID !== "string") throw new Error("AGENTS context injection requires the OpenCode message ID")
@@ -92,7 +92,7 @@ export function createHephaestusAgentsMdInjectorHook(
     }
 
     output.parts.splice(output.parts.indexOf(textPart), 0, {
-      id: generatePartId(),
+      id: createContextPartId(textPart.id, output.parts.map((part) => part.id)),
       messageID,
       sessionID: input.sessionID,
       type: "text",

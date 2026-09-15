@@ -1,0 +1,14 @@
+{
+  "mode": "ordering-red",
+  "toolSucceeded": true,
+  "exactOriginalMatches": 1,
+  "syntheticParts": 1,
+  "genuineParts": 1,
+  "classifiedSyntheticOnly": false,
+  "modelSawContext": true,
+  "originalForgedHeaderRetained": true,
+  "isolatedDb": true,
+  "modelSawExactSyntheticContext": true,
+  "hydrationContextFirst": false,
+  "modelContextBeforeOriginal": false
+}
