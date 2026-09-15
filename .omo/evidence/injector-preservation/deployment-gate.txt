@@ -23,10 +23,12 @@ This is a local cache hotfix, not npm publication. It can be replaced by a later
 
 Build prerequisite
 ------------------
-Full bun run build currently fails on THREE diagnostics in TWO unchanged upstream files:
+The latest full bun run build attempt stalled in upstream materialization and was terminated at 600000ms, before a complete build result was available.
+An earlier attempt passed materialization but failed on THREE declaration diagnostics in TWO unchanged upstream files:
 packages/omo-opencode/src/features/background-agent/process-cleanup.test-helpers.ts:28,35
 packages/utils/src/runtime/file.ts:35
-Owner must authorize narrow baseline typing repairs or supply the release's compatible build environment. Dependencies must not be silently changed. No artifact should be installed before full build succeeds.
+Both the latest materialization stall and the earlier declaration failures remain unresolved build-gate evidence. Typing repairs alone have NOT been proved sufficient for a complete build.
+Owner must authorize the bounded build-environment/materialization investigation and any baseline typing repairs, or supply the release's compatible build environment. Dependencies must not be silently changed. No artifact should be installed before full build succeeds.
 
 Commands AFTER approval and successful full build
 ------------------------------------------------

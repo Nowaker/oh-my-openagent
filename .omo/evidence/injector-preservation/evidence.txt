@@ -55,10 +55,16 @@ Ordering review correction:
 - OpenCode message-v2.ts:314-330 hydrates ORDER BY message_id,part.id; array splice alone did not preserve order.
 - Ordering-red real run: ACK and context presence passed, but hydrationContextFirst=false and modelContextBeforeOriginal=false. Random-prefix synthetic IDs sorted after native original IDs.
 - Context IDs now use the native 12-hex time/counter and 14-base62 random suffix contract, with the time/counter field one less than the original. Existing IDs are never changed. Cryptographic suffixes retain collision resistance and candidate collisions against existing parts are rejected.
-- Unsupported/non-native and zero-field IDs fail explicitly rather than invent invalid ordering. This boundary requires retained reviewer approval.
+- Unsupported/non-native and zero-field IDs fail explicitly rather than invent invalid ordering. Retained Oracle approved the native-ID source path at 142ca3067c42735a8e3518b3f108dacd358f1ff0.
 - Ordering-green actual source runtime: one original match, one synthetic part, genuine classification unchanged, hydrationContextFirst=true, modelContextBeforeOriginal=true. Model order is checked within the current request's user content, not against prior history.
 - Unit suite: 43 pass, 395 assertions, including deterministic minimal native original ID and SQL hydration, 100 unique IDs, existing relative order, and unsupported-ID refusal.
 - Latest canonical full build retry again stalled in upstream materialization and was terminated at 600000ms. Previous declaration blockers remain; no complete package artifact or deployment approval is claimed.
 - Adapter index rebuild: 1978 modules, 5.75 MB; require shim succeeded.
 
-Remaining review: retained Oracle and parent review required before integration. Existing directory truncation remains unchanged; original data already prefixed in historical rows is not rewritten.
+Review and independent parent verification (reported by parent):
+- Retained Oracle source review approved 142ca3067c42735a8e3518b3f108dacd358f1ff0 for the native-ID path.
+- Parent independently reran the corrected actual runtime: exactOriginalMatches=1, syntheticParts=1, genuineParts=1, hydrationContextFirst=true, modelContextBeforeOriginal=true, with all runtime checks true.
+- Parent independently reran the focused suite: 43 tests passed, 395 assertions.
+- Source approval and runtime proof do not waive the package build gate. The latest 600000ms materialization stall is distinct from earlier declaration diagnostics; typing repairs alone are not proved sufficient.
+
+Remaining gate: full package build and explicit packaging/installation/activation approval. Existing directory truncation remains unchanged; original data already prefixed in historical rows is not rewritten.
