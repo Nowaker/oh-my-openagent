@@ -22,7 +22,7 @@ type OutputPart = {
 }
 
 type ChatMessageOutput = {
-  readonly message: { readonly id: string; readonly [key: string]: unknown }
+  readonly message: Record<string, unknown>
   readonly parts: OutputPart[]
 }
 
@@ -69,6 +69,8 @@ export function createHephaestusAgentsMdInjectorHook(
 
     const textPart = output.parts.find(isRealUserTextPart)
     if (!textPart) return
+    const messageID = output.message.id
+    if (typeof messageID !== "string") throw new Error("AGENTS context injection requires the OpenCode message ID")
 
     const agentsPaths = await findAgentsMdUp({
       startDir: ctx.directory,
@@ -91,7 +93,7 @@ export function createHephaestusAgentsMdInjectorHook(
 
     output.parts.splice(output.parts.indexOf(textPart), 0, {
       id: generatePartId(),
-      messageID: output.message.id,
+      messageID,
       sessionID: input.sessionID,
       type: "text",
       synthetic: true,

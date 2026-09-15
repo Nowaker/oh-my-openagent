@@ -37,8 +37,9 @@ Canonical adapter build (the index and node-require-shim nodes of script/build.t
 bun build packages/omo-opencode/src/index.ts --outdir dist --target bun --format esm --external zod
 bun run script/patch-node-require-shim.ts
 Observed: 1977 modules, 5.74 MB; require shim patched successfully.
-Whole-product bun install lifecycle started bun run build and exceeded the command deadline in unrelated upstream materialization; no full multi-harness release-build success is claimed.
-Scoped tsc has one inherited dependency error: packages/utils/src/runtime/file.ts:35 ArrayBuffer | SharedArrayBuffer vs ArrayBuffer. No changed-file diagnostics reported. Do not silently modify unrelated dependency code.
+Whole-product build was retried with 600000ms after restoring every frontend submodule to its recorded gitlink. Materialization succeeded (148 files), and index/TUI/CLI/schema build nodes succeeded.
+Full build remains FAILED at declarations with unchanged upstream errors in process-cleanup.test-helpers.ts:28,35 and packages/utils/src/runtime/file.ts:35. No full multi-harness release-build success or deployable tarball is claimed.
+The full build also found an injector/shared-interface mismatch omitted by the earlier scoped tsc. Fixed by retaining the shared Record message type and checking its ID at the injection boundary. The later full build no longer reports that error. Unit suite remains 39 pass/88 assertions and real runtime remains green.
 LSP tool refused the task worktree as outside the request cwd; this is not a clean LSP claim.
 
 Dependencies: @opencode-ai/plugin 1.15.13; @opencode-ai/sdk 1.15.13; zod ^4.4.3; workspace agents-md-core, rules-engine, utils. No dependency or version changes.

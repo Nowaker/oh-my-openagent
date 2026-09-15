@@ -1,0 +1,59 @@
+NOT EXECUTED: installation, config replacement, package publication, activation.
+
+Source-backed mechanism
+-----------------------
+CONTRIBUTING.md:87-117 only documents file-path development loading. That is NOT the requested deployment route.
+.github/workflows/publish.yml:737-759 is the canonical oh-my-openagent alias packaging: rename root package from oh-my-opencode to oh-my-openagent, map optional platform dependency keys to oh-my-openagent-*, then npm publish --ignore-scripts. Do not edit installed dist.
+OpenCode packages/opencode/src/plugin/shared.ts:207-212 resolves a non-path plugin via Npm.add; a bare name becomes @latest.
+OpenCode packages/core/src/npm.ts:79,115-137 derives cache/packages/<sanitized-spec>, returns existing node_modules/<name> when present, otherwise uses npm Arborist reify with ignoreScripts=true.
+
+Exact current slot
+------------------
+Spec: oh-my-openagent@latest
+Cache project: /home/nowaker/.cache/opencode/packages/oh-my-openagent@latest
+Resolved package: /home/nowaker/.cache/opencode/packages/oh-my-openagent@latest/node_modules/oh-my-openagent
+Entry: dist/index.js
+Updating ~/.npm-global does NOT update this slot.
+
+Proposed local package gate (owner decision required)
+----------------------------------------------------
+Approve local version 4.19.4-nowaker.1 for package oh-my-openagent.
+Keep optional platform binary versions at published 4.19.4 (their code is unchanged); map their keys to the canonical oh-my-openagent-* aliases. Do NOT stamp unavailable platform packages with the local prerelease version.
+This is a local cache hotfix, not npm publication. It can be replaced by a later normal plugin cache refresh; do not claim registry durability.
+
+Build prerequisite
+------------------
+Full bun run build currently fails on THREE diagnostics in TWO unchanged upstream files:
+packages/omo-opencode/src/features/background-agent/process-cleanup.test-helpers.ts:28,35
+packages/utils/src/runtime/file.ts:35
+Owner must authorize narrow baseline typing repairs or supply the release's compatible build environment. Dependencies must not be silently changed. No artifact should be installed before full build succeeds.
+
+Commands AFTER approval and successful full build
+------------------------------------------------
+Run from /home/nowaker/projekty/nowaker/omo-injector-context-part:
+  bun run build
+  bun pm pack --ignore-scripts --destination .omo/evidence/injector-preservation
+
+That initial pack retains the source name oh-my-opencode. Stage the alias without mutating the source manifest:
+  mkdir -p .omo/evidence/injector-preservation/package-stage
+  tar -xzf .omo/evidence/injector-preservation/oh-my-opencode-4.19.4.tgz -C .omo/evidence/injector-preservation/package-stage --strip-components=1
+  bun run .omo/evidence/injector-preservation/stage-manifest.ts .omo/evidence/injector-preservation/package-stage/package.json 4.19.4-nowaker.1
+
+Then run in /home/nowaker/projekty/nowaker/omo-injector-context-part/.omo/evidence/injector-preservation/package-stage:
+  npm pack --ignore-scripts --pack-destination /home/nowaker/projekty/nowaker/omo-injector-context-part/.omo/evidence/injector-preservation
+
+Expected artifact AFTER those successful steps (not currently generated):
+/home/nowaker/projekty/nowaker/omo-injector-context-part/.omo/evidence/injector-preservation/oh-my-openagent-4.19.4-nowaker.1.tgz
+
+Explicitly authorized parent installation, without changing OpenCode config:
+  npm install --prefix /home/nowaker/.cache/opencode/packages/oh-my-openagent@latest --ignore-scripts --save-exact --no-audit --no-fund /home/nowaker/projekty/nowaker/omo-injector-context-part/.omo/evidence/injector-preservation/oh-my-openagent-4.19.4-nowaker.1.tgz
+
+This changes only that package-manager cache project's manifest/lock/install tree. It is NOT a source-path plugin pin and does not overwrite dist by hand. Existing OpenCode plugin configuration remains unchanged. Keep the immutable tarball available for later cache reinstall.
+
+Before activation: verify installed package name/version are oh-my-openagent/4.19.4-nowaker.1, compare SHA-256 of installed dist/index.js to the packaged entry, and ensure no second OMO entry was introduced. Record tarball SHA-256 before installation. Use an isolated config/runtime first.
+Activation: coordinator individually reloads only intended affected OpenCode processes after explicit approval. No default tmux server restart, implicit coordinator restart, or production message replay.
+
+Current generated artifacts
+---------------------------
+dist/index.js (canonical index build and require shim succeeded), dist/tui.js, dist/cli/index.js, dist/cli-node outputs, schemas, materialized skill references.
+These are PARTIAL build outputs, not a complete release package. No .tgz is represented as deployable.
