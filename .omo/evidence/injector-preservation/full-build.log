@@ -1,0 +1,279 @@
+$ bun run script/build.ts
+build:materialize
+$ node packages/omo-codex/plugin/scripts/materialize-shared-upstreams.mjs --strict
+[materialize] wrote 148 frontend reference files from submodules
+build:git-bash-mcp
+$ bun run --cwd packages/git-bash-mcp build
+$ bun build src/cli.ts --outdir dist --target node --format esm
+Bundled 15 modules in 20ms
+
+  cli.js  22.58 KB  (entry point)
+
+build:cli-node
+$ bun run script/build-cli-node.ts
+built dist/cli-node (1 output)
+build:codex-install
+$ bun run script/build-codex-install.ts
+build:schema
+$ bun run script/build-schema.ts
+Generating JSON Schemas...
+✓ JSON Schemas generated: assets/omo.schema.json, assets/oh-my-opencode.schema.json
+build:index
+Bundled 1978 modules in 271ms
+
+  index.js  5.75 MB  (entry point)
+
+build:tui
+Bundled 558 modules in 340ms
+
+  tui.js  2.14 MB  (entry point)
+
+build:cli
+Bundled 918 modules in 320ms
+
+  index.js  3.24 MB  (entry point)
+
+build:omo-schema
+$ bun run script/build-omo-schema.ts
+Generating omo JSON Schema...
+✓ omo JSON Schema generated: assets/omo.schema.json
+build:node-require-shim
+$ bun run script/patch-node-require-shim.ts
+Patched Node/Electron require shim in dist/index.js
+build:shared-skills-assets
+$ bun run build:materialize-frontend && rm -rf dist/skills && cp -R packages/shared-skills/skills dist/skills
+$ node packages/omo-codex/plugin/scripts/materialize-shared-upstreams.mjs --strict
+[materialize] skipped (OMO_SKIP_MATERIALIZE=1)
+build:declarations
+build:lsp-tools-mcp
+$ npm --prefix packages/lsp-tools-mcp ci && npm --prefix packages/lsp-tools-mcp run build
+
+added 51 packages, and audited 54 packages in 3s
+
+18 packages are looking for funding
+  run `npm fund` for details
+
+4 vulnerabilities (2 moderate, 2 high)
+
+To address all issues, run:
+  npm audit fix
+
+Run `npm audit` for details.
+npm notice run @code-yeongyu/lsp-tools-mcp@0.1.0 build
+npm notice run node scripts/ensure-core-links.mjs && rm -rf dist && tsc -p tsconfig.build.json --emitDeclarationOnly && bun build src/cli.ts src/mcp.ts src/tools.ts src/request-context.ts src/lsp/manager.ts --outdir dist --target node --format esm
+Bundled 65 modules in 17ms
+
+  cli.js               177.21 KB  (entry point)
+  mcp.js               176.73 KB  (entry point)
+  tools.js             164.93 KB  (entry point)
+  request-context.js   7.44 KB    (entry point)
+  lsp/manager.js       103.29 KB  (entry point)
+
+build:lsp-daemon
+$ npm --prefix packages/lsp-daemon ci && npm --prefix packages/lsp-daemon run build
+
+added 51 packages, and audited 54 packages in 3s
+
+18 packages are looking for funding
+  run `npm fund` for details
+
+4 vulnerabilities (2 moderate, 2 high)
+
+To address all issues, run:
+  npm audit fix
+
+Run `npm audit` for details.
+npm notice run @code-yeongyu/lsp-daemon@0.1.0 build
+npm notice run node scripts/clean-dist.mjs && tsc -p tsconfig.build.json && bun build src/cli.ts src/index.ts src/client.ts --outdir dist --target node --format esm && node scripts/stamp-dist-version.mjs
+Bundled 78 modules in 68ms
+
+  cli.js     231.47 KB  (entry point)
+  index.js   212.28 KB  (entry point)
+  client.js  209.84 KB  (entry point)
+
+build:senpi-plugin
+$ bun run build:materialize-frontend && node packages/omo-senpi/plugin/scripts/stage-lsp-daemon-runtime.mjs && node packages/omo-senpi/plugin/scripts/build-extension.mjs && node packages/omo-senpi/plugin/scripts/sync-skills.mjs && node packages/omo-senpi/plugin/scripts/embed-directive.mjs --check && node packages/omo-senpi/plugin/scripts/build-install.mjs
+$ node packages/omo-codex/plugin/scripts/materialize-shared-upstreams.mjs --strict
+[materialize] skipped (OMO_SKIP_MATERIALIZE=1)
+Staged Senpi LSP runtime: /home/nowaker/projekty/nowaker/omo-injector-context-part/packages/omo-senpi/plugin/runtime/lsp-daemon/dist
+Bundled 646 modules in 32ms
+
+  omo.js  0.68 MB  (entry point)
+
+Bundled 274 modules in 22ms
+
+  omo-member.js  115.54 KB  (entry point)
+
+Built omo-senpi extensions: /home/nowaker/projekty/nowaker/omo-injector-context-part/packages/omo-senpi/plugin/extensions/omo.js, /home/nowaker/projekty/nowaker/omo-injector-context-part/packages/omo-senpi/plugin/extensions/omo-member.js
+synced omo-senpi skills to /home/nowaker/projekty/nowaker/omo-injector-context-part/packages/omo-senpi/plugin/skills
+generated directive is current: /home/nowaker/projekty/nowaker/omo-injector-context-part/packages/omo-senpi/src/components/ultrawork/generated-directive.ts
+Bundled 2 modules in 3ms
+
+  install.mjs  10.15 KB  (entry point)
+
+Built omo-senpi installer: /home/nowaker/projekty/nowaker/omo-injector-context-part/packages/omo-senpi/plugin/scripts/install.mjs
+build:codex-plugin
+$ npm --prefix packages/omo-codex/plugin ci && bun run --cwd packages/omo-codex/plugin build
+
+added 76 packages, and audited 96 packages in 7s
+
+19 packages are looking for funding
+  run `npm fund` for details
+
+4 vulnerabilities (2 moderate, 2 high)
+
+To address all issues, run:
+  npm audit fix
+
+Run `npm audit` for details.
+npm warn install-scripts 1 package had install scripts blocked because they are not covered by allowScripts:
+npm warn install-scripts   @code-yeongyu/comment-checker@0.8.0 (postinstall: node postinstall.js)
+npm warn install-scripts
+npm warn install-scripts Run `npm install-scripts ls` to review, or `npm install-scripts approve <pkg>` to allow.
+$ node scripts/sync-version.mjs && node scripts/sync-hook-status-messages.mjs && node scripts/build-bundled-mcp-runtimes.mjs && node scripts/materialize-shared-upstreams.mjs --strict && node scripts/sync-skills.mjs && node scripts/build-components.mjs
+Synced OMO Codex manifests to version 4.19.4 (0 updated)
+Using bundled lsp-tools-mcp dist
+Using bundled lsp-daemon dist
+Using bundled git-bash-mcp dist
+[materialize] skipped (OMO_SKIP_MATERIALIZE=1)
+Building components/comment-checker
+npm notice run @code-yeongyu/codex-comment-checker@4.19.4 build
+npm notice run node -e "require('node:fs').rmSync('dist',{recursive:true,force:true})" && bun build src/cli.ts --target node --format esm --outfile dist/cli.js
+Bundled 10 modules in 19ms
+
+  cli.js  19.23 KB  (entry point)
+
+Building components/ultrawork
+npm notice run @code-yeongyu/codex-ultrawork@4.19.4 build
+npm notice run node scripts/sync-directive.mjs && node -e "require('node:fs').rmSync('dist',{recursive:true,force:true})" && bun build src/cli.ts --target node --format esm --outfile dist/cli.js
+Bundled 4 modules in 18ms
+
+  cli.js  7.30 KB  (entry point)
+
+Building components/start-work-continuation
+npm notice run @code-yeongyu/codex-start-work-continuation@4.19.4 build
+npm notice run node -e "require('node:fs').rmSync('dist',{recursive:true,force:true})" && bun build src/cli.ts --target node --format esm --outfile dist/cli.js
+Bundled 5 modules in 15ms
+
+  cli.js  13.75 KB  (entry point)
+
+Bundling components/comment-checker/dist/cli.js
+Bundled 10 modules in 17ms
+
+  cli.js  19.40 KB  (entry point)
+
+Bundling components/ultrawork/dist/cli.js
+Bundled 4 modules in 10ms
+
+  cli.js  7.44 KB  (entry point)
+
+Bundling components/start-work-continuation/dist/cli.js
+Bundled 5 modules in 15ms
+
+  cli.js  13.99 KB  (entry point)
+
+Building components/teammode
+npm notice run @sisyphuslabs/codex-teammode@4.19.4 build
+npm notice run node -e "require('node:fs').rmSync('dist',{recursive:true,force:true})" && bun build src/cli.ts --target node --format esm --outfile dist/cli.js
+Bundled 2 modules in 26ms
+
+  cli.js  4.18 KB  (entry point)
+
+Building components/rules
+npm notice run @code-yeongyu/codex-rules@4.19.4 build
+npm notice run node -e "require('node:fs').rmSync('dist',{recursive:true,force:true})" && bun build src/cli.ts --target node --format esm --outfile dist/cli.js
+Bundled 51 modules in 45ms
+
+  cli.js  155.41 KB  (entry point)
+
+Bundling components/teammode/dist/cli.js
+Bundled 2 modules in 5ms
+
+  cli.js  4.22 KB  (entry point)
+
+Bundling components/rules/dist/cli.js
+Bundled 51 modules in 18ms
+
+  cli.js  155.62 KB  (entry point)
+
+Building components/telemetry
+npm notice run @code-yeongyu/codex-telemetry@4.19.4 build
+npm notice run node -e "require('node:fs').rmSync('dist',{recursive:true,force:true})" && bun build src/cli.ts --target node --format esm --outfile dist/cli.js && bun build src/posthog.ts --target node --format esm --outfile dist/posthog.js
+Bundled 78 modules in 21ms
+
+  cli.js  204.84 KB  (entry point)
+
+Bundled 76 modules in 33ms
+
+  posthog.js  202.42 KB  (entry point)
+
+Bundling components/telemetry/dist/cli.js
+Bundled 78 modules in 34ms
+
+  cli.js  204.57 KB  (entry point)
+
+Building components/codegraph
+npm notice run @sisyphuslabs/codex-codegraph@4.19.4 build
+npm notice run node -e "require('node:fs').rmSync('dist',{recursive:true,force:true})" && bun build src/serve.ts --target node --format esm --outfile dist/serve.js && bun build src/cli.ts --target node --format esm --outfile dist/cli.js
+Bundled 158 modules in 59ms
+
+  serve.js  0.33 MB  (entry point)
+
+Bundled 181 modules in 60ms
+
+  cli.js  0.42 MB  (entry point)
+
+Bundling components/codegraph/dist/cli.js
+Bundled 181 modules in 65ms
+
+  cli.js  0.42 MB  (entry point)
+
+Building components/bootstrap
+npm notice run @sisyphuslabs/codex-bootstrap@4.19.4 build
+npm notice run node scripts/build.mjs
+Resolving dependencies
+Resolved, downloaded and extracted [54]
+Saved lockfile
+
+  dist/cli.js  142.1kb
+
+⚡ Done in 23ms
+Bundling components/bootstrap/dist/cli.js
+Bundled 47 modules in 22ms
+
+  cli.js  146.42 KB  (entry point)
+
+Building components/lazycodex-executor-verify
+npm notice run @code-yeongyu/codex-lazycodex-executor-verify@4.19.4 build
+npm notice run tsc -p tsconfig.build.json
+Building components/git-bash
+npm notice run @sisyphuslabs/codex-git-bash-hook@4.19.4 build
+npm notice run tsc -p tsconfig.build.json
+Bundling components/lazycodex-executor-verify/dist/cli.js
+Bundled 5 modules in 3ms
+
+  cli.js  8.33 KB  (entry point)
+
+Bundling components/git-bash/dist/cli.js
+Bundled 2 modules in 2ms
+
+  cli.js  5.75 KB  (entry point)
+
+Building components/lsp
+npm notice run @code-yeongyu/codex-lsp@4.19.4 prebuild
+npm notice run node scripts/build-lsp-tools.mjs && node scripts/build-lsp-daemon.mjs
+npm notice run @code-yeongyu/codex-lsp@4.19.4 build
+npm notice run node scripts/build-runtime.mjs
+Bundled 10 modules in 11ms
+
+  cli.js  209.40 KB  (entry point)
+
+Building components/ulw-loop
+npm notice run @code-yeongyu/codex-ulw-loop@4.19.4 build
+npm notice run tsc -p tsconfig.build.json
+Bundling components/ulw-loop/dist/cli.js
+Bundled 38 modules in 4ms
+
+  cli.js  153.31 KB  (entry point)
+
+build: all steps completed

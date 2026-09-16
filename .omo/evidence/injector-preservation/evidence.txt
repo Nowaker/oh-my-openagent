@@ -67,4 +67,14 @@ Review and independent parent verification (reported by parent):
 - Parent independently reran the focused suite: 43 tests passed, 395 assertions.
 - Source approval and runtime proof do not waive the package build gate. The latest 600000ms materialization stall is distinct from earlier declaration diagnostics; typing repairs alone are not proved sufficient.
 
-Remaining gate: full package build and explicit packaging/installation/activation approval. Existing directory truncation remains unchanged; original data already prefixed in historical rows is not rewritten.
+Build/package gate resolved by explicitly authorized prerequisite repairs:
+- Exact missing open-design gitlink restored via shallow submodule update; materialization writes all 148 files, no bypass.
+- b761d559d: owned ArrayBuffer return preserves Node file byte-copy semantics.
+- 415a23fd9: checked EventEmitter view preserves heterogeneous listener identity and typing.
+- Oracle ses_f587c34ecffeuxYdMjTUIkkW37 approved both prerequisite repairs.
+- Canonical bun run build succeeded completely; full-build.log ends build: all steps completed.
+- Focused suite: 95 pass, 0 fail, 511 assertions. Node fallback driver: empty, pooled-size, large independent ArrayBuffers PASS.
+- Immutable full package: oh-my-openagent-4.19.4-nowaker.1.tgz; SHA256 4c692b4e59e55a068ad4c13281e0641a2690b88bcb1550e9154c9bef9d19157d.
+- Full package npm-installed in isolated fixture: first/resumed real owner processes pass original identity/bytes, SQL/model order, genuine classification and exact ACK once. See full-package-result.json and full-package-evidence.txt, not earlier extracted-hook evidence.
+- Whole live cache project and config preimages captured privately; see deployment-gate.txt for adoption and process-aware rollback plan.
+Remaining gate: parent retained Oracle artifact review and explicit installation/activation approval. Existing directory truncation remains unchanged; original data already prefixed in historical rows is not rewritten.

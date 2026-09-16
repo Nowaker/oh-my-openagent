@@ -15,22 +15,21 @@ Resolved package: /home/nowaker/.cache/opencode/packages/oh-my-openagent@latest/
 Entry: dist/index.js
 Updating ~/.npm-global does NOT update this slot.
 
-Proposed local package gate (owner decision required)
+Built local package (installation/activation approval still required)
 ----------------------------------------------------
-Approve local version 4.19.4-nowaker.1 for package oh-my-openagent.
+Local version 4.19.4-nowaker.1 for package oh-my-openagent was explicitly authorized and built.
 Keep optional platform binary versions at published 4.19.4 (their code is unchanged); map their keys to the canonical oh-my-openagent-* aliases. Do NOT stamp unavailable platform packages with the local prerelease version.
 This is a local cache hotfix, not npm publication. It can be replaced by a later normal plugin cache refresh; do not claim registry durability.
 
 Build prerequisite
 ------------------
-The latest full bun run build attempt stalled in upstream materialization and was terminated at 600000ms, before a complete build result was available.
-An earlier attempt passed materialization but failed on THREE declaration diagnostics in TWO unchanged upstream files:
-packages/omo-opencode/src/features/background-agent/process-cleanup.test-helpers.ts:28,35
-packages/utils/src/runtime/file.ts:35
-Both the latest materialization stall and the earlier declaration failures remain unresolved build-gate evidence. Typing repairs alone have NOT been proved sufficient for a complete build.
-Owner must authorize the bounded build-environment/materialization investigation and any baseline typing repairs, or supply the release's compatible build environment. Dependencies must not be silently changed. No artifact should be installed before full build succeeds.
+Resolved: open-design was uninitialized; bounded shallow submodule update restored exact gitlink 6afe7eae156bfa29251a51fd0636649c257f7444. Materialization was not bypassed.
+Resolved: process-cleanup.test-helpers.ts uses the checked EventEmitter interface and the heterogeneous Function return contract; runtime/file.ts copies into an owned ArrayBuffer.
+Oracle ses_f587c34ecffeuxYdMjTUIkkW37 approved both repairs. Source commits b761d559d and 415a23fd9. No dependency updates.
+Canonical bun run build exited 0: full-build.log ends with build: all steps completed. Every build graph node completed, including declarations, Codex/Senpi and MCPs.
+Focused suite: 95 pass, 0 fail, 511 assertions. Node fallback driver covers empty, pooled-size and large independent buffers. LSP rejected the external worktree path; successful canonical tsc declarations provide compiler evidence instead.
 
-Commands AFTER approval and successful full build
+Packaging commands executed (do NOT overwrite the immutable artifact)
 ------------------------------------------------
 Run from /home/nowaker/projekty/nowaker/omo-injector-context-part:
   bun run build
@@ -42,12 +41,16 @@ That initial pack retains the source name oh-my-opencode. Stage the alias withou
   bun run .omo/evidence/injector-preservation/stage-manifest.ts .omo/evidence/injector-preservation/package-stage/package.json 4.19.4-nowaker.1
 
 Then run in /home/nowaker/projekty/nowaker/omo-injector-context-part/.omo/evidence/injector-preservation/package-stage:
-  npm pack --ignore-scripts --pack-destination /home/nowaker/projekty/nowaker/omo-injector-context-part/.omo/evidence/injector-preservation
+  bun pm pack --ignore-scripts --destination ..
 
-Expected artifact AFTER those successful steps (not currently generated):
+Immutable built artifact:
 /home/nowaker/projekty/nowaker/omo-injector-context-part/.omo/evidence/injector-preservation/oh-my-openagent-4.19.4-nowaker.1.tgz
+SHA256: 4c692b4e59e55a068ad4c13281e0641a2690b88bcb1550e9154c9bef9d19157d
+Packed dist/index.js SHA256: 1a7b9b04f7727cd6da56ab9e4a3f6c5fef7b698053d31a59b004e6d898a937e5
+Packed manifest SHA256: e926c67df3d27f3d3d44f88436339ef9bb67ce531e69bbbe37d78a4ddd4e9ffa
+Never rebuild or replace approved bytes under 4.19.4-nowaker.1. Any changed artifact requires a new version and another review.
 
-Explicitly authorized parent installation, without changing OpenCode config:
+Proposed parent installation AFTER explicit adoption approval, without changing OpenCode config:
   npm install --prefix /home/nowaker/.cache/opencode/packages/oh-my-openagent@latest --ignore-scripts --save-exact --no-audit --no-fund /home/nowaker/projekty/nowaker/omo-injector-context-part/.omo/evidence/injector-preservation/oh-my-openagent-4.19.4-nowaker.1.tgz
 
 This changes only that package-manager cache project's manifest/lock/install tree. It is NOT a source-path plugin pin and does not overwrite dist by hand. Existing OpenCode plugin configuration remains unchanged. Keep the immutable tarball available for later cache reinstall.
@@ -55,7 +58,14 @@ This changes only that package-manager cache project's manifest/lock/install tre
 Before activation: verify installed package name/version are oh-my-openagent/4.19.4-nowaker.1, compare SHA-256 of installed dist/index.js to the packaged entry, and ensure no second OMO entry was introduced. Record tarball SHA-256 before installation. Use an isolated config/runtime first.
 Activation: coordinator individually reloads only intended affected OpenCode processes after explicit approval. No default tmux server restart, implicit coordinator restart, or production message replay.
 
-Current generated artifacts
+Validation and rollback preimage
 ---------------------------
-dist/index.js (canonical index build and require shim succeeded), dist/tui.js, dist/cli/index.js, dist/cli-node outputs, schemas, materialized skill references.
-These are PARTIAL build outputs, not a complete release package. No .tgz is represented as deployable.
+Full package installed with npm into fresh isolated HOME/XDG/cache/data/state and driven through two real OpenCode owner processes and a loopback mock provider. Complete 15-hook server chain, not the extracted injector. First and resumed originals retain bytes/IDs/genuine classification; synthetic context precedes original in SQL hydration and model content. Public prompt tool succeeds with exactly one exact resumed original ACK and no retry. See full-package-result.json and full-package-evidence.txt.
+
+Private preimages directory: .omo/evidence/injector-preservation/preimages (mode 0700, NEVER commit/upload).
+cache-project/ is a complete copy of /home/nowaker/.cache/opencode/packages/oh-my-openagent@latest, including cache project manifest, lock, dependency tree, .bin and symlinks. diff -qr source/copy exited 0. All 17 symlinks resolve within the cache tree; zero external targets were needed.
+Four existing OpenCode/TUI/OMO config files were safely copied without printing values; their resolved paths and hashes are in private inventory.json. Installed preimage name/version: oh-my-openagent 4.19.4; original dist/index.js SHA256 e522d513a08d0a6871129dbf3d9c3a79e4871693997fbf34190c4d3fa3d6b4b5.
+Before adoption, coordinator must verify preimage freshness against the live target cache/configs. If another session changed them, capture a new private preimage rather than overwrite this one.
+Rollback AFTER explicit owner decision: stop only adopted owner processes, move the entire changed target cache project aside, restore cache-project/ to the exact original cache path preserving links/modes, restore configs only if adoption changed them and no concurrent config changes would be lost, then individually reload every adopted owner. Check installed preimage version/hash and probe each reloaded owner. Disk restore alone does not replace code in already-running processes.
+This changes the JS plugin, not the published 4.19.4 embedded platform binaries. No default server, coordinator, protected serve, production install, primary merge, push or cross-session activation was performed.
+Build tooling reported existing dependency audit warnings (MCP install: 2 moderate, 2 high); no unrelated dependency upgrades were attempted.

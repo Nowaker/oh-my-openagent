@@ -1,0 +1,51 @@
+Artifact: oh-my-openagent-4.19.4-nowaker.1.tgz
+SHA256: 4c692b4e59e55a068ad4c13281e0641a2690b88bcb1550e9154c9bef9d19157d
+Mode: 0444; never replace these bytes under this version.
+Source worktree: /home/nowaker/projekty/nowaker/omo-injector-context-part
+Branch: fix/hephaestus-context-part
+Source base: cee71e03d05fb10347303720800ce5143c72e81a (release 4.19.4)
+Source tip containing all built source changes: 415a23fd9977d1d9c5229dff97d0439326934cd7
+Source injector reviewed at: 142ca3067c42735a8e3518b3f108dacd358f1ff0
+Build prerequisite commits: b761d559d, 415a23fd9
+Source-review session for prerequisites: ses_f587c34ecffeuxYdMjTUIkkW37 (APPROVE)
+Source manifest remains oh-my-opencode 4.19.4. Alias staging alone renames package/version/platform keys.
+
+Build command: bun run build
+Build log: full-build.log (279 lines; final line build: all steps completed)
+Toolchain: Bun 1.4.0 (34cbb9a40), Node v26.8.1, npm 12.0.2
+Generated tracked bundles changed during the build; these build outputs were packed, then working-tree bundle churn was restored. No source file was reverted. The immutable tarball, not a later rebuild, is the adoption input.
+Pack commands: bun pm pack --ignore-scripts --destination .omo/evidence/injector-preservation; extract source archive into package-stage; stage-manifest.ts package-stage/package.json 4.19.4-nowaker.1; bun pm pack --ignore-scripts --destination .. from package-stage.
+Packed JS entry SHA256: 1a7b9b04f7727cd6da56ab9e4a3f6c5fef7b698053d31a59b004e6d898a937e5
+Packed manifest SHA256: e926c67df3d27f3d3d44f88436339ef9bb67ce531e69bbbe37d78a4ddd4e9ffa
+Packed dist/index.d.ts, dist/index.js, dist/tui.js and dist/oh-my-opencode.schema.json exist.
+Runtime dependencies are in the immutable packed manifest; @opencode-ai/plugin and sdk stay 1.15.13, zod stays ^4.4.3. All 12 optional platform keys use oh-my-openagent-* aliases with version 4.19.4. Only the JS plugin is updated; embedded platform binaries remain the published release.
+
+Source lock SHA256:
+bun.lock: 712a91517575a9bc19d50222c953b2b8a11f2ccfcfad119b1e47ee771c77ca0a
+packages/lsp-tools-mcp/package-lock.json: b6a86d8f8cd4e1b4af7f215d72c21969446bf10e090a1938ad4316c663aea260
+packages/lsp-daemon/package-lock.json: 379f5c35ca82aa99418b2ec148b3a2185941610959e453a72d9547e67bd4e167
+packages/omo-codex/plugin/package-lock.json: 55a2f56bd22e1231968cba5057d1182e95fcafaa7c741cdf72ea6c85132b2c9e
+
+Parent independently verified the final full-package driver and identical tarball. Retained tested npm installation provenance (250 locked, 230 installed; all 66 non-builtin literal imports resolved inside isolated installation):
+full-package-package-lock.json SHA256: f3bd487e6e1a0d1bc8219b3c3b9abd76c0b7d09e25498815fd7a999c472bcd5f
+full-package-dependency-inventory.json SHA256: 7caa691b65f906bad538216d4ae64e7d380aff953a6fcbb3d1ee28cd68de4789
+These are the exact tested npm resolution, not a promise that unconstrained ranges will resolve identically during later adoption. Compare adoption's installed dependency tree/lock against this evidence before activation; changes require review.
+
+Submodule gitlinks (all matching recorded source gitlinks):
+packages/shared-skills/upstreams/designpowers: cb00757da9d554591fa78d27aa1854d60a05c4f7
+packages/shared-skills/upstreams/open-design: 6afe7eae156bfa29251a51fd0636649c257f7444
+packages/shared-skills/upstreams/taste-skill: b17742737e796305d829b3ad39eda3add0d79060
+packages/shared-skills/upstreams/ui-ux-pro-max: f32d6a61cdf0bfd57404c45854583fd19ff95088
+
+Private preimage archive: preimages.tar.gz (mode 0600; NEVER commit/upload)
+Archive SHA256: f7e5ed629645f018b1fe55075ff320e9ae66244783fc7e0c69c0937dbf4177cc
+Contains whole cache project plus four config file copies and private inventory.
+Installed preimage: oh-my-openagent 4.19.4
+Installed manifest SHA256: 39e34f875d3f872be7bfcaf7704873e2a2f43e7a20a469ba372cadd5a5ebe0fb
+Installed dist/index.js SHA256: e522d513a08d0a6871129dbf3d9c3a79e4871693997fbf34190c4d3fa3d6b4b5
+Whole cache copy compared equal via diff -qr; 17 internal symlinks, zero external targets.
+Config contents were never printed. Freshness must be rechecked immediately before adoption.
+
+Validation: 95 tests pass, 511 assertions; Node fallback manual driver passes empty, pooled-size, large byte ranges and independent copy semantics. Complete packaged hookchain QA is recorded separately in full-package-result.json and full-package-evidence.txt.
+Node driver reproduction: bun build packages/utils/src/runtime/file.ts --target node --format esm --outfile .omo/evidence/injector-preservation/file-shim.mjs && node .omo/evidence/injector-preservation/prerequisite-driver.mjs
+Limitations: LSP tool rejects worktree outside request cwd; canonical declaration compilation succeeded. No all-repository test-suite claim. Existing package audit warnings remain, no dependency security upgrades in scope. No production installation, activation, push, merge or protected-process restart.
