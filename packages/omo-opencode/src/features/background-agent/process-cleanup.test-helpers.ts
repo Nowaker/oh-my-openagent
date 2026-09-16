@@ -1,3 +1,4 @@
+import type { EventEmitter } from "node:events"
 import { __getProcessCleanupSignalListenerForTesting } from "./process-cleanup"
 
 type ProcessCleanupEvent =
@@ -23,8 +24,9 @@ export function getRegisteredProcessCleanupSignalListener(
 export function getNewListener(
   signal: ProcessCleanupEvent,
   existingListeners: Function[],
-): () => void {
-  const listener = process
+): Function {
+  const emitter: EventEmitter = process
+  const listener = emitter
     .listeners(signal)
     .find((registeredListener) => !existingListeners.includes(registeredListener))
 
