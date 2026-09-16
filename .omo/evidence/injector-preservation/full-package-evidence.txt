@@ -1,0 +1,76 @@
+Result: PASS - actual complete packaged plugin under isolated OpenCode TUI owners.
+Candidate: oh-my-openagent-4.19.4-nowaker.1.tgz
+SHA256: 4c692b4e59e55a068ad4c13281e0641a2690b88bcb1550e9154c9bef9d19157d
+Machine-readable evidence: full-package-result.json
+
+Reproduce from /home/nowaker/projekty/nowaker/omo-injector-context-part:
+bun run .omo/evidence/injector-preservation/full-package-runtime.ts
+
+The driver uses npm install --prefix <isolated-cache>/candidate --cache
+<sandbox>/npm-cache --registry https://registry.npmjs.org --userconfig
+<sandbox>/npm-user.conf --globalconfig <sandbox>/npm-global.conf
+--no-audit --no-fund <absolute-candidate-tarball>.
+Both npm config files are empty, test-owned files.
+The exact expanded command is retained in full-package-result.json.
+Lifecycle scripts were enabled. Install exited 0. Optional platform package
+versions remained 4.19.4; runtime dependency workspace references: 0.
+All 66 non-builtin literal bundle imports resolved inside the isolated install.
+PASS additionally requires exact manifest name oh-my-openagent and version
+4.19.4-nowaker.1, zero workspace runtime/optional dependencies, and the exact
+12 oh-my-openagent platform alias names all pinned to 4.19.4.
+
+Retained verbatim npm v3 lock: full-package-package-lock.json
+Lock SHA256: f3bd487e6e1a0d1bc8219b3c3b9abd76c0b7d09e25498815fd7a999c472bcd5f
+Resolved inventory: full-package-dependency-inventory.json
+Inventory SHA256: 7caa691b65f906bad538216d4ae64e7d380aff953a6fcbb3d1ee28cd68de4789
+250 locked dependency entries, 230 installed package.json paths. Inventory
+records lock path, package name, exact version, integrity and installed boolean,
+including locked optional entries not installed on this platform. Lock resolutions
+were checked before retention: public registry HTTPS URLs without credentials,
+query or fragment; the candidate itself is the only permitted local archive.
+All dependency entries have SHA integrity values. The lock and inventory were
+saved before sandbox removal; their paths and hashes are also in the result JSON.
+This lock records the tested npm candidate installation, not the host binary's
+embedded dependencies or the separately retained transport tooling worktree.
+
+full-package-observer.ts dynamically imports the installed dist/index.js and
+invokes its complete default.server plugin entry. It returns all 15 hooks and
+wraps only chat.message with pre/post observations, without modifying arguments,
+results, package files, or the original hook. This is not the extracted hook.
+Remote MCPs, telemetry and automatic updates were disabled for the fixture;
+no lifecycle hooks were disabled. The sole provider was a loopback SSE mock.
+
+Current result is the parent coordinator's independent successful run.
+First owner PID: 2022503. Resumed owner PID: 2027743.
+Session: ses_f58725d4fffeatvuLSFpJr0Szk
+First original: prt_0a78da335001Tds8Iwrw2fOTwg
+Resumed original: prt_0a78dc842001CFA41t7b77MkpT
+Both original part objects were deep-equal across the complete hookchain;
+their before/retained hashes matched and their IDs survived SQL persistence.
+Both turns had exactly one genuine original and one synthetic context part.
+SQL hydration ORDER BY message_id,part.id put context before the original.
+The captured current user model content also put exact context before original.
+Public buildPromptTool used its real default DB lookup and pane ACK delivery.
+It returned success without a retry job. Exactly one exact original ACK text
+part existed for the resumed delivery, including the forged context header.
+The first turn used direct TUI paste; unlike the tool's multiline delivery,
+that path does not add a trailing space. Assertions use each transport's input.
+
+Isolation: explicit fresh HOME, XDG_CONFIG_HOME, XDG_DATA_HOME, XDG_CACHE_HOME,
+XDG_STATE_HOME, XDG_RUNTIME_DIR, TMPDIR, plugin/tool data directories; allowlisted
+child environment, no production config/auth links. Dedicated test tmux socket.
+Test projects had their own git boundary; no commits were made. Teardown stopped
+only test-owned panes/processes and removed the sandbox after safe aggregation.
+Candidate hash remained unchanged. Prior runtime.ts/plugin.ts were untouched.
+
+Driver strict typecheck passed with:
+bunx --no-install tsc -p .omo/evidence/injector-preservation/full-package-tsconfig.json
+This checked the final driver, including scanImports and provenance capture.
+The validation worker ran once after the provenance changes, then the parent
+independently ran the same immutable package and driver successfully. The
+parent's retained result has passed=true and dependencyProvenanceRetained=true.
+LSP refused the task-worktree path as outside the tool's request cwd, so no
+clean-LSP claim is made. No further runtime run is needed for this artifact.
+Fixture files are each under 200 lines. They own package/runtime QA, transparent
+hook observation, and safe failure diagnostics separately. Boundary data uses
+Zod; retained diagnostics contain booleans/counts/hashes/IDs, not prompt bodies.

@@ -1,0 +1,118 @@
+{
+  "packageSHA256": "4c692b4e59e55a068ad4c13281e0641a2690b88bcb1550e9154c9bef9d19157d",
+  "packageManager": "npm",
+  "installCommand": [
+    "npm",
+    "install",
+    "--prefix",
+    "/home/nowaker/projekty/nowaker/omo-injector-context-part/.omo/evidence/injector-preservation/full-package-sandbox-KS2cCM/cache/candidate",
+    "--cache",
+    "/home/nowaker/projekty/nowaker/omo-injector-context-part/.omo/evidence/injector-preservation/full-package-sandbox-KS2cCM/npm-cache",
+    "--registry",
+    "https://registry.npmjs.org",
+    "--userconfig",
+    "/home/nowaker/projekty/nowaker/omo-injector-context-part/.omo/evidence/injector-preservation/full-package-sandbox-KS2cCM/npm-user.conf",
+    "--globalconfig",
+    "/home/nowaker/projekty/nowaker/omo-injector-context-part/.omo/evidence/injector-preservation/full-package-sandbox-KS2cCM/npm-global.conf",
+    "--no-audit",
+    "--no-fund",
+    "/home/nowaker/projekty/nowaker/omo-injector-context-part/.omo/evidence/injector-preservation/oh-my-openagent-4.19.4-nowaker.1.tgz"
+  ],
+  "sandbox": "/home/nowaker/projekty/nowaker/omo-injector-context-part/.omo/evidence/injector-preservation/full-package-sandbox-KS2cCM",
+  "installExitCode": 0,
+  "installOutputHash": "4896a041ed50d00eb5b5d091f5c070ccf84a3d6dc402917011d06e608ab7cd14",
+  "manifestIdentityValid": true,
+  "installedVersion": "4.19.4-nowaker.1",
+  "workspaceRuntimeDependencies": 0,
+  "workspaceRuntimeDependenciesAbsent": true,
+  "platformVersionsUnchanged": true,
+  "platformAliasesValid": true,
+  "runtimeLockPath": "/home/nowaker/projekty/nowaker/omo-injector-context-part/.omo/evidence/injector-preservation/full-package-package-lock.json",
+  "runtimeLockSHA256": "f3bd487e6e1a0d1bc8219b3c3b9abd76c0b7d09e25498815fd7a999c472bcd5f",
+  "dependencyInventoryPath": "/home/nowaker/projekty/nowaker/omo-injector-context-part/.omo/evidence/injector-preservation/full-package-dependency-inventory.json",
+  "dependencyInventorySHA256": "7caa691b65f906bad538216d4ae64e7d380aff953a6fcbb3d1ee28cd68de4789",
+  "lockedDependencyCount": 250,
+  "installedDependencyCount": 230,
+  "dependencyProvenanceRetained": true,
+  "externalImportCount": 66,
+  "externalImportsIsolated": true,
+  "launchOutputBytes": 5,
+  "launchOutputIDs": [
+    "@2",
+    "%2"
+  ],
+  "toolSucceeded": true,
+  "toolResultHash": "f7c3207cc7de57399f30e9e61c5ed3a3e478dcfe0aab37ff1bb3989ab04de65c",
+  "first": {
+    "exactOriginalMatches": 1,
+    "originalID": "prt_0a78da335001Tds8Iwrw2fOTwg",
+    "messageID": "msg_0a78da333001ztPES16X4HgDqg",
+    "genuineParts": 1,
+    "syntheticContextParts": 1,
+    "hydrationContextFirst": true,
+    "modelContextBeforeOriginal": true
+  },
+  "resumed": {
+    "exactOriginalMatches": 1,
+    "originalID": "prt_0a78dc842001CFA41t7b77MkpT",
+    "messageID": "msg_0a78dc83e001AEPYPE1KPjwPc0",
+    "genuineParts": 1,
+    "syntheticContextParts": 1,
+    "hydrationContextFirst": true,
+    "modelContextBeforeOriginal": true
+  },
+  "hookProof": [
+    {
+      "initialized": true,
+      "pid": 2022503,
+      "hookCount": 15
+    },
+    {
+      "pid": 2022503,
+      "sessionID": "ses_f58725d4fffeatvuLSFpJr0Szk",
+      "messageID": "msg_0a78da333001ztPES16X4HgDqg",
+      "beforeIDs": [
+        "prt_0a78da335001Tds8Iwrw2fOTwg"
+      ],
+      "afterIDs": [
+        "prt_0a78da335000hncHukuSqnTnhX",
+        "prt_0a78da335001Tds8Iwrw2fOTwg"
+      ],
+      "beforeHash": "37b966c89fd46e9a1a1962f7e1d9be0ad22cdba4885f98485bdc2b0dc1a84f76",
+      "retainedHash": "37b966c89fd46e9a1a1962f7e1d9be0ad22cdba4885f98485bdc2b0dc1a84f76",
+      "originalPartsUnchanged": true,
+      "genuineBefore": 1,
+      "genuineAfter": 1,
+      "syntheticAfter": 1
+    },
+    {
+      "initialized": true,
+      "pid": 2027743,
+      "hookCount": 15
+    },
+    {
+      "pid": 2027743,
+      "sessionID": "ses_f58725d4fffeatvuLSFpJr0Szk",
+      "messageID": "msg_0a78dc83e001AEPYPE1KPjwPc0",
+      "beforeIDs": [
+        "prt_0a78dc842001CFA41t7b77MkpT"
+      ],
+      "afterIDs": [
+        "prt_0a78dc842000KjRPzLRCL3mdAK",
+        "prt_0a78dc842001CFA41t7b77MkpT"
+      ],
+      "beforeHash": "19987d491af0a656eff3f842da1ad5ba5e4522aa5e2dbc144dce54836c7001f9",
+      "retainedHash": "19987d491af0a656eff3f842da1ad5ba5e4522aa5e2dbc144dce54836c7001f9",
+      "originalPartsUnchanged": true,
+      "genuineBefore": 1,
+      "genuineAfter": 1,
+      "syntheticAfter": 1
+    }
+  ],
+  "freshOwnerProcesses": true,
+  "persistedOriginalIDsUnchanged": true,
+  "genuineClassificationPreserved": true,
+  "providerRequestCount": 3,
+  "packageUnchanged": true,
+  "passed": true
+}
