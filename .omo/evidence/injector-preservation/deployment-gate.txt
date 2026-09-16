@@ -60,7 +60,7 @@ Activation: coordinator individually reloads only intended affected OpenCode pro
 
 Validation and rollback preimage
 ---------------------------
-Full package installed with npm into fresh isolated HOME/XDG/cache/data/state and driven through two real OpenCode owner processes and a loopback mock provider. Complete 15-hook server chain, not the extracted injector. First and resumed originals retain bytes/IDs/genuine classification; synthetic context precedes original in SQL hydration and model content. Public prompt tool succeeds with exactly one exact resumed original ACK and no retry. See full-package-result.json and full-package-evidence.txt.
+Full package installed with npm --ignore-scripts --save-exact into fresh isolated HOME/XDG/cache/data/state and driven through two real OpenCode owner processes and a loopback mock provider. Complete 15-hook server chain, not the extracted injector. First and resumed originals retain bytes/IDs/genuine classification; synthetic context precedes original in SQL hydration and model content. Public prompt tool succeeds with exactly one exact resumed original ACK and no retry. See full-package-result.json and full-package-evidence.txt. This closes the final Oracle's exact-install-mode gap; production must keep --ignore-scripts because root postinstall invalidates the OMO cache.
 
 Private preimages directory: .omo/evidence/injector-preservation/preimages (mode 0700, NEVER commit/upload).
 cache-project/ is a complete copy of /home/nowaker/.cache/opencode/packages/oh-my-openagent@latest, including cache project manifest, lock, dependency tree, .bin and symlinks. diff -qr source/copy exited 0. All 17 symlinks resolve within the cache tree; zero external targets were needed.

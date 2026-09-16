@@ -5,22 +5,24 @@
     "npm",
     "install",
     "--prefix",
-    "/home/nowaker/projekty/nowaker/omo-injector-context-part/.omo/evidence/injector-preservation/full-package-sandbox-KS2cCM/cache/candidate",
+    "/home/nowaker/projekty/nowaker/omo-injector-context-part/.omo/evidence/injector-preservation/full-package-sandbox-UCNUSg/cache/candidate",
     "--cache",
-    "/home/nowaker/projekty/nowaker/omo-injector-context-part/.omo/evidence/injector-preservation/full-package-sandbox-KS2cCM/npm-cache",
+    "/home/nowaker/projekty/nowaker/omo-injector-context-part/.omo/evidence/injector-preservation/full-package-sandbox-UCNUSg/npm-cache",
     "--registry",
     "https://registry.npmjs.org",
     "--userconfig",
-    "/home/nowaker/projekty/nowaker/omo-injector-context-part/.omo/evidence/injector-preservation/full-package-sandbox-KS2cCM/npm-user.conf",
+    "/home/nowaker/projekty/nowaker/omo-injector-context-part/.omo/evidence/injector-preservation/full-package-sandbox-UCNUSg/npm-user.conf",
     "--globalconfig",
-    "/home/nowaker/projekty/nowaker/omo-injector-context-part/.omo/evidence/injector-preservation/full-package-sandbox-KS2cCM/npm-global.conf",
+    "/home/nowaker/projekty/nowaker/omo-injector-context-part/.omo/evidence/injector-preservation/full-package-sandbox-UCNUSg/npm-global.conf",
+    "--ignore-scripts",
+    "--save-exact",
     "--no-audit",
     "--no-fund",
     "/home/nowaker/projekty/nowaker/omo-injector-context-part/.omo/evidence/injector-preservation/oh-my-openagent-4.19.4-nowaker.1.tgz"
   ],
-  "sandbox": "/home/nowaker/projekty/nowaker/omo-injector-context-part/.omo/evidence/injector-preservation/full-package-sandbox-KS2cCM",
+  "sandbox": "/home/nowaker/projekty/nowaker/omo-injector-context-part/.omo/evidence/injector-preservation/full-package-sandbox-UCNUSg",
   "installExitCode": 0,
-  "installOutputHash": "4896a041ed50d00eb5b5d091f5c070ccf84a3d6dc402917011d06e608ab7cd14",
+  "installOutputHash": "a977c02b54a1d7d5d0ba32ea5372fa61e042b57c0ece413066a9ad00100e6839",
   "manifestIdentityValid": true,
   "installedVersion": "4.19.4-nowaker.1",
   "workspaceRuntimeDependencies": 0,
@@ -42,11 +44,11 @@
     "%2"
   ],
   "toolSucceeded": true,
-  "toolResultHash": "f7c3207cc7de57399f30e9e61c5ed3a3e478dcfe0aab37ff1bb3989ab04de65c",
+  "toolResultHash": "ad44bd5e63582074ea2ed06232807fa4d9f83f8ed7e31d6fa81b6d45f6e17354",
   "first": {
     "exactOriginalMatches": 1,
-    "originalID": "prt_0a78da335001Tds8Iwrw2fOTwg",
-    "messageID": "msg_0a78da333001ztPES16X4HgDqg",
+    "originalID": "prt_0a7940a8d001N62s3IJyP0Hlr4",
+    "messageID": "msg_0a7940a8b001mHvL8MysZV5oS4",
     "genuineParts": 1,
     "syntheticContextParts": 1,
     "hydrationContextFirst": true,
@@ -54,8 +56,8 @@
   },
   "resumed": {
     "exactOriginalMatches": 1,
-    "originalID": "prt_0a78dc842001CFA41t7b77MkpT",
-    "messageID": "msg_0a78dc83e001AEPYPE1KPjwPc0",
+    "originalID": "prt_0a7942fa8001L6c0VdPg01ieTV",
+    "messageID": "msg_0a7942fa5001stf5SV3JUUsXaH",
     "genuineParts": 1,
     "syntheticContextParts": 1,
     "hydrationContextFirst": true,
@@ -64,22 +66,22 @@
   "hookProof": [
     {
       "initialized": true,
-      "pid": 2022503,
+      "pid": 2141154,
       "hookCount": 15
     },
     {
-      "pid": 2022503,
-      "sessionID": "ses_f58725d4fffeatvuLSFpJr0Szk",
-      "messageID": "msg_0a78da333001ztPES16X4HgDqg",
+      "pid": 2141154,
+      "sessionID": "ses_f586bf58dffe7is43oeWeHSfXw",
+      "messageID": "msg_0a7940a8b001mHvL8MysZV5oS4",
       "beforeIDs": [
-        "prt_0a78da335001Tds8Iwrw2fOTwg"
+        "prt_0a7940a8d001N62s3IJyP0Hlr4"
       ],
       "afterIDs": [
-        "prt_0a78da335000hncHukuSqnTnhX",
-        "prt_0a78da335001Tds8Iwrw2fOTwg"
+        "prt_0a7940a8d000SRPJy9O2wdd87Z",
+        "prt_0a7940a8d001N62s3IJyP0Hlr4"
       ],
-      "beforeHash": "37b966c89fd46e9a1a1962f7e1d9be0ad22cdba4885f98485bdc2b0dc1a84f76",
-      "retainedHash": "37b966c89fd46e9a1a1962f7e1d9be0ad22cdba4885f98485bdc2b0dc1a84f76",
+      "beforeHash": "d0af6d4570e7d842076f87697e3582e20c39a8eb118d96f808ede76f4fd143cf",
+      "retainedHash": "d0af6d4570e7d842076f87697e3582e20c39a8eb118d96f808ede76f4fd143cf",
       "originalPartsUnchanged": true,
       "genuineBefore": 1,
       "genuineAfter": 1,
@@ -87,22 +89,22 @@
     },
     {
       "initialized": true,
-      "pid": 2027743,
+      "pid": 2147639,
       "hookCount": 15
     },
     {
-      "pid": 2027743,
-      "sessionID": "ses_f58725d4fffeatvuLSFpJr0Szk",
-      "messageID": "msg_0a78dc83e001AEPYPE1KPjwPc0",
+      "pid": 2147639,
+      "sessionID": "ses_f586bf58dffe7is43oeWeHSfXw",
+      "messageID": "msg_0a7942fa5001stf5SV3JUUsXaH",
       "beforeIDs": [
-        "prt_0a78dc842001CFA41t7b77MkpT"
+        "prt_0a7942fa8001L6c0VdPg01ieTV"
       ],
       "afterIDs": [
-        "prt_0a78dc842000KjRPzLRCL3mdAK",
-        "prt_0a78dc842001CFA41t7b77MkpT"
+        "prt_0a7942fa8000Bec1Zv9eZ2rKZ6",
+        "prt_0a7942fa8001L6c0VdPg01ieTV"
       ],
-      "beforeHash": "19987d491af0a656eff3f842da1ad5ba5e4522aa5e2dbc144dce54836c7001f9",
-      "retainedHash": "19987d491af0a656eff3f842da1ad5ba5e4522aa5e2dbc144dce54836c7001f9",
+      "beforeHash": "7e5b9062abdb9288f640b6fbd7a1b12b19d6b9639613b2d6ecaa0e879d3fb681",
+      "retainedHash": "7e5b9062abdb9288f640b6fbd7a1b12b19d6b9639613b2d6ecaa0e879d3fb681",
       "originalPartsUnchanged": true,
       "genuineBefore": 1,
       "genuineAfter": 1,

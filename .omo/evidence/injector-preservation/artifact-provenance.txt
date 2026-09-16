@@ -26,7 +26,7 @@ packages/lsp-tools-mcp/package-lock.json: b6a86d8f8cd4e1b4af7f215d72c21969446bf1
 packages/lsp-daemon/package-lock.json: 379f5c35ca82aa99418b2ec148b3a2185941610959e453a72d9547e67bd4e167
 packages/omo-codex/plugin/package-lock.json: 55a2f56bd22e1231968cba5057d1182e95fcafaa7c741cdf72ea6c85132b2c9e
 
-Parent independently verified the final full-package driver and identical tarball. Retained tested npm installation provenance (250 locked, 230 installed; all 66 non-builtin literal imports resolved inside isolated installation):
+Parent independently verified the scripts-enabled full-package driver and identical tarball. Final Oracle requested --ignore-scripts validation; package worker personally ran strict fixture typecheck and full first/resumed runtime in --ignore-scripts --save-exact mode, both exited 0. Current retained result is that exact-install-mode run. Dependency hashes remained identical. Retained tested npm installation provenance (250 locked, 230 installed; all 66 non-builtin literal imports resolved inside isolated installation):
 full-package-package-lock.json SHA256: f3bd487e6e1a0d1bc8219b3c3b9abd76c0b7d09e25498815fd7a999c472bcd5f
 full-package-dependency-inventory.json SHA256: 7caa691b65f906bad538216d4ae64e7d380aff953a6fcbb3d1ee28cd68de4789
 These are the exact tested npm resolution, not a promise that unconstrained ranges will resolve identically during later adoption. Compare adoption's installed dependency tree/lock against this evidence before activation; changes require review.

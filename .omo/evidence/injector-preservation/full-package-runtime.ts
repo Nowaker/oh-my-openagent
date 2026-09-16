@@ -26,7 +26,7 @@ const install = join(env["XDG_CACHE_HOME"] ?? root, "candidate")
 mkdirSync(install, { recursive: true })
 writeFileSync(join(install, "package.json"), JSON.stringify({ private: true, name: "isolated-package-qa", version: "1.0.0" }))
 for (const name of ["npm-user.conf", "npm-global.conf"]) writeFileSync(join(root, name), "")
-const command = ["npm", "install", "--prefix", install, "--cache", join(root, "npm-cache"), "--registry", "https://registry.npmjs.org", "--userconfig", join(root, "npm-user.conf"), "--globalconfig", join(root, "npm-global.conf"), "--no-audit", "--no-fund", archive]
+const command = ["npm", "install", "--prefix", install, "--cache", join(root, "npm-cache"), "--registry", "https://registry.npmjs.org", "--userconfig", join(root, "npm-user.conf"), "--globalconfig", join(root, "npm-global.conf"), "--ignore-scripts", "--save-exact", "--no-audit", "--no-fund", archive]
 const report: Record<string, unknown> = { packageSHA256: sha256(readFileSync(archive)), packageManager: "npm", installCommand: command, sandbox: root }
 let phase = "package-install"
 let stop: (() => Promise<void>) | undefined
