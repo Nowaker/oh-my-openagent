@@ -113,7 +113,7 @@ For EACH batch, fire a deep agent:
 
 ```
 task(
-  category="deep",
+  category="deep-low",
   load_skills=["typescript-programmer", "git-master"],
   run_in_background=true,
   description="Remove dead code batch N: [brief description]",
@@ -213,4 +213,3 @@ If `$ARGUMENTS` is provided, narrow the scan:
 STOP and report if:
 - More than 50 candidates found (ask user to narrow scope or confirm proceeding)
 - Build breaks and cannot be fixed by reverting
-

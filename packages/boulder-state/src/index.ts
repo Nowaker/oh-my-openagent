@@ -1,4 +1,5 @@
 export { BOULDER_DIR, BOULDER_FILE, BOULDER_STATE_PATH, NOTEPAD_BASE_PATH, NOTEPAD_DIR, PROMETHEUS_PLANS_DIR } from "./constants"
+export { getPlanChecklist, isStructuredTaskRow, parsePlanChecklist } from "./plan-checklist"
 export { readCurrentTopLevelTask } from "./top-level-task"
 export {
   addBoulderWork,
@@ -7,6 +8,7 @@ export {
   clearBoulderState,
   completeBoulder,
   createBoulderState,
+  DEFAULT_STALE_WORK_THRESHOLD_MS,
   endTaskTimer,
   findPrometheusPlans,
   generateWorkId,
@@ -20,10 +22,15 @@ export {
   getWorkByPlanName,
   getWorkForSession,
   getWorkResumeOptions,
+  isWorkStale,
+  normalizeSessionId,
   readBoulderState,
+  reconcileStaleWorks,
   resolveBoulderPlanPath,
   resolveBoulderPlanPathForWork,
+  resolveStaleWorkThresholdMs,
   selectActiveWork,
+  STALE_WORK_THRESHOLD_ENV_KEY,
   startTaskTimer,
   upsertTaskSessionState,
   upsertTaskSessionStateForWork,
@@ -36,7 +43,11 @@ export type {
   BoulderWorkResumeOption,
   BoulderWorkState,
   BoulderWorkStatus,
+  PlanChecklist,
   PlanProgress,
+  ReconcileStaleWorksOptions,
+  StaleWorkDemotion,
+  StaleWorkReconcileResult,
   TaskSessionState,
   TopLevelTaskRef,
 } from "./types"

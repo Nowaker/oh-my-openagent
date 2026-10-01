@@ -1,23 +1,33 @@
 ---
 name: pre-publish-review
-description: "Nuclear-grade 16-agent pre-publish release gate. Runs /get-unpublished-changes to detect all changes since last npm release, spawns up to 10 ultrabrain agents for deep per-change analysis, invokes /review-work (5 agents) for holistic review, and 1 oracle for overall release synthesis. Use before EVERY npm publish. Triggers: 'pre-publish review', 'review before publish', 'release review', 'pre-release review', 'ready to publish?', 'can I publish?', 'pre-publish', 'safe to publish', 'publishing review', 'pre-publish check'."
+description: "Nuclear-grade 12-agent pre-publish release gate. Runs /get-unpublished-changes to detect all changes since last npm release, spawns up to 10 ultrabrain agents for deep per-change analysis, invokes /review-work (orchestrator manual QA plus one gate reviewer) for holistic review, and 1 oracle for overall release synthesis. Runs ONLY when the user explicitly asks for a pre-publish review — a plain publish/release request MUST NOT trigger this; /publish ships directly. Triggers: 'pre-publish review', 'review before publish', 'release review', 'pre-release review', 'ready to publish?', 'can I publish?', 'pre-publish', 'safe to publish', 'publishing review', 'pre-publish check'."
 ---
 
-# Pre-Publish Review — 16-Agent Release Gate
+# Pre-Publish Review — 12-Agent Release Gate
 
-Three-layer review before publishing to npm. Every layer covers a different angle — together they catch what no single reviewer could.
+Three-agent-layer review before publishing to npm. Every layer covers a different angle, and every result is mapped onto the release layers below.
 
 | Layer | Agents | Type | What They Check |
 |-------|--------|------|-----------------|
 | Per-Change Deep Dive | up to 10 | ultrabrain | Each logical change group individually — correctness, edge cases, pattern adherence |
-| Holistic Review | 5 | review-work | Goal compliance, QA execution, code quality, security, context mining across full changeset |
+| Holistic Review | 1 (+ orchestrator QA) | review-work | Manual QA by the review orchestrator, then one gate reviewer covering goal compliance, code quality, security, and missed context across the full changeset |
 | Release Synthesis | 1 | oracle | Overall release readiness, version bump, breaking changes, deployment risk |
+
+## Release Layer Taxonomy
+
+Every phase classifies evidence and risk across:
+
+| Release Layer | Scope | Required version decision |
+|---|---|---|
+| `omo pure components` | Core packages, MCP packages, shared skills, reusable scripts, platform binary inputs | Patch/minor/major impact for shared logic consumed by adapters. |
+| `omo opencode` | Root `oh-my-opencode` / `oh-my-openagent`, `src/`, OpenCode plugin hooks/tools/CLI/config/docs, `.opencode/`, `.agents/` | Semver bump for the OpenCode/OpenAgent npm release. |
+| `omo codex` | `packages/omo-codex`, `lazycodex-ai`, Codex plugin metadata/hooks, bundled MCP runtimes, `code-yeongyu/lazycodex` marketplace payload | Codex adapter bump, LazyCodex npm publish risk, and marketplace/GitHub release need. |
 
 ---
 
 ## Phase 0: Detect Unpublished Changes
 
-Run `/get-unpublished-changes` FIRST. This is the single source of truth for what changed.
+Run `/get-unpublished-changes` FIRST. This is the single source of truth for what changed and must include `omo pure components`, `omo opencode`, and `omo codex` layer-specific version recommendations.
 
 ```
 skill(name="get-unpublished-changes")
@@ -29,7 +39,7 @@ This command automatically:
 - Reads actual diffs (not just commit messages) to describe REAL changes
 - Groups changes by type (feat/fix/refactor/docs) with scope
 - Identifies breaking changes
-- Recommends version bump (patch/minor/major)
+- Recommends a layer-specific version bump plus one overall workflow bump
 
 **Save the full output** — it feeds directly into Phase 1 grouping and all agent prompts.
 
@@ -61,6 +71,7 @@ Use the `/get-unpublished-changes` output as the starting point — it already g
 3. Target **up to 10 groups**. If fewer than 10 commits, each commit is its own group. If more than 10 logical areas, merge the smallest groups.
 4. For each group, extract:
    - **Group name**: Short descriptive label (e.g., "agent-model-resolution", "hook-system-refactor")
+   - **Release layer(s)**: `omo pure components`, `omo opencode`, `omo codex`
    - **Commits**: List of commit hashes and messages
    - **Files**: Changed files in this group
    - **Diff**: The relevant portion of the full diff (`git diff v${PUBLISHED}..HEAD -- {group files}`)
@@ -78,6 +89,7 @@ For each change group, spawn one ultrabrain agent. Each gets only its portion of
 ```
 task(
   category="ultrabrain",
+  model="gpt-5.6-sol",
   run_in_background=true,
   load_skills=[],
   description="Deep analysis: {GROUP_NAME}",
@@ -147,13 +159,14 @@ OUTPUT FORMAT:
 """)
 ```
 
-### Layer 2: Holistic Review via /review-work (5 agents)
+### Layer 2: Holistic Review via /review-work (one gate reviewer)
 
-Spawn a sub-agent that loads the `/review-work` skill. The review-work skill internally launches 5 parallel agents: Oracle (goal verification), unspecified-high (QA execution), Oracle (code quality), Oracle (security), unspecified-high (context mining). All 5 must pass for the review to pass.
+Spawn a sub-agent that loads the `/review-work` skill. The review-work skill runs manual QA on the real surface itself, then launches ONE gate reviewer (oracle) that audits goal compliance, code quality, security, missed context, and the QA evidence. The review passes only on a clean QA matrix plus APPROVE.
 
 ```
 task(
   category="unspecified-high",
+  model="gpt-5.6-sol",
   run_in_background=true,
   load_skills=["review-work"],
   description="Run /review-work on all unpublished changes",
@@ -173,7 +186,7 @@ BACKGROUND: Pre-publish review of oh-my-opencode, an OpenCode plugin with 1268 T
 
 The diff base is: git diff v{PUBLISHED}..HEAD
 
-Follow the /review-work skill flow exactly — launch all 5 review agents and collect results. Do NOT skip any of the 5 agents.
+Follow the /review-work skill flow exactly — run the manual QA phase, launch the gate reviewer, and collect its verdict. Do NOT skip the QA phase or the reviewer.
 """)
 ```
 
@@ -184,6 +197,7 @@ The oracle gets the full picture — all commits, full diff stat, and changed fi
 ```
 task(
   subagent_type="oracle",
+  model="gpt-5.6-sol",
   run_in_background=true,
   load_skills=[],
   description="Oracle: overall release synthesis and version bump recommendation",
@@ -214,7 +228,7 @@ task(
 {Read and include full content of KEY changed files — focus on public API surfaces, config schemas, agent definitions, hook registrations, tool registrations}
 </file_contents>
 
-You are the final gate before an npm publish. 10 ultrabrain agents are reviewing individual changes and 5 review-work agents are doing holistic review. Your job is the bird's-eye view that those focused reviews might miss.
+You are the final gate before an npm publish. 10 ultrabrain agents are reviewing individual changes and the review-work gate reviewer is doing the holistic review. Your job is the bird's-eye view that those focused reviews might miss.
 
 SYNTHESIS CHECKLIST:
 
@@ -224,7 +238,7 @@ SYNTHESIS CHECKLIST:
    - PATCH: Bug fixes only, no behavior changes
    - MINOR: New features, backward-compatible changes
    - MAJOR: Breaking changes to public API, config format, or behavior
-   Recommend the correct bump with specific justification.
+   Recommend the correct bump for each release layer and the overall workflow with specific justification.
 
 3. **Breaking Changes Audit**: Exhaustively list every change that could break existing users. Check:
    - Config schema changes (new required fields, removed fields, renamed fields)
@@ -256,6 +270,7 @@ SYNTHESIS CHECKLIST:
 OUTPUT FORMAT:
 <verdict>SAFE / CAUTION / RISKY / BLOCK</verdict>
 <recommended_version_bump>PATCH / MINOR / MAJOR</recommended_version_bump>
+<layer_specific_version_bump>omo pure components: PATCH/MINOR/MAJOR; omo opencode: PATCH/MINOR/MAJOR; omo codex: PATCH/MINOR/MAJOR</layer_specific_version_bump>
 <version_bump_justification>Why this bump level</version_bump_justification>
 <release_coherence>Assessment of whether changes belong in one release</release_coherence>
 <breaking_changes>
@@ -337,6 +352,14 @@ Compile the final report:
 ## Recommended Version Bump: PATCH / MINOR / MAJOR
 {Justification from Oracle}
 
+## Layer-specific Version Recommendation
+
+| Layer | Recommendation | Reason |
+|---|---|---|
+| omo pure components | PATCH/MINOR/MAJOR | ... |
+| omo opencode | PATCH/MINOR/MAJOR | ... |
+| omo codex | PATCH/MINOR/MAJOR | ... |
+
 ---
 
 ## Per-Change Analysis (Ultrabrains)
@@ -355,11 +378,8 @@ Compile the final report:
 
 | # | Review Area | Verdict | Confidence |
 |---|------------|---------|------------|
-| 1 | Goal & Constraint Verification | PASS/FAIL | HIGH/MED/LOW |
-| 2 | QA Execution | PASS/FAIL | HIGH/MED/LOW |
-| 3 | Code Quality | PASS/FAIL | HIGH/MED/LOW |
-| 4 | Security | PASS/FAIL | Severity |
-| 5 | Context Mining | PASS/FAIL | HIGH/MED/LOW |
+| 1 | Manual QA (orchestrator, real surface) | PASS/FAIL | - |
+| 2 | Gate Review (goal, code quality, security, context, QA audit) | APPROVE/REJECT | HIGH/MED/LOW |
 
 ### Blocking Issues from Holistic Review
 {Aggregated from review-work}

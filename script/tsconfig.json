@@ -11,5 +11,6 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "include": ["./publish-workflow.test.ts", "./package-layout.test.ts"]
+  "include": ["./*.ts", "installer/**/*.ts", "qa/**/*.ts"],
+  "exclude": ["qa/fixtures/**", "qa/omo-native-telemetry-qa.test.ts"]
 }

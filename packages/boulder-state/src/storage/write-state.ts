@@ -1,11 +1,11 @@
 import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs"
-import { dirname } from "node:path"
+import { dirname, join } from "node:path"
 
 import type { BoulderState, BoulderWorkState } from "../types"
 import { getBoulderFilePath } from "./path"
 import { getPlanName } from "./plan-progress"
 import { getBoulderWorks, readBoulderState } from "./read-state"
-import { getElapsedMs, nowIsoString, projectWorkToMirror } from "./shared"
+import { getElapsedMs, normalizeSessionId, nowIsoString, projectWorkToMirror, restoreDemotedWork } from "./shared"
 
 export function writeBoulderState(directory: string, state: BoulderState): boolean {
   const filePath = getBoulderFilePath(directory)
@@ -13,6 +13,8 @@ export function writeBoulderState(directory: string, state: BoulderState): boole
     const dir = dirname(filePath)
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true })
+      // Self-ignoring .gitignore - excludes rules/ which is tracked in git
+      writeFileSync(join(dir, ".gitignore"), ["*", "!/rules/", "!/rules/**", ""].join("\n"), "utf-8")
     }
 
     const stateToWrite: BoulderState = { ...state }
@@ -67,6 +69,7 @@ export function generateWorkId(planName: string): string {
 
 export function createBoulderState(planPath: string, sessionId: string, agent?: string, worktreePath?: string): BoulderState {
   const startedAt = nowIsoString()
+  const normalizedSessionId = normalizeSessionId(sessionId)
   const workId = generateWorkId(getPlanName(planPath))
   const work: BoulderWorkState = {
     work_id: workId,
@@ -75,8 +78,8 @@ export function createBoulderState(planPath: string, sessionId: string, agent?: 
     status: "active",
     started_at: startedAt,
     updated_at: startedAt,
-    session_ids: [sessionId],
-    session_origins: { [sessionId]: "direct" },
+    session_ids: [normalizedSessionId],
+    session_origins: { [normalizedSessionId]: "direct" },
     ...(agent !== undefined ? { agent } : {}),
     ...(worktreePath !== undefined ? { worktree_path: worktreePath } : {}),
     task_sessions: {},
@@ -90,8 +93,8 @@ export function createBoulderState(planPath: string, sessionId: string, agent?: 
     started_at: startedAt,
     status: "active",
     updated_at: startedAt,
-    session_ids: [sessionId],
-    session_origins: { [sessionId]: "direct" },
+    session_ids: [normalizedSessionId],
+    session_origins: { [normalizedSessionId]: "direct" },
     plan_name: getPlanName(planPath),
     task_sessions: {},
     ...(agent !== undefined ? { agent } : {}),
@@ -106,16 +109,17 @@ export function selectActiveWork(directory: string, workId: string): BoulderStat
   }
 
   const works = getBoulderWorks(state)
-  const nextWork = works.find((work) => work.work_id === workId)
-  if (!nextWork) {
+  const selectedWork = works.find((work) => work.work_id === workId)
+  if (!selectedWork) {
     return null
   }
 
+  const nextWork = restoreDemotedWork(selectedWork)
   const nextState: BoulderState = {
     ...state,
     schema_version: 2,
     active_work_id: workId,
-    works: state.works ?? Object.fromEntries(works.map((work) => [work.work_id, work])),
+    works: { ...Object.fromEntries(works.map((work) => [work.work_id, work])), [workId]: nextWork },
   }
   projectWorkToMirror(nextState, nextWork)
   return writeBoulderState(directory, nextState) ? nextState : null
@@ -132,6 +136,7 @@ export function addBoulderWork(
 
   const workId = generateWorkId(getPlanName(input.planPath))
   const startedAt = input.startedAt ?? nowIsoString()
+  const normalizedSessionId = normalizeSessionId(input.sessionId)
   const nextWork: BoulderWorkState = {
     work_id: workId,
     active_plan: input.planPath,
@@ -139,8 +144,8 @@ export function addBoulderWork(
     status: "active",
     started_at: startedAt,
     updated_at: startedAt,
-    session_ids: [input.sessionId],
-    session_origins: { [input.sessionId]: "direct" },
+    session_ids: [normalizedSessionId],
+    session_origins: { [normalizedSessionId]: "direct" },
     ...(input.agent !== undefined ? { agent: input.agent } : {}),
     ...(input.worktreePath !== undefined ? { worktree_path: input.worktreePath } : {}),
     task_sessions: {},

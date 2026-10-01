@@ -1,4 +1,3 @@
-export { AGENTS_FILENAME } from "./constants";
 export { resolveFilePath } from "./finder";
 export {
   DIRECTORY_CONTEXT_END_MARKER,
