@@ -83,6 +83,14 @@ const RETRYABLE_MESSAGE_PATTERNS = [
   "upstream request failed",
 ]
 
+// Deterministic prefill-contract failures: never transient, so retrying
+// them drives the model-fallback abort+re-dispatch loop (abort emits
+// session.idle which wipes the fallback dedupe state). Must stay non-retryable.
+const NON_RETRYABLE_MESSAGE_PATTERNS = [
+  "assistant message prefill",
+  "conversation must end with a user message",
+]
+
 const AUTO_RETRY_GATE_PATTERNS = [
   "rate limit",
   "cooling down",
@@ -110,6 +118,11 @@ export interface ErrorInfo {
 export function isRetryableModelError(error: ErrorInfo): boolean {
   const errorNameLower = error.name?.toLowerCase()
   if (errorNameLower !== undefined && NON_RETRYABLE_ERROR_NAMES.has(errorNameLower)) {
+    return false
+  }
+
+  const messageLower = error.message?.toLowerCase() ?? ""
+  if (NON_RETRYABLE_MESSAGE_PATTERNS.some((pattern) => messageLower.includes(pattern))) {
     return false
   }
 

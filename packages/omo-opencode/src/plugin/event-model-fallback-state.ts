@@ -62,6 +62,7 @@ export function createModelFallbackContinuationController(args: {
 }) {
   const { pluginConfig, pluginContext, lastKnownModelBySession, continuationsInFlight } = args;
   const lastDispatchedContinuationKeys = args.lastDispatchedContinuationKeys;
+  const fallbackRapidLoopGuard = new Map<string, number[]>();
 
   const resolveFallbackProviderID = (sessionID: string, providerHint?: string): string => {
     const normalizedProviderHint = providerHint?.trim();
@@ -136,6 +137,20 @@ export function createModelFallbackContinuationController(args: {
         sessionID,
         source,
       });
+      return true;
+    }
+
+    // Error-agnostic backstop. The dedupe state above is cleared by the
+    // session.idle that auto-continue's own abort emits, so it cannot stop a
+    // fast abort+re-dispatch loop on its own. This guard is never cleared on
+    // idle: 5 dispatches inside 10s (far faster than real backoff) is a loop.
+    const now = Date.now();
+    const timestamps = fallbackRapidLoopGuard.get(sessionID) ?? [];
+    timestamps.push(now);
+    if (timestamps.length > 5) timestamps.shift();
+    fallbackRapidLoopGuard.set(sessionID, timestamps);
+    if (timestamps.length === 5 && now - timestamps[0] < 10_000) {
+      log("[event] model-fallback continuation skipped because of rapid loop", { sessionID, source });
       return true;
     }
 
