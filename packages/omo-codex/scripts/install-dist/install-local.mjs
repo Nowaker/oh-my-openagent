@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// omo-codex-install:a1f96096cef4f8615e30953c86b15240f13309b354e404cf5f0ee3eb8c12905c:e5e0ce072c9aecb36bb20f87b647831eb69af1120a97e6d8f9751489afcb2166
+// omo-codex-install:c0b6024c5ee9234aa4d998b1b7d8d3ba1f32b7c9ef694bec8770b7bfc1d89cf5:71dfd93a6476d503675beb6000f5aa02a1cd0304a8f2c977e661a745529feca2
 var __esm = (fn, res, err) => () => {
   if (fn)
     try {
@@ -9984,7 +9984,7 @@ var package_default;
 var init_package = __esm(() => {
   package_default = {
     name: "@oh-my-opencode/omo-codex",
-    version: "5.1.8",
+    version: "5.1.12",
     type: "module",
     private: true,
     description: "Codex harness adapter for oh-my-openagent. Vendored Codex plugin namespace (omo) + TypeScript installer + telemetry.",
@@ -19849,11 +19849,15 @@ var OmoFormatOnMutationSchema = OmoFormatOnMutationLayerSchema.extend({
   timeoutMs: number2().int().positive().default(3000)
 }).strict();
 
+// packages/omo-config-core/src/schema/gateway.ts
+var OmoGatewaySectionSchema = record(string2(), unknown()).describe("Chat-surface gateway settings, owned and validated by a separately installed gateway package. omo accepts the key and never reads it.");
+
 // packages/omo-config-core/src/schema/config.ts
 var OmoOpenCodeHarnessConfigSchema = record(string2(), unknown());
 var OmoDisabledSkillsSchema = array(string2());
 var OmoTypedHarnessConfigSchema = object({
   formatOnMutation: OmoFormatOnMutationLayerSchema.optional(),
+  gateway: OmoGatewaySectionSchema.optional(),
   categories: OmoCategoriesConfigSchema.optional(),
   agents: OmoAgentsConfigSchema.optional(),
   git_master: OmoGitMasterSettingsLayerSchema.optional(),
@@ -19888,6 +19892,7 @@ var OmoConfigProfileSchema = object({
 }).strict();
 var OmoConfigSchema = object({
   formatOnMutation: OmoFormatOnMutationSchema.optional(),
+  gateway: OmoGatewaySectionSchema.optional(),
   $schema: string2().optional(),
   categories: OmoCategoriesConfigSchema.optional(),
   agents: OmoAgentsConfigSchema.optional(),
@@ -19911,6 +19916,7 @@ var OmoConfigSchema = object({
 }).strict();
 var OmoConfigLayerSchema = object({
   formatOnMutation: OmoFormatOnMutationLayerSchema.optional(),
+  gateway: OmoGatewaySectionSchema.optional(),
   $schema: string2().optional(),
   categories: OmoCategoriesConfigSchema.optional(),
   agents: OmoAgentsConfigSchema.optional(),

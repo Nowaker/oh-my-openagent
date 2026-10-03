@@ -57,6 +57,9 @@ export type ChildSpec = {
   // typed session-create-failed, never a silent inMemory/default-dir fallback.
   readonly sessionDir: string
   readonly agentDir?: string
+  // The parent session's project-trust decision. The child's settings include the project layer
+  // only when the parent trusted it; unknown means untrusted.
+  readonly projectTrusted?: boolean
   readonly authStorage?: CreateAgentSessionOptions["authStorage"]
   readonly modelRegistry?: CreateAgentSessionOptions["modelRegistry"]
   readonly modelRuntime?: CreateAgentSessionOptions["modelRuntime"]
@@ -213,7 +216,9 @@ export class InProcessRunner {
       })
     } catch (error) {
       this.#kernelToolBindings?.release(spec.taskId)
-      discardUnstartedChildSession(session)
+      await discardUnstartedChildSession(session).catch((shutdownError: unknown) => {
+        throw new AggregateError([error, shutdownError], "child handle construction failed, and shutting down its session failed")
+      })
       throw error
     }
     // Runtime-only, and only once the child actually exists: the grant is bound under this child's
