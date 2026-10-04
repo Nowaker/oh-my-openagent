@@ -14,6 +14,8 @@ if (mode === "exit") {
 
 let buffer = Buffer.alloc(0);
 let symbolRequests = 0;
+// Like yaml-language-server, symbols exist only for a document opened under the exact URI asked about.
+const openedUris = new Set();
 
 function send(message) {
 	const body = Buffer.from(JSON.stringify({ jsonrpc: "2.0", ...message }), "utf-8");
@@ -33,12 +35,17 @@ function handle(message) {
 			return;
 		}
 		symbolRequests += 1;
-		if (mode === "empty-symbols" || (mode === "late-symbols" && symbolRequests === 1)) {
+		const unopened = !openedUris.has(message.params?.textDocument?.uri);
+		if (unopened || mode === "empty-symbols" || (mode === "late-symbols" && symbolRequests === 1)) {
 			send({ id: message.id, result: [] });
 			return;
 		}
 		const range = { start: { line: 0, character: 0 }, end: { line: 0, character: 5 } };
 		send({ id: message.id, result: [{ name: "probe", kind: 12, range, selectionRange: range }] });
+		return;
+	}
+	if (message.method === "textDocument/didOpen") {
+		openedUris.add(message.params?.textDocument?.uri);
 		return;
 	}
 	if (message.method === "shutdown") {

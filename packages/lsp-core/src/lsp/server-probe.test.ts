@@ -1,3 +1,5 @@
+import { mkdtempSync, rmSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
 
@@ -21,6 +23,24 @@ describe("probeLspServer", () => {
 		// then
 		expect(result.status).toBe("ok");
 		if (result.status === "ok") expect(result.symbols).toBe(1);
+	});
+
+	test("#given a temp root reached through a symlink (macOS /var) #when probed #then the server is asked about the URI it opened", async () => {
+		// given
+		const realRoot = mkdtempSync(join(tmpdir(), "omo-probe-real-"));
+		const linkedRoot = `${realRoot}-link`;
+		symlinkSync(realRoot, linkedRoot);
+
+		try {
+			// when
+			const result = await probeLspServer(fakeServer("ok"), FIXTURE, { diagnosticsWindowMs: 50, symbolsWindowMs: 300, tempRoot: linkedRoot });
+
+			// then
+			expect(result.status).toBe("ok");
+		} finally {
+			rmSync(linkedRoot, { force: true });
+			rmSync(realRoot, { recursive: true, force: true });
+		}
 	});
 
 	test("#given a server that exits at once #when probed #then reports startup_failed", async () => {
