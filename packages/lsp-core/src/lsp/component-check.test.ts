@@ -157,6 +157,34 @@ describe("checkLspComponents", () => {
 	test("#given an unused optional language #when nothing handles it #then it is reported but not a problem", async () => {
 		// given
 		const project = makeProject();
+		writeFile(join(project.root, "settings.ini"), "a=1\n");
+
+		// when
+		const report = await run(project, { probeServer: okProbe });
+
+		// then
+		const ini = byLanguage(report.languages, "ini");
+		expect(ini.status).toBe("unconfigured");
+		expect(isLspLanguageProblem(ini)).toBe(false);
+	});
+
+	test("#given vscode-json-language-server and biome both installed #when checking json #then the schema-aware json server is selected", async () => {
+		// given
+		const project = makeProject();
+		writeFile(join(project.root, "package.json"), "{}\n");
+		writeExecutable(join(project.bin, "vscode-json-language-server"), "#!/bin/sh\nexit 0\n");
+		writeExecutable(join(project.bin, "biome"), "#!/bin/sh\nexit 0\n");
+
+		// when
+		const report = await run(project, { probeServer: okProbe });
+
+		// then
+		expect(byLanguage(report.languages, "json").serverId).toBe("json");
+	});
+
+	test("#given a markdown file and no marksman #when checked #then reports marksman missing", async () => {
+		// given
+		const project = makeProject();
 		writeFile(join(project.root, "README.md"), "# hi\n");
 
 		// when
@@ -164,8 +192,8 @@ describe("checkLspComponents", () => {
 
 		// then
 		const markdown = byLanguage(report.languages, "markdown");
-		expect(markdown.status).toBe("unconfigured");
-		expect(isLspLanguageProblem(markdown)).toBe(false);
+		expect(markdown.status).toBe("missing");
+		expect(markdown.serverId).toBe("marksman");
 	});
 
 	test("#given a configured server that works #when probed for real #then reports ok", async () => {
