@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -83,7 +83,9 @@ export async function probeLspServer(
 ): Promise<LspProbeResult> {
 	const startedAt = performance.now();
 	const elapsed = (): number => Math.round(performance.now() - startedAt);
-	const workspace = mkdtempSync(join(options.tempRoot ?? tmpdir(), "omo-lsp-probe-"));
+	// The document state opens files by real path, so a workspace under a symlink (macOS's /var ->
+	// /private/var temp dir) would have documentSymbol ask about a URI the server never opened.
+	const workspace = realpathSync(mkdtempSync(join(options.tempRoot ?? tmpdir(), "omo-lsp-probe-")));
 	const filePath = join(workspace, fixture.fileName);
 	writeFileSync(filePath, fixture.content, "utf-8");
 
