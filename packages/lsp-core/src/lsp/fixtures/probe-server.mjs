@@ -4,6 +4,7 @@
 //   hang-initialize  never answers initialize
 //   symbol-error     answers initialize, fails documentSymbol
 //   empty-symbols    answers documentSymbol with no symbols
+//   late-symbols     answers the first documentSymbol with no symbols, later ones with one
 const mode = process.argv[2] ?? "ok";
 
 if (mode === "exit") {
@@ -12,6 +13,7 @@ if (mode === "exit") {
 }
 
 let buffer = Buffer.alloc(0);
+let symbolRequests = 0;
 
 function send(message) {
 	const body = Buffer.from(JSON.stringify({ jsonrpc: "2.0", ...message }), "utf-8");
@@ -30,7 +32,8 @@ function handle(message) {
 			send({ id: message.id, error: { code: -32603, message: "symbol provider crashed" } });
 			return;
 		}
-		if (mode === "empty-symbols") {
+		symbolRequests += 1;
+		if (mode === "empty-symbols" || (mode === "late-symbols" && symbolRequests === 1)) {
 			send({ id: message.id, result: [] });
 			return;
 		}
