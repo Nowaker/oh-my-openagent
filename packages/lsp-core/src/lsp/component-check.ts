@@ -2,7 +2,8 @@ import { existsSync, lstatSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { contextCwd, lspRequestContext } from "../request-context.js";
-import { getMergedServers } from "./config-loader.js";
+import { getMergedServers, type ServerWithSource } from "./config-loader.js";
+import { isServerInstalled } from "./server-installation.js";
 import { effectiveExtension } from "./effective-extension.js";
 import { EXT_TO_LANG } from "./language-mappings.js";
 import { LSP_INSTALL_HINTS, LSP_LOCAL_INSTALL_HINTS } from "./server-definitions.js";
@@ -375,6 +376,22 @@ async function assessLanguage(
 		};
 	}
 
+	const skipped = findSkippedServer(entry.extension, server.id, cwd);
+	if (skipped !== null) {
+		const command = skipped.command[0] ?? skipped.id;
+		return {
+			...base,
+			status: "missing",
+			serverId: skipped.id,
+			executable: null,
+			probe,
+			detail:
+				`Server '${skipped.id}' is configured for ${entry.extension} but '${command}' is not installed, so ` +
+				`'${server.id}' was selected instead and failed at ${probe.stage}: ${probe.detail}`,
+			remediation: installRemediation(skipped.id, command),
+		};
+	}
+
 	return {
 		...base,
 		status: probe.status,
@@ -384,6 +401,22 @@ async function assessLanguage(
 		detail: `Server '${server.id}' failed at ${probe.stage}: ${probe.detail}`,
 		remediation: [`Run '${executable ?? server.id}' by hand to see why it does not start, or reinstall it.`],
 	};
+}
+
+/**
+ * The first server ahead of `selectedId` for the extension that applies to this project but is not
+ * installed. A failing fallback (eslint or biome for .ts, chosen because typescript-language-server
+ * is absent) is then reported as the preferred server missing, which is what installing fixes.
+ */
+function findSkippedServer(extension: string, selectedId: string, cwd: string): ServerWithSource | null {
+	for (const server of getMergedServers()) {
+		if (!server.extensions.includes(extension)) continue;
+		if (server.id === selectedId) return null;
+		const markers = server.source === "builtin" ? BUILTIN_SERVER_PROJECT_MARKERS[server.id] : undefined;
+		if (markers !== undefined && !hasProjectMarker(cwd, markers)) continue;
+		if (!isServerInstalled(server.command, cwd)) return server;
+	}
+	return null;
 }
 
 function findAlternativeServer(extension: string, selectedId: string): string | null {
