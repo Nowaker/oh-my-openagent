@@ -51,9 +51,18 @@ describe("probeLspServer", () => {
 		if (result.status !== "ok") expect(result.stage).toBe("initialize");
 	});
 
+	test("#given a server that parses the fixture only after didOpen settles #when probed #then retries and reports ok", async () => {
+		// when
+		const result = await probeLspServer(fakeServer("late-symbols"), FIXTURE, { diagnosticsWindowMs: 50 });
+
+		// then
+		expect(result.status).toBe("ok");
+		if (result.status === "ok") expect(result.symbols).toBe(1);
+	});
+
 	test("#given a server that answers without parsing the fixture #when probed #then reports request_failed", async () => {
 		// when
-		const result = await probeLspServer(fakeServer("empty-symbols"), FIXTURE);
+		const result = await probeLspServer(fakeServer("empty-symbols"), FIXTURE, { symbolsWindowMs: 300 });
 
 		// then
 		expect(result.status).toBe("request_failed");
