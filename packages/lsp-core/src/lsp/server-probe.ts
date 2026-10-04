@@ -54,6 +54,8 @@ export interface ProbeLspServerOptions {
 	readonly initializeTimeoutMs?: number;
 	readonly requestTimeoutMs?: number;
 	readonly diagnosticsWindowMs?: number;
+	/** How long an empty documentSymbol answer is retried before it counts as "not parsing". */
+	readonly symbolsWindowMs?: number;
 	/** Directory the throwaway probe workspace is created in; defaults to the OS temp directory. */
 	readonly tempRoot?: string;
 }
@@ -61,6 +63,8 @@ export interface ProbeLspServerOptions {
 const DEFAULT_INITIALIZE_TIMEOUT_MS = 12_000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 6_000;
 const DEFAULT_DIAGNOSTICS_WINDOW_MS = 1_500;
+const DEFAULT_SYMBOLS_WINDOW_MS = 3_000;
+const SYMBOLS_RETRY_MS = 150;
 const MAX_DETAIL_LENGTH = 400;
 const KILL_GRACE_MS = 2_000;
 
@@ -96,8 +100,7 @@ export async function probeLspServer(
 		stage = "initialize";
 		await client.untilExit(client.initialize());
 		stage = "request";
-		const symbols = await client.untilExit(client.documentSymbols(filePath));
-		const symbolCount = Array.isArray(symbols) ? symbols.length : 0;
+		const symbolCount = await countSymbols(client, filePath, options.symbolsWindowMs ?? DEFAULT_SYMBOLS_WINDOW_MS);
 		if (symbolCount === 0) {
 			return {
 				status: "request_failed",
@@ -114,6 +117,20 @@ export async function probeLspServer(
 	} finally {
 		await stopClient(client, failed);
 		rmSync(workspace, { recursive: true, force: true });
+	}
+}
+
+/**
+ * Some servers parse a document asynchronously after `didOpen` (bash-language-server answers
+ * `[]` for its first ~300ms), so an empty answer is retried until the window closes.
+ */
+async function countSymbols(client: ProbeClient, filePath: string, windowMs: number): Promise<number> {
+	const deadline = performance.now() + windowMs;
+	for (;;) {
+		const symbols = await client.untilExit(client.documentSymbols(filePath));
+		const count = Array.isArray(symbols) ? symbols.length : 0;
+		if (count > 0 || performance.now() >= deadline) return count;
+		await new Promise((resolve) => setTimeout(resolve, SYMBOLS_RETRY_MS));
 	}
 }
 
