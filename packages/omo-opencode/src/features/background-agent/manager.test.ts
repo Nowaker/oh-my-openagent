@@ -3203,7 +3203,7 @@ describe("BackgroundManager restart recovery", () => {
     managers.clear()
   })
 
-  async function launchRecoveryChild() {
+  async function launchRecoveryChild(agent = "explore") {
     const sessionId = `ses_recovery_${crypto.randomUUID()}`
     const dispatched = Promise.withResolvers<void>()
     const continued = Promise.withResolvers<void>()
@@ -3215,16 +3215,19 @@ describe("BackgroundManager restart recovery", () => {
       id: sessionId, parentID: "parent-original", directory: tmpdir(), time: {},
     }
     let aborts = 0
+    let acceptedPrompts = 0
     const client = {
       session: {
         get: async ({ path }: { path: { id: string } }) => ({ data: path.id === sessionId ? child : { id: path.id, directory: tmpdir(), time: {} } }),
         create: async () => ({ data: { id: sessionId } }),
         status: async () => ({ data: {} }),
-        messages: async () => ({ data: calls.length === 0 ? [] : [{ info: { role: "assistant", agent: "explore", model, variant: null }, parts: [{ type: "tool", state: { status: "running" } }] }] }),
+        messages: async () => ({ data: acceptedPrompts === 0 ? [] : [{ info: { role: "assistant", agent: calls.at(-1)?.body.agent, model, variant: null }, parts: [{ type: "tool", state: { status: "running" } }] }] }),
         promptAsync: async (input: { path: { id: string }; body: Record<string, unknown> }) => {
           calls.push(input)
+          if (input.body.agent === "missing-agent") throw new Error("Agent not found: missing-agent")
+          acceptedPrompts++
           dispatched.resolve()
-          if (calls.length === 2) { continued.resolve(); await completion.promise }
+          if (acceptedPrompts === 2) { continued.resolve(); await completion.promise }
           return {}
         },
         abort: async () => { aborts++; return {} },
@@ -3236,7 +3239,7 @@ describe("BackgroundManager restart recovery", () => {
     managers.add(second)
     stubNotifyParentSession(first)
     stubNotifyParentSession(second)
-    const launched = await first.launch({ agent: "explore", description: "recovery", prompt: "initial", model, category: "quick", teamRunId: "team-recovery",
+    const launched = await first.launch({ agent, description: "recovery", prompt: "initial", model, category: "quick", teamRunId: "team-recovery",
       userPermission: { webfetch: "deny" }, parentSessionId: "parent-original", parentMessageId: "msg-original" })
     await dispatched.promise
     return { first, second, launched, model, sessionId, calls, child, continued, client, aborts: () => aborts }
@@ -3268,6 +3271,19 @@ describe("BackgroundManager restart recovery", () => {
     await expect(second.resume({ sessionId, prompt: "continue", parentSessionId: "parent-new", parentMessageId: "msg-new" })).rejects.toThrow("owner is live")
     expect(calls).toHaveLength(1)
     expect(aborts()).toBe(before)
+  })
+
+  test("preserves the effective fallback agent and tools across worker restart", async () => {
+    const { first, second, sessionId, calls, continued } = await launchRecoveryChild("missing-agent")
+    expect(calls[1]?.body.agent).toBe("general")
+    await first.shutdown()
+    releaseAllPromptAsyncReservationsForTesting()
+    const resumed = await second.resume({ sessionId, prompt: "continue", parentSessionId: "parent-new", parentMessageId: "msg-new" })
+    expect(resumed.agent).toBe("general")
+    await continued.promise
+    expect(calls).toHaveLength(3)
+    expect(calls[2]?.body.agent).toBe("general")
+    expect(calls[2]?.body.tools).toEqual(calls[1]?.body.tools)
   })
 
   test("two recovering managers claim one orphan and dispatch one continuation", async () => {

@@ -997,14 +997,17 @@ The fallback retry session is now created and can be inspected directly.
             tools: fallbackTools,
             modelFallbackControllerAccessor: this.modelFallbackControllerAccessor,
           })
+          task.agent = FALLBACK_AGENT
+          await this.taskRecovery.persist(task, fallbackTools, childDirectory)
+          const fallbackGeneration = this.taskRecovery.generation(sessionID)
           await this.taskRecovery.dispatch({
             path: { id: sessionID },
             body: fallbackBody,
             query: { directory: childDirectory },
-          }, launchGeneration)
-          task.agent = FALLBACK_AGENT
+          }, fallbackGeneration)
           return
         } catch (retryError) {
+          if (this.shutdownTriggered || !this.taskRecovery.owns(sessionID)) return
           log("[background-agent] Fallback agent also failed:", retryError)
         }
       }
