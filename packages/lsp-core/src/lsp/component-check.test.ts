@@ -182,6 +182,37 @@ describe("checkLspComponents", () => {
 		expect(byLanguage(report.languages, "json").serverId).toBe("json");
 	});
 
+	test("#given only eslint handles .ts and it fails the probe #when checked #then reports typescript missing, not eslint broken", async () => {
+		// given
+		const project = makeProject();
+		writeFile(join(project.root, "index.ts"), "export const a = 1\n");
+		writeExecutable(join(project.bin, "vscode-eslint-language-server"), "#!/bin/sh\nexit 0\n");
+		const failingProbe = async (): Promise<LspProbeResult> => ({ status: "request_failed", stage: "request", durationMs: 1, detail: "no symbols" });
+
+		// when
+		const report = await run(project, { probeServer: failingProbe });
+
+		// then
+		const typescript = byLanguage(report.languages, "typescript");
+		expect(typescript.status).toBe("missing");
+		expect(typescript.serverId).toBe("typescript");
+		expect(typescript.detail).toContain("'eslint' was selected instead");
+		expect(typescript.remediation.join("\n")).toContain("typescript-language-server");
+	});
+
+	test("#given only eslint handles .ts and it answers the probe #when checked #then the fallback is accepted", async () => {
+		// given
+		const project = makeProject();
+		writeFile(join(project.root, "index.ts"), "export const a = 1\n");
+		writeExecutable(join(project.bin, "vscode-eslint-language-server"), "#!/bin/sh\nexit 0\n");
+
+		// when
+		const report = await run(project, { probeServer: okProbe });
+
+		// then
+		expect(byLanguage(report.languages, "typescript")).toMatchObject({ status: "ok", serverId: "eslint" });
+	});
+
 	test("#given a markdown file and no marksman #when checked #then reports marksman missing", async () => {
 		// given
 		const project = makeProject();
