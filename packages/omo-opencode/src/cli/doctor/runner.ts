@@ -3,8 +3,10 @@ import { getAllCheckDefinitions, getCodexCheckDefinitions, gatherSystemInfo, gat
 import { EXIT_CODES } from "./framework/constants"
 import { formatDoctorOutput, formatJsonOutput } from "./framework/formatter"
 
-// Component probes start real language servers; a cold one can take most of a 30s budget.
-const DOCTOR_TIMEOUT_MS = 60_000
+// Component probes start real language servers side by side. A cold tsserver measured 8s on a
+// loaded host, and one probe may take up to 30s (initialize) + 20s (request); the budget covers
+// that with room, so a slow but working server is not cut off.
+const DOCTOR_TIMEOUT_MS = 120_000
 const DOCTOR_TIMEOUT_LABEL = `${DOCTOR_TIMEOUT_MS / 1000}s`
 
 class DoctorTimeoutError extends Error {
