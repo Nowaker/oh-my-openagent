@@ -1,7 +1,6 @@
 /// <reference types="bun-types" />
 import { afterEach, beforeEach, mock, setDefaultTimeout } from "bun:test"
-import { mkdtempSync, rmSync } from "node:fs"
-import { tmpdir } from "node:os"
+import { rmSync } from "node:fs"
 import { join } from "node:path"
 import { _resetForTesting as resetClaudeSessionState } from "./packages/omo-opencode/src/features/claude-code-session-state/state"
 import { _resetTaskToastManagerForTesting as resetTaskToastManager } from "./packages/omo-opencode/src/features/task-toast-manager/manager"
@@ -13,6 +12,7 @@ import { releaseAllPromptAsyncReservationsForTesting } from "./packages/omo-open
 import { resetLiveServerRouteForTesting } from "./packages/omo-opencode/src/shared/live-server-route"
 import { installModuleMockLifecycle } from "./packages/omo-opencode/src/testing/module-mock-lifecycle"
 import { ensureVendoredLspDaemonBuilt } from "./script/ensure-vendored-lsp-daemon"
+import { installHermeticHome } from "./test-hermetic-home"
 
 // Installer/doctor integration tests need the vendored lsp-daemon dist that CI builds
 // out-of-band before `bun test`; mirror that here so fresh clones/worktrees pass too.
@@ -37,28 +37,12 @@ await Promise.all([loadPiTui(), loadSenpiBarrel()])
 // runs get this value; a file that needs more still sets its own budget.
 setDefaultTimeout(process.platform === "win32" ? 30_000 : 20_000)
 
-// Skill/agent/command discovery reads the developer's real HOME (~/.agents/skills,
-// ~/.claude, ~/.config/opencode). A machine with real user skills installed then makes
-// discovery tests pass or fail depending on whose laptop runs them. Point HOME (and
-// USERPROFILE, which os.homedir() reads on Windows) at one empty per-process temp dir so
-// discovery always falls back to the builtins the tests assert on. The discovery code
-// resolves home through getHomeDirectory() (process.env.HOME || USERPROFILE || homedir()),
-// so setting these env vars is sufficient — os.homedir() itself caches the OS home at
-// process start and ignores this mutation. XDG data is isolated for durable task owners;
+// Skill/agent/command discovery reads the developer's real HOME, and the engine's agent dir falls
+// back to os.homedir(). Both point at one per-process temp home; see test-hermetic-home.ts.
+// XDG data is isolated too so durable background-task owners never land in the real data dir;
 // config-dir tests still control CLAUDE/OPENCODE and the other XDG directories themselves.
-//
-// Applied ONCE at module load, not per-test: the beforeEach env snapshot below captures
-// this hermetic HOME for tests that don't touch it, and the afterEach restore keeps it.
-// A per-test re-application would clobber HOME for suites that set their own HOME in a
-// beforeAll (e.g. openclaw reply-listener daemon tests) and only reset state — not HOME —
-// in their beforeEach, so it must NOT run every test.
-const HERMETIC_HOME = mkdtempSync(join(tmpdir(), "omo-test-home-"))
-process.env.HOME = HERMETIC_HOME
-process.env.USERPROFILE = HERMETIC_HOME
+const { home: HERMETIC_HOME } = installHermeticHome()
 process.env.XDG_DATA_HOME = join(HERMETIC_HOME, ".local", "share")
-// A run started inside a live omo session inherits its agent dir; drop it so agent-dir state
-// (task stores, sessions) resolves under the hermetic HOME exactly as it does in CI.
-for (const name of ["OMO_CODING_AGENT_DIR", "SENPI_CODING_AGENT_DIR", "PI_CODING_AGENT_DIR"]) delete process.env[name]
 delete process.env.OPENCODE_SERVER_PASSWORD
 
 let isGlobalMockCleanup = false
