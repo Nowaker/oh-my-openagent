@@ -67,7 +67,17 @@ function toModelResolutionConfig(config: OhMyOpenCodeConfig): OmoConfig {
 
 export function resolveRoster(directory: string): RosterRow[] {
   try {
-    const config = validatePluginConfig(directory).config
+    return resolveRosterForConfig(validatePluginConfig(directory).config)
+  } catch (error) {
+    if (error instanceof Error) {
+      return []
+    }
+    throw error
+  }
+}
+
+export function resolveRosterForConfig(config: OhMyOpenCodeConfig): RosterRow[] {
+  try {
     const resolution = getModelResolutionInfoWithOverrides(toModelResolutionConfig(config))
     return [...resolution.agents, ...resolution.categories]
       .map(toRosterRow)

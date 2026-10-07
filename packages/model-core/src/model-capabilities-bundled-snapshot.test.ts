@@ -59,6 +59,22 @@ describe("bundled model capabilities snapshot", () => {
     }
   })
 
+  test("builds the merged snapshot once per input instead of copying the model map per call", () => {
+    // given
+    const first = getBundledModelCapabilitiesSnapshot(bundledModelCapabilitiesSnapshotJson)
+    const otherInput = { generatedAt: "test", sourceUrl: "test", models: {} }
+
+    // when
+    const second = getBundledModelCapabilitiesSnapshot(bundledModelCapabilitiesSnapshotJson)
+    const other = getBundledModelCapabilitiesSnapshot(otherInput)
+
+    // then
+    expect(second).toBe(first)
+    expect(other).not.toBe(first)
+    expect(other.generatedAt).toBe("test")
+    expect(Object.keys(first.models).length).toBeGreaterThan(Object.keys(other.models).length)
+  })
+
   test("reports the 1M context window for Luna and Luna Fast", () => {
     // given
     const bundledSnapshot = getBundledModelCapabilitiesSnapshot(bundledModelCapabilitiesSnapshotJson)

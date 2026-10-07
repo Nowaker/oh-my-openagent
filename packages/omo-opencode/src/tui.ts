@@ -3,12 +3,12 @@ import type { TuiPluginModule } from "@opencode-ai/plugin/tui"
 import { registerBtwSideTui } from "./features/btw-side"
 import { registerNativeEditionNudgeTui } from "./features/native-edition-nudge"
 import { computeView, viewKey } from "./features/tui-sidebar/compute-view"
+import type { SidebarConfigInputs } from "./features/tui-sidebar/config-inputs"
 import { POLL_INTERVAL_MS } from "./features/tui-sidebar/constants"
 import { deriveAgents, deriveConfig, deriveJobBoard, deriveLoop, deriveRoster } from "./features/tui-sidebar/derivers"
 import type { ViewNode } from "./features/tui-sidebar/element-helpers"
-import { readMirror } from "./features/tui-sidebar/mirror-io"
+import { createMirrorReader } from "./features/tui-sidebar/mirror-io"
 import { buildViewNodes } from "./features/tui-sidebar/render-view"
-import type { RosterRow } from "./features/tui-sidebar/state-types"
 import type { SidebarView } from "./features/tui-sidebar/state-types"
 import { log } from "./shared/logger"
 import { trackLoadedPluginSandbox } from "./hooks/auto-update-checker/checker/sandbox-refresh"
@@ -69,34 +69,22 @@ function materializeNode<Node>(node: ViewNode, solid: SolidRuntime<Node>): Node 
   return element
 }
 
-type RosterResolver = (directory: string) => RosterRow[]
-type PluginValidation = {
-  readonly valid: boolean
-  readonly messages: readonly string[]
-  readonly config: {
-    readonly tui?: {
-      readonly sidebar?: {
-        readonly enabled?: boolean
-      }
-    }
+let readConfigInputs: ((directory: string) => SidebarConfigInputs) | null = null
+
+async function loadConfigInputs(directory: string): Promise<SidebarConfigInputs> {
+  if (readConfigInputs === null) {
+    const { createConfigInputsReader } = await import("./features/tui-sidebar/config-inputs")
+    readConfigInputs = createConfigInputsReader()
   }
+  return readConfigInputs(directory)
 }
 
-async function loadPluginValidation(directory: string): Promise<PluginValidation> {
-  const { validatePluginConfig } = await import("./config/validate")
-  return validatePluginConfig(directory)
-}
-
-async function loadRosterRows(directory: string): Promise<readonly RosterRow[]> {
-  const { resolveRoster } = await import("./features/tui-sidebar/roster-resolver")
-  const resolver: RosterResolver = resolveRoster
-  return resolver(directory)
-}
-
-async function readView(directory: string): Promise<SidebarView> {
-  const validation = await loadPluginValidation(directory)
-  const mirror = readMirror(directory)
-  const roster = await loadRosterRows(directory)
+async function readView(
+  directory: string,
+  readMirror: ReturnType<typeof createMirrorReader>,
+): Promise<SidebarView> {
+  const { validation, roster } = await loadConfigInputs(directory)
+  const mirror = readMirror()
   return computeView({
     config: deriveConfig(validation),
     roster: deriveRoster(roster),
@@ -142,11 +130,12 @@ const module: TuiPluginModule = {
     }
 
     const directory = api.state.path.directory
-    if ((await loadPluginValidation(directory)).config.tui?.sidebar?.enabled === false) {
+    if ((await loadConfigInputs(directory)).validation.config.tui?.sidebar?.enabled === false) {
       return
     }
 
-    let currentView = await readView(directory)
+    const readMirror = createMirrorReader(directory)
+    let currentView = await readView(directory, readMirror)
     let currentKey = viewKey(currentView)
     let disposed = false
     let inFlight = false
@@ -173,7 +162,7 @@ const module: TuiPluginModule = {
       }
       inFlight = true
       try {
-        const nextView = await readView(directory)
+        const nextView = await readView(directory, readMirror)
         const nextKey = viewKey(nextView)
         if (nextKey !== currentKey) {
           currentView = nextView

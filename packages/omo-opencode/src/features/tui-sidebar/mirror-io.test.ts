@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 
 import { MIRROR_DIR_NAME, MIRROR_SCHEMA_VERSION, STALE_MS } from "./constants"
-import { readMirror, writeMirror } from "./mirror-io"
+import { createMirrorReader, readMirror, writeMirror } from "./mirror-io"
 import { mirrorFilePath, mirrorStorageDir } from "./mirror-path"
 import type { TuiRuntimeSnapshot } from "./snapshot-schema"
 
@@ -217,6 +217,32 @@ describe("tui-sidebar mirror IPC", () => {
       return
     }
     expect(statSync(mirrorFilePath(projectDir)).mode & 0o777).toBe(0o600)
+  })
+
+  it("#given a polling mirror reader #when the file is unchanged, rewritten, removed, or goes stale #then it matches readMirror", () => {
+    // given
+    const projectDir = makeTempDir("cached-reader")
+    const readCached = createMirrorReader(projectDir)
+    const first = snapshotFor(projectDir, Date.now())
+    writeMirror(projectDir, first)
+
+    // when
+    const initial = readCached()
+    const unchanged = readCached()
+    const rewritten = { ...first, activeAgents: [{ name: "atlas", status: "busy" as const }], updatedAt: Date.now() + 1 }
+    writeMirror(projectDir, rewritten)
+    const afterRewrite = readCached()
+    writeMirror(projectDir, snapshotFor(projectDir, Date.now() - STALE_MS - 1_000))
+    const afterStale = readCached()
+    rmSync(mirrorFilePath(projectDir))
+    const afterRemove = readCached()
+
+    // then
+    expect(initial).toEqual(first)
+    expect(unchanged).toBe(initial)
+    expect(afterRewrite).toEqual(rewritten)
+    expect(afterStale).toBeNull()
+    expect(afterRemove).toBeNull()
   })
 
   it("#given mirror storage parent is a file #when writing #then it reports the filesystem failure", () => {

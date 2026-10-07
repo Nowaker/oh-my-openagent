@@ -20,7 +20,7 @@ TUI side:     1s poll → readMirror() → derivers → computeView() → viewKe
 | `mirror-manager.ts` | `TuiStateMirror` — debounced (250ms) flush, 2s heartbeat, single in-flight write, start/stop lifecycle |
 | `snapshot-builder.ts` | `buildTuiRuntimeSnapshot` — active agents from session statuses, job board from `BackgroundManager.getTasksSnapshot()`, loop state; redacts `activeGoal` text before write |
 | `snapshot-schema.ts` | Zod schema `TuiRuntimeSnapshotSchema` (version literal 1) + `parseSnapshot` |
-| `mirror-io.ts` | `writeMirror` (atomic, mode 0600) / `readMirror` — rejects unparseable, wrong-project, or stale (>6s) snapshots |
+| `mirror-io.ts` | `writeMirror` (atomic, mode 0600) / `readMirror` / `createMirrorReader` (re-parses only on stat change) — rejects unparseable, wrong-project, or stale (>6s) snapshots |
 | `mirror-path.ts` | XDG data dir + sha1(projectDir) prefix filename; `canonicalProjectDir` via realpath |
 | `loop-reader.ts` | Reads `.omo/ulw-loop/*/goals.json` (v1 schema) + legacy `.omo/loop/goals.json`, freshest live loop wins; stale after 120s |
 | `derivers.ts` | Snapshot → section states; jobs sorted by status priority (running first), caps MAX_AGENTS/MAX_JOBS = 12 |
@@ -28,6 +28,8 @@ TUI side:     1s poll → readMirror() → derivers → computeView() → viewKe
 | `render-view.ts` | `buildViewNodes` (themed box/text tree) + `describeView` (plain lines); 24-char label truncation |
 | `state-types.ts` | Discriminated-union section states (`kind` tags) + `assertNever` |
 | `roster-resolver.ts` | Idle-view model roster from config via doctor's model resolution |
+| `config-input-signature.ts` | Stat/env fingerprint of every `.omo` config input + `memoizeByConfigInputs` |
+| `config-inputs.ts` | `createConfigInputsReader` - validation + roster, recomputed only when the config fingerprint changes |
 | `element-helpers.ts` | `ViewNode` type + `box`/`text` constructors (renderer-agnostic) |
 | `config-validator.ts` | Re-export of `validatePluginConfig` |
 | `constants.ts` | All timing/size knobs: STALE_MS 6s, HEARTBEAT_MS 2s, POLL_INTERVAL_MS 1s, WRITE_DEBOUNCE_MS 250ms, LOOP_FRESH_MS 120s |
