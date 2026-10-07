@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from "bun:test"
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-import { HEARTBEAT_MS, WRITE_DEBOUNCE_MS } from "./constants"
+import { HEARTBEAT_MS, MIRROR_KEEPALIVE_MS, WRITE_DEBOUNCE_MS } from "./constants"
 import { readMirror } from "./mirror-io"
+import { mirrorFilePath } from "./mirror-path"
+import type { MirrorTiming } from "./mirror-timing"
 import { TuiStateMirror } from "./mirror-manager"
 import type { SessionAgentResolver } from "./snapshot-builder"
 import type { BackgroundTaskSnapshot } from "../background-agent/types"
@@ -61,6 +63,8 @@ function createMirror(input?: {
   readonly backgroundManager?: FakeBackgroundManager
   readonly sessionAgentResolver?: SessionAgentResolver
   readonly reportFlushError?: (error: Error) => void
+  readonly timing?: MirrorTiming
+  readonly now?: () => number
 }): TuiStateMirror {
   const projectDir = input?.projectDir ?? makeTempDir("project")
   return new TuiStateMirror({
@@ -69,7 +73,37 @@ function createMirror(input?: {
     backgroundManager: input?.backgroundManager ?? createBackgroundManager([]),
     sessionAgentResolver: input?.sessionAgentResolver ?? resolveTestSessionAgent,
     reportFlushError: input?.reportFlushError,
+    timing: input?.timing,
+    now: input?.now,
   })
+}
+
+function writtenUpdatedAt(projectDir: string): number {
+  const raw: unknown = JSON.parse(readFileSync(mirrorFilePath(projectDir), "utf-8"))
+  if (typeof raw !== "object" || raw === null || !("updatedAt" in raw) || typeof raw.updatedAt !== "number") {
+    throw new Error("mirror file has no numeric updatedAt")
+  }
+  return raw.updatedAt
+}
+
+function countingClient(statuses: () => StatusMap): { readonly client: FakeClient; readonly builds: () => number } {
+  let builds = 0
+  return {
+    client: {
+      session: {
+        status: async () => {
+          builds += 1
+          return { data: statuses() }
+        },
+        messages: async () => ({ data: [] }),
+      },
+    },
+    builds: () => builds,
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolvePromise) => setTimeout(resolvePromise, ms))
 }
 
 const resolveTestSessionAgent: SessionAgentResolver = async (sessionID) => {
@@ -260,5 +294,89 @@ describe("TuiStateMirror", () => {
 
     // then
     expect(buildCount).toBe(1)
+  })
+
+  it("#given an unchanged idle snapshot #when flushed again #then the mirror file is not rewritten", async () => {
+    // given
+    const projectDir = makeTempDir("idle-unchanged")
+    const mirror = createMirror({ projectDir })
+    await mirror.flush()
+    const firstUpdatedAt = writtenUpdatedAt(projectDir)
+    await sleep(5)
+
+    // when
+    await mirror.flush()
+
+    // then
+    expect(writtenUpdatedAt(projectDir)).toBe(firstUpdatedAt)
+  })
+
+  it("#given a snapshot whose content changed #when flushed #then the mirror file is rewritten", async () => {
+    // given
+    const projectDir = makeTempDir("content-changed")
+    let statuses: StatusMap = {}
+    const mirror = createMirror({ projectDir, client: countingClient(() => statuses).client })
+    await mirror.flush()
+
+    // when
+    statuses = { "ses-main": { type: "busy" } }
+    await mirror.flush()
+
+    // then
+    expect(readMirror(projectDir)?.activeAgents).toEqual([{ name: "sisyphus", status: "busy" }])
+  })
+
+  it("#given an unchanged active snapshot #when flushed before and after the keepalive age #then only the late flush rewrites it", async () => {
+    // given
+    const projectDir = makeTempDir("active-keepalive")
+    let clock = 1_000_000
+    const mirror = createMirror({
+      projectDir,
+      client: createClient({ "ses-main": { type: "busy" } }),
+      now: () => clock,
+    })
+    await mirror.flush()
+    const firstUpdatedAt = writtenUpdatedAt(projectDir)
+
+    // when
+    clock += MIRROR_KEEPALIVE_MS - 1
+    await sleep(5)
+    await mirror.flush()
+    const beforeKeepalive = writtenUpdatedAt(projectDir)
+    clock += 1
+    await sleep(5)
+    await mirror.flush()
+
+    // then
+    expect(beforeKeepalive).toBe(firstUpdatedAt)
+    expect(writtenUpdatedAt(projectDir)).toBeGreaterThan(firstUpdatedAt)
+  })
+
+  it("#given an idle mirror with a long idle recheck #when heartbeats fire #then it rebuilds only once", async () => {
+    // given
+    const counting = countingClient(() => ({}))
+    const mirror = createMirror({ client: counting.client, timing: { heartbeatMs: 20, idleRecheckMs: 60_000 } })
+
+    // when
+    mirror.start()
+    await sleep(WRITE_DEBOUNCE_MS * 3)
+    mirror.stop()
+
+    // then
+    expect(counting.builds()).toBe(1)
+  })
+
+  it("#given an active mirror #when heartbeats fire #then it keeps rebuilding on the heartbeat", async () => {
+    // given
+    const counting = countingClient(() => ({ "ses-main": { type: "busy" } }))
+    const mirror = createMirror({ client: counting.client, timing: { heartbeatMs: 20, idleRecheckMs: 60_000 } })
+
+    // when
+    mirror.start()
+    await sleep(WRITE_DEBOUNCE_MS * 3)
+    mirror.stop()
+
+    // then
+    expect(counting.builds()).toBeGreaterThanOrEqual(2)
   })
 })
