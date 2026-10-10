@@ -1,3 +1,34 @@
+## 2026-10-09 - Adopt senpi 2026.10.10-11
+
+Every `@code-yeongyu/senpi` pin moves from 2026.10.10-10 to 2026.10.10-11: the root devDependency, `omo-native` and its provider map comment, the `omo-senpi` and `senpi-task` peer and dev pins (with their `senpi-tui` and `senpi-ai` aliases), the pin tests and the engine named in `senpi-task`'s coverage test. `tool_schema("eval:environments")` documents `packages.install` and `environment_install_timeout` in JavaScript and Python cells, while the default eval description and parameters stay byte-identical. Julia, Ruby and Python cells do less fixed work per cell: no globals walk below the memory thresholds, no awaited cwd stat, and leaner Python queue and capture bookkeeping. The lockfile is refreshed with `bun install --no-cache`, the provider map is checked against the pinned engine's `builtinProviders()`, and the generated plugin bundle is regenerated for it.
+
+## 2026-10-09 - Default lineups use Claude Haiku 5.5, right after Luna
+
+Every default chain that used `claude-haiku-4-5` now uses `claude-haiku-5-5` at `medium`, moved up to sit right after `gpt-6-luna-fast`:
+- `quick` (`packages/senpi-task/src/category/fallback-chains.ts`, mirror `packages/model-core/src/category-model-requirements.ts`): Luna (low) -> Haiku 5.5 (medium) -> DeepSeek Flash (off) -> ...; the trailing Haiku 4.5 (off) rung is gone.
+- `explore` and `librarian` (`packages/senpi-task/src/agents/builtin/fallback-chains.ts`, mirror `packages/model-core/src/agent-model-requirements.ts`, parity #8259): Kimi HighSpeed (off) -> Luna (low) -> Haiku 5.5 (medium) -> DeepSeek Flash (max) -> ...; the trailing Haiku 4.5 rung is gone.
+- The Claude Code `haiku` alias maps to `claude-haiku-5-5`; the OpenCode installer's Claude-only `explore` default is `anthropic/claude-haiku-5-5` (medium); the agent-category migration maps both ids to `quick`; telemetry adds the 5.5 id and keeps 4.5.
+
+Providers are the 4.5 rung's, all of which serve the model in the pinned senpi catalog: `anthropic` and `anthropic-subscription` (`claude-haiku-5-5`), `anthropic-api` (an `anthropic` alias), `github-copilot` (`claude-haiku-5.5`, reached by `transformModelForProvider`). The variant is `medium` because Haiku 5.5 has no `off`, and in our evaluation `low` stopped early. The bundled capability snapshot gains the nine `claude-haiku-5-5` entries these rungs need, picked from a fresh models.dev fetch like the Opus 5.5 entries were; the full refresh is the scheduled workflow's job. `.github/workflows/sisyphus-agent.yml` keeps its `claude-haiku-4-5` entry: it is that workflow's own pinned provider definition for its CI agent, not a routing default.
+
+## 2026-10-09 - Adopt senpi 2026.10.10-10
+
+Every `@code-yeongyu/senpi` pin moves from 2026.10.10-9 to 2026.10.10-10: the root devDependency, `omo-native` and its provider map comment, the `omo-senpi` and `senpi-task` peer and dev pins (with their `senpi-tui` and `senpi-ai` aliases), the pin tests and the engine named in `senpi-task`'s coverage test. The engine keeps a session on one Anthropic Subscription account across transient errors (senpi#2891), stops re-writing the whole conversation to the prompt cache with resume off (senpi#2982), waits for the reader instead of failing a long streamed tool call (senpi#2822), and serves `gpt-6.1-sol-ultrafast` without a local extension (senpi#2975). The generated plugin bundle is regenerated for it on Linux.
+
+## 2026-10-08 - Config migrations edit omo.jsonc only where a value changes (#9777)
+
+The first engine start against an existing `~/.omo/omo.jsonc` runs the `2026-08-reasoning-unification` migration (replace-target, no `shouldRun`). It reformatted every top-level value: nested line and block comments, trailing commas, inline objects and custom indentation were lost. A `.bak` was written first, so nothing was unrecoverable. There were two causes:
+- **Every key was edited:** `prepareTargetReplacement` (`packages/omo-config-core/src/migration/commit.ts`) emitted an edit for every top-level key, changed or not.
+- **Edits reformatted their neighbours:** jsonc-parser's `modify` reformats the neighbouring member's line whenever it inserts or removes a member, and it replaces a whole value's text.
+
+The fix:
+- **Diffing:** replace-target migrations now diff the transformed document against the target (`migration/diff-edits.ts`) and edit only the deepest paths that changed, plus the `_migrations` marker. A migration that changes nothing adds only the marker.
+- **Surgical writes:** the writer (`writer/surgical-edit.ts`) inserts and removes members by hand in the file's own indentation and trailing-comma style. Replacing a value still goes through `modify`, which rewrites only that value. A member that shares its line with another falls back to `modify`.
+
+The same writer serves merge migrations' additions and `omo setup` edits.
+
+Every registered migration was audited: reasoning-unification, category-deep-split, harness-native-rename and subscription-provider-rename (replace-target) and the opencode/config-jsonc merges. They all write through the one writer, so all of them are covered.
+
 ## 2026-10-08 - The configuration reference documents the Anthropic 1-hour prompt cache and the cache keep-alive (#9770)
 
 `docs/reference/configuration.md` gains an "Anthropic Prompt Cache Lifetime" section. The engine already supported both settings, but the docs never mentioned them, so users with long gaps between turns paid a full cache rewrite on every turn and asked for a feature that already existed. The section covers:
