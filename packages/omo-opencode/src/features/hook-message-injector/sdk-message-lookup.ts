@@ -5,7 +5,10 @@ import type { StoredMessage, ToolPermission } from "./types"
 
 export type OpencodeClient = {
   readonly session: {
-    readonly messages: (input: { readonly path: { readonly id: string } }) => Promise<unknown>
+    readonly messages: (input: {
+      readonly path: { readonly id: string }
+      readonly query?: { readonly limit?: number }
+    }) => Promise<unknown>
   }
 }
 
@@ -54,9 +57,27 @@ function convertSDKMessageToStoredMessage(msg: SDKMessage): StoredMessage | null
   }
 }
 
-export async function fetchSDKMessages(client: OpencodeClient, sessionID: string): Promise<SDKMessage[] | null> {
+/**
+ * How many of the newest messages `findNearestMessageWithFieldsFromSDK` reads
+ * before it falls back to the whole session. Every assistant turn carries an
+ * agent and a model, so the answer is almost always in the last few messages,
+ * while a long-lived session's full history runs to tens of MB: 83 MB and
+ * 3-10 s per fetch was measured on a 6,600-message coordinator session, paid
+ * twice per tool call by Atlas's orchestrator check.
+ */
+export const NEAREST_MESSAGE_RECENT_WINDOW = 50
+
+export async function fetchSDKMessages(
+  client: OpencodeClient,
+  sessionID: string,
+  options: { readonly limit?: number } = {},
+): Promise<SDKMessage[] | null> {
   try {
-    const response = await client.session.messages({ path: { id: sessionID } })
+    const response = await client.session.messages(
+      options.limit === undefined
+        ? { path: { id: sessionID } }
+        : { path: { id: sessionID }, query: { limit: options.limit } },
+    )
     const emptyMessages: SDKMessage[] = []
     const normalized = normalizeSDKResponse(response, emptyMessages, { preferResponseOnMissingData: true })
     return Array.isArray(normalized) ? normalized : emptyMessages
@@ -70,20 +91,32 @@ export async function fetchSDKMessages(client: OpencodeClient, sessionID: string
   return null
 }
 
-export function findNearestMessageWithFieldsFromMessages(messages: readonly SDKMessage[]): StoredMessage | null {
-  const sortedMessages = messages
+function newestFirst(messages: readonly SDKMessage[]): { readonly stored: StoredMessage | null }[] {
+  return messages
     .map((message) => ({
       stored: convertSDKMessageToStoredMessage(message),
       createdAt: message.info?.time?.created ?? Number.NEGATIVE_INFINITY,
       id: typeof message.id === "string" ? message.id : "",
     }))
     .sort((left, right) => right.createdAt - left.createdAt || right.id.localeCompare(left.id))
+}
 
+function findNewestCompleteMessage(sortedMessages: readonly { readonly stored: StoredMessage | null }[]): StoredMessage | null {
   for (const message of sortedMessages) {
     const stored = message.stored
     if (stored?.agent && stored.model?.providerID && stored.model?.modelID) {
       return stored
     }
+  }
+  return null
+}
+
+export function findNearestMessageWithFieldsFromMessages(messages: readonly SDKMessage[]): StoredMessage | null {
+  const sortedMessages = newestFirst(messages)
+
+  const complete = findNewestCompleteMessage(sortedMessages)
+  if (complete) {
+    return complete
   }
 
   for (const message of sortedMessages) {
@@ -120,6 +153,17 @@ export async function findNearestMessageWithFieldsFromSDK(
   client: OpencodeClient,
   sessionID: string
 ): Promise<StoredMessage | null> {
+  // The newest message carrying both an agent and a model wins outright, so
+  // finding one in the newest window gives exactly the full-history answer.
+  // Only a window without one needs the whole session: the partial-field
+  // fallback must see every message to pick the same one it always did.
+  const recent = await fetchSDKMessages(client, sessionID, { limit: NEAREST_MESSAGE_RECENT_WINDOW })
+  if (recent) {
+    const complete = findNewestCompleteMessage(newestFirst(recent))
+    if (complete) {
+      return complete
+    }
+  }
   const messages = await fetchSDKMessages(client, sessionID)
   return messages ? findNearestMessageWithFieldsFromMessages(messages) : null
 }
