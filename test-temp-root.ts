@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync
 import { tmpdir } from "node:os"
 import { basename, join } from "node:path"
 import reportOnlyPrefixesByOwner from "./test-temp-leak-report-only.json"
-import { reportOnlyOwner as ownerIn } from "./test-temp-leak-match"
+import { isOsCreatedTempEntry, reportOnlyOwner as ownerIn } from "./test-temp-leak-match"
 
 // Every test process gets its own temp root, and the OS temp dir variables point at it for the rest
 // of the process (#9766). os.tmpdir() re-reads them on each call, so every mkdtemp a test makes, and
@@ -81,7 +81,9 @@ export function markTestInfrastructureDir(path: string): void {
 
 function leftoverEntries(): string[] {
   try {
-    return readdirSync(runRoot).filter((entry) => !infrastructureEntries.has(entry)).sort()
+    return readdirSync(runRoot)
+      .filter((entry) => !infrastructureEntries.has(entry) && !isOsCreatedTempEntry(entry))
+      .sort()
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT") return []
     throw error

@@ -103,9 +103,9 @@ describe("the rollup's first day (account move, 2026-10-09)", () => {
     expect(queried).toBe(false)
   })
 
-  test("the deployed config sets the first day to 2026-10-10 and keeps the cron off until the analytics token exists", async () => {
+  test("the deployed config sets the first day to 2026-10-10 and runs the rollup hourly at :17", async () => {
     const config = await Bun.file(new URL("../wrangler.jsonc", import.meta.url)).text()
     expect(config).toContain('"ROLLUP_FIRST_DAY": "2026-10-10"')
-    expect(config).toContain('"triggers": { "crons": [] }')
+    expect(config).toContain('"triggers": { "crons": ["17 * * * *"] }')
   })
 })
