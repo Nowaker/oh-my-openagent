@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// omo-codex-install:c0434c323119abd4c8f9dbe2770f25c161f77afbc2510028fd56c1cf8686c9f0:e05728c791992ba8b6cd306a4648b585ac26e82c604e589ee39a47768c95fb09
+// omo-codex-install:643bf27c152edbd2cb2348ec12962f6fa9c214781d3435eac8f5f2bba2e2a8e5:d4eeade8402959d812046ab47a22010046503bc95f9fa850a38fd68254b0b542
 var __esm = (fn, res, err) => () => {
   if (fn)
     try {
@@ -9984,7 +9984,7 @@ var package_default;
 var init_package = __esm(() => {
   package_default = {
     name: "@oh-my-opencode/omo-codex",
-    version: "5.1.30",
+    version: "5.1.32",
     type: "module",
     private: true,
     description: "Codex harness adapter for oh-my-openagent. Vendored Codex plugin namespace (omo) + TypeScript installer + telemetry.",
@@ -19469,7 +19469,8 @@ var OmoMemoryNudgeSchema = object({
 }).strict();
 var OmoMemoryFactsSchema = object({
   enabled: boolean2().default(true),
-  debounce_settles: number2().int().min(1).default(4)
+  debounce_settles: number2().int().min(1).default(4),
+  model: string2().min(1).optional()
 }).strict();
 var OmoMemoryDreamSchema = object({
   enabled: boolean2().default(true),
@@ -19531,7 +19532,8 @@ var OmoMemoryNudgeLayerSchema = object({
 }).strict();
 var OmoMemoryFactsLayerSchema = object({
   enabled: boolean2().optional(),
-  debounce_settles: number2().int().min(1).optional()
+  debounce_settles: number2().int().min(1).optional(),
+  model: string2().min(1).optional()
 }).strict();
 var OmoMemoryDreamLayerSchema = object({
   enabled: boolean2().optional(),
