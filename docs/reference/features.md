@@ -943,7 +943,7 @@ Current composition counts:
 | ---------------------------- | ------------------- | ------------------------------------------------------- |
 | **claude-code-hooks**        | Message + PreToolUse + PostToolUse | Executes supported Claude Code hook handlers for `chat.message` and `tool.execute.before`/`tool.execute.after`; it does not run on every OMO hook event. |
 | **interactive-bash-session** | PostToolUse + Event | Manages tmux sessions for interactive CLI.              |
-| **non-interactive-env**      | PreToolUse          | Handles non-interactive environment constraints.        |
+| **non-interactive-env**      | shell.env + System + PreToolUse | Supplies scoped agent bash defaults without rewriting commands; warns about interactive commands. See [configuration](configuration.md#agent-bash-environment-opencode). |
 
 #### Specialized
 

@@ -867,6 +867,26 @@ Guard hooks such as `team-tool-gating`, `write-existing-file-guard`, `bash-file-
 - `directory-agents-injector` - auto-disabled on OpenCode 1.1.37+ (native AGENTS.md support)
 - `startup-toast` is a sub-feature of `auto-update-checker`. Disable just the toast by adding `startup-toast` to `disabled_hooks`.
 
+#### Agent bash environment (OpenCode)
+
+The `non-interactive-env` hook supplies environment defaults to each agent bash child without changing the command text. It requires a host that tags `shell.env` calls with `source: "tool"`; hosts without this field receive no overlay rather than risking user-shell changes. User `!` shell commands and interactive PTYs are excluded. The parent process environment is never modified.
+
+Core defaults: `GIT_TERMINAL_PROMPT=0`, `GCM_INTERACTIVE=never`, `GIT_PAGER=cat`, `PAGER=cat`, and `PIP_NO_INPUT=1`. These apply to git and non-git agent bash commands alike.
+
+The separate editor preset defaults to `fail_closed`: `GIT_EDITOR=false`, `GIT_SEQUENCE_EDITOR=false`, `EDITOR=false`, and `VISUAL=false`. An operation that needs an editor fails instead of silently accepting a no-op edit. Supply a message/file explicitly or deliberately select an editor. To inherit editor settings instead:
+
+```jsonc
+{
+  "[opencode]": {
+    "non_interactive_env": { "editor_policy": "inherit" }
+  }
+}
+```
+
+Precedence: inherited host environment < agent defaults < existing explicit plugin environment overlay < assignments in the command. An empty explicit value is preserved. For example, `GIT_EDITOR=my-editor git commit` overrides the editor default; `export PAGER=my-pager` overrides it for subsequent commands in that child. Later plugins can also override the overlay. No `env` argument is added to the bash tool.
+
+`env -i`, `sudo`, and SSH may clear or replace this environment; defaults are not re-injected across those boundaries. `CI=true`, npm auto-confirmation, and relaxed Yarn immutable-install settings are not supplied. Debian frontend, Homebrew auto-update, and git merge auto-edit settings are operation-scoped opt-ins. The `GIT_MASTER` marker remains part of the git-master skill only, not this environment policy. Disable the policy and its guidance with `disabled_hooks: ["non-interactive-env"]`.
+
 ### Commands
 
 Disable built-in commands via `disabled_commands`:
