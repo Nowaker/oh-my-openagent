@@ -54,6 +54,19 @@
         "type": "string"
       }
     },
+    "non_interactive_env": {
+      "type": "object",
+      "properties": {
+        "editor_policy": {
+          "type": "string",
+          "enum": [
+            "fail_closed",
+            "inherit"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
     "disabled_commands": {
       "type": "array",
       "items": {
