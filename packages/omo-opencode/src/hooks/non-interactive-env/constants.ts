@@ -1,26 +1,35 @@
 export const HOOK_NAME = "non-interactive-env"
 
-export const NON_INTERACTIVE_ENV: Record<string, string> = {
-  CI: "true",
-  DEBIAN_FRONTEND: "noninteractive",
-  GIT_TERMINAL_PROMPT: "0",
-  GCM_INTERACTIVE: "never",
-  HOMEBREW_NO_AUTO_UPDATE: "1",
-  // Block interactive editors - git rebase, commit, etc.
-  GIT_EDITOR: ":",
-  EDITOR: ":",
-  VISUAL: "",
-  GIT_SEQUENCE_EDITOR: ":",
-  GIT_MERGE_AUTOEDIT: "no",
-  // Block pagers
-  GIT_PAGER: "cat",
-  PAGER: "cat",
-  // NPM non-interactive
-  npm_config_yes: "true",
-  // Pip non-interactive
-  PIP_NO_INPUT: "1",
-  // Yarn non-interactive
-  YARN_ENABLE_IMMUTABLE_INSTALLS: "false",
+export type EditorPolicy = "fail_closed" | "inherit"
+
+type EnvironmentDefault = {
+  readonly name: string
+  readonly value: string
+  readonly preset: "core" | "editor"
+}
+
+export const BASH_ENV_DEFAULTS = [
+  { name: "GIT_TERMINAL_PROMPT", value: "0", preset: "core" },
+  { name: "GCM_INTERACTIVE", value: "never", preset: "core" },
+  { name: "GIT_PAGER", value: "cat", preset: "core" },
+  { name: "PAGER", value: "cat", preset: "core" },
+  { name: "PIP_NO_INPUT", value: "1", preset: "core" },
+  { name: "GIT_EDITOR", value: "false", preset: "editor" },
+  { name: "GIT_SEQUENCE_EDITOR", value: "false", preset: "editor" },
+  { name: "EDITOR", value: "false", preset: "editor" },
+  { name: "VISUAL", value: "false", preset: "editor" },
+] as const satisfies readonly EnvironmentDefault[]
+
+export function getBashEnvDefaults(editorPolicy: EditorPolicy): Record<string, string> {
+  return Object.fromEntries(BASH_ENV_DEFAULTS
+    .filter((entry) => entry.preset === "core" || editorPolicy === "fail_closed")
+    .map(({ name, value }) => [name, value]))
+}
+
+export function getBashEnvGuidance(editorPolicy: EditorPolicy): string {
+  const defaults = Object.entries(getBashEnvDefaults(editorPolicy))
+    .map(([name, value]) => `${name}=${value}`).join(" ")
+  return `On hosts with source-tagged shell.env, agent bash children receive ${defaults} as environment defaults, not command prefixes. Explicit environment overlays and shell assignments override them; user shells and PTYs are unchanged. ${editorPolicy === "fail_closed" ? "Editors fail closed: provide messages/files or explicitly select an editor; false does not approve an empty edit. " : "Editor settings are inherited. "}Do not repeat these defaults in commands. env -i, sudo, and SSH may clear them; opt in to operation-specific CI, package-manager, or merge settings only when needed.`
 }
 
 /**

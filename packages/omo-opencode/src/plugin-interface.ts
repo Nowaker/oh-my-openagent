@@ -76,11 +76,18 @@ export function createPluginInterface(args: {
       hooks,
     }),
 
-    "experimental.chat.system.transform": createSystemTransformHandler(
-      pluginConfig.default_mode,
-      getUltraworkMessage,
-      hooks.keywordDetector,
-    ),
+    "experimental.chat.system.transform": async (input, output) => {
+      await createSystemTransformHandler(
+        pluginConfig.default_mode,
+        getUltraworkMessage,
+        hooks.keywordDetector,
+      )(input, output)
+      await hooks.nonInteractiveEnv?.["experimental.chat.system.transform"](input, output)
+    },
+
+    "shell.env": async (input: Parameters<NonNullable<CreatedHooks["nonInteractiveEnv"]>["shell.env"]>[0], output) => {
+      await hooks.nonInteractiveEnv?.["shell.env"](input, output)
+    },
 
     config: managers.configHandler,
 

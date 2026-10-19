@@ -152,7 +152,7 @@ export function createSessionHooks(args: {
     : null
 
   const nonInteractiveEnv = isHookEnabled("non-interactive-env")
-    ? safeHook("non-interactive-env", () => createNonInteractiveEnvHook(ctx))
+    ? safeHook("non-interactive-env", () => createNonInteractiveEnvHook(ctx, pluginConfig.non_interactive_env))
     : null
 
   const interactiveBashSession =

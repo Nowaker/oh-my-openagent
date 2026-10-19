@@ -43,6 +43,9 @@ export const OhMyOpenCodeConfigSchema = z.object({
   disabled_agents: z.array(z.string()).optional(),
   disabled_skills: z.array(z.string()).optional(),
   disabled_hooks: z.array(z.string()).optional(),
+  non_interactive_env: z.object({
+    editor_policy: z.enum(["fail_closed", "inherit"]).optional(),
+  }).optional(),
   disabled_commands: z.array(BuiltinCommandNameSchema).optional(),
   /** Disable specific tools by name (e.g., ["todowrite", "todoread"]) */
   disabled_tools: z.array(z.string()).optional(),

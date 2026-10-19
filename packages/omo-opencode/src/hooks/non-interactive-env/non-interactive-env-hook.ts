@@ -1,8 +1,6 @@
 import type { PluginInput } from "@opencode-ai/plugin"
-import { HOOK_NAME, NON_INTERACTIVE_ENV, SHELL_COMMAND_PATTERNS } from "./constants"
-import { log, buildEnvPrefix, replaceToolArgs } from "../../shared"
-import type { ShellType } from "../../shared/shell-env"
-import { openCodeShellTypeResolver } from "../../shared/opencode-shell"
+import { getBashEnvDefaults, getBashEnvGuidance, SHELL_COMMAND_PATTERNS } from "./constants"
+import type { EditorPolicy } from "./constants"
 
 export * from "./constants"
 export * from "./detector"
@@ -21,16 +19,33 @@ function detectBannedCommand(command: string): string | undefined {
   return undefined
 }
 
-export interface NonInteractiveEnvHookDeps {
-  readonly resolveShellType: () => ShellType
+type ShellEnvInput = {
+  readonly cwd: string
+  readonly source?: "tool" | "shell" | "pty"
+  readonly sessionID?: string
+  readonly messageID?: string
+  readonly callID?: string
 }
 
-const defaultDeps: NonInteractiveEnvHookDeps = {
-  resolveShellType: () => openCodeShellTypeResolver.resolveShellType(),
-}
-
-export function createNonInteractiveEnvHook(_ctx: PluginInput, deps: NonInteractiveEnvHookDeps = defaultDeps) {
+export function createNonInteractiveEnvHook(
+  _ctx: PluginInput,
+  config?: { readonly editor_policy?: EditorPolicy },
+) {
+  const editorPolicy = config?.editor_policy ?? "fail_closed"
   return {
+    "shell.env": async (input: ShellEnvInput, output: { env: Record<string, string> }): Promise<void> => {
+      // Older hosts cannot distinguish agent bash from user !shell commands.
+      if (input.source !== "tool" || !input.sessionID || !input.messageID || !input.callID) return
+      for (const [name, value] of Object.entries(getBashEnvDefaults(editorPolicy))) {
+        if (!Object.hasOwn(output.env, name)) output.env[name] = value
+      }
+    },
+    "experimental.chat.system.transform": async (
+      _input: unknown,
+      output: { system: string[] },
+    ): Promise<void> => {
+      output.system.push(getBashEnvGuidance(editorPolicy))
+    },
     "tool.execute.before": async (
       input: { tool: string; sessionID: string; callID: string },
       output: { args: Record<string, unknown>; message?: string }
@@ -39,8 +54,8 @@ export function createNonInteractiveEnvHook(_ctx: PluginInput, deps: NonInteract
         return
       }
 
-      const command = output.args.command as string | undefined
-      if (!command) {
+      const command = output.args.command
+      if (typeof command !== "string" || !command) {
         return
       }
 
@@ -49,34 +64,6 @@ export function createNonInteractiveEnvHook(_ctx: PluginInput, deps: NonInteract
         output.message = `Warning: '${bannedCmd}' is an interactive command that may hang in non-interactive environments.`
       }
 
-      // Only prepend env vars for git commands (editor blocking, pager, etc.)
-      const isGitCommand = /\bgit\b/.test(command)
-      if (!isGitCommand) {
-        return
-      }
-
-      // NOTE: We intentionally removed the isNonInteractive() check here.
-      // Even when OpenCode runs in a TTY, the agent cannot interact with
-      // spawned bash processes. Git commands like `git rebase --continue`
-      // would open editors (vim/nvim) that hang forever.
-      // The env vars (GIT_EDITOR=:, EDITOR=:, etc.) must ALWAYS be injected
-      // for git commands to prevent interactive prompts.
-
-      const shellType = deps.resolveShellType()
-      const envPrefix = buildEnvPrefix(NON_INTERACTIVE_ENV, shellType)
-      
-      // Check if the command already starts with the prefix to avoid stacking.
-      // This maintains the non-interactive behavior and makes the operation idempotent.
-      if (command.trim().startsWith(envPrefix.trim())) {
-        return
-      }
-
-      replaceToolArgs(output, { command: `${envPrefix} ${command}` })
-
-      log(`[${HOOK_NAME}] Prepended non-interactive env vars to git command`, {
-        sessionID: input.sessionID,
-        envPrefix,
-      })
     },
   }
 }
