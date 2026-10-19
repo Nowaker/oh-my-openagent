@@ -1,5 +1,6 @@
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 
 import { reportBestEffortCleanupError } from "./cleanup-errors.js";
@@ -56,10 +57,18 @@ export function validateCwd(cwd: string): { valid: boolean; error?: string } {
 	}
 }
 
-function wrap(proc: ChildProcess): SpawnedProcess {
+function wrap(proc: ChildProcess, scratch: string): SpawnedProcess {
 	const exitedPromise = new Promise<number>((resolve) => {
-		proc.once("close", (code) => resolve(code ?? 0));
-		proc.once("error", () => resolve(1));
+		let spawnFailed = false;
+		proc.once("error", () => { spawnFailed = true; });
+		proc.once("close", (code) => {
+			try {
+				rmSync(scratch, { recursive: true, force: true, maxRetries: 3 });
+			} catch (error) {
+				reportBestEffortCleanupError("server scratch removal", error);
+			}
+			resolve(spawnFailed ? 1 : (code ?? 0));
+		});
 	});
 
 	if (!proc.stdin || !proc.stdout || !proc.stderr) {
@@ -192,14 +201,25 @@ export function spawnProcess(command: string[], options: SpawnOptions): SpawnedP
 		process.env["ComSpec"] ?? "cmd.exe",
 		options.env,
 	);
-	const proc = spawn(preparedCommand.command, preparedCommand.args, {
-		cwd: options.cwd,
-		env: options.env,
-		stdio: ["pipe", "pipe", "pipe"],
-		windowsHide: true,
-		shell: preparedCommand.shell,
-		detached: process.platform !== "win32",
-	});
+	const base = process.platform === "win32"
+		? options.env["TEMP"] || options.env["TMP"] || tmpdir()
+		: options.env["TMPDIR"] || options.env["TMP"] || options.env["TEMP"] || tmpdir();
+	// Servers can leave scratch behind on SIGTERM/SIGKILL. Own it until their pipes close,
+	// rather than relying on each language server's shutdown handlers to remove it.
+	const scratch = mkdtempSync(join(base, "omo-lsp-server-"));
+	try {
+		const proc = spawn(preparedCommand.command, preparedCommand.args, {
+			cwd: options.cwd,
+			env: { ...options.env, TMPDIR: scratch, TEMP: scratch, TMP: scratch },
+			stdio: ["pipe", "pipe", "pipe"],
+			windowsHide: true,
+			shell: preparedCommand.shell,
+			detached: process.platform !== "win32",
+		});
 
-	return wrap(proc);
+		return wrap(proc, scratch);
+	} catch (error) {
+		rmSync(scratch, { recursive: true, force: true, maxRetries: 3 });
+		throw error;
+	}
 }
