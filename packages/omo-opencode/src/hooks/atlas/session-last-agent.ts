@@ -54,7 +54,7 @@ async function getLastAgentFromSessionMessages(
 
         const leftId = left.info?.id ?? left.id ?? ""
         const rightId = right.info?.id ?? right.id ?? ""
-        return rightId.localeCompare(leftId)
+        return leftId < rightId ? 1 : leftId > rightId ? -1 : 0
       })
 
       for (const message of messages) {

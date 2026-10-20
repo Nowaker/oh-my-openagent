@@ -9,6 +9,7 @@ type Message = {
 function fixture(initial: Record<string, readonly Message[]>) {
   const histories = new Map(Object.entries(initial))
   const reads: number[] = []
+  const anchors: (string | undefined)[] = []
   const client = {
     session: {
       async messages(input: { readonly path: { readonly id: string }; readonly query?: { readonly limit?: number; readonly before?: string } }) {
@@ -16,11 +17,12 @@ function fixture(initial: Record<string, readonly Message[]>) {
         const end = input.query?.before ? history.findIndex((message) => message.info.id === input.query?.before) : history.length
         const items = history.slice(0, end).slice(-(input.query?.limit ?? history.length))
         reads.push(items.length)
+        anchors.push(input.query?.before)
         return { data: items }
       },
     },
   }
-  return { histories, reads, resolve: (id: string) => getLastAgentFromSession(id, client, { isSqliteBackend: () => true }) }
+  return { histories, reads, anchors, resolve: (id: string) => getLastAgentFromSession(id, client, { isSqliteBackend: () => true }) }
 }
 
 function message(index: number, agent?: string): Message {
@@ -28,6 +30,32 @@ function message(index: number, agent?: string): Message {
 }
 
 describe("session agent bounded history", () => {
+  test("selects the binary-newest nested ID when timestamps tie", async () => {
+    // given
+    const input = fixture({ main: [
+      { info: { id: "msg_Z", agent: "Atlas", time: { created: 100 } } },
+      { info: { id: "msg_a", agent: "Hephaestus", time: { created: 100 } } },
+    ] })
+    // when
+    const agent = await input.resolve("main")
+    // then
+    expect(agent).toBe("hephaestus")
+  })
+
+  test("continues before the binary-oldest nested ID without overlapping a tied page", async () => {
+    // given
+    const input = fixture({ main: [
+      { info: { id: "msg_0", agent: "Hephaestus", time: { created: 100 } } },
+      ..."ABCDEFGHIJabcdefghij".split("").map((id) => ({ info: { id: `msg_${id}`, time: { created: 100 } } })),
+    ] })
+    // when
+    const agent = await input.resolve("main")
+    // then
+    expect(agent).toBe("hephaestus")
+    expect(input.anchors).toEqual([undefined, "msg_A"])
+    expect(input.reads.reduce((sum, count) => sum + count, 0)).toBe(21)
+  })
+
   test("reads only the newest page when a large session has a current agent", async () => {
     // given
     const input = fixture({ main: Array.from({ length: 2000 }, (_, index) => message(index, "Atlas")) })
