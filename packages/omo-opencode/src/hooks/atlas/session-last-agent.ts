@@ -22,7 +22,7 @@ const defaultSessionLastAgentDeps: SessionLastAgentDeps = {
 
 type SessionMessagesClient = {
   session: {
-    messages: (input: { path: { id: string } }) => Promise<unknown>
+    messages: (input: { path: { id: string }; query?: { limit: number; before?: string } }) => Promise<unknown>
   }
 }
 
@@ -32,42 +32,51 @@ async function getLastAgentFromSessionMessages(
   deps: SessionLastAgentDeps,
 ): Promise<string | null> {
   try {
-    const response = await client.session.messages({ path: { id: sessionID } })
-    const messages = deps.normalizeSDKResponse(response, [] as Array<{
-      id?: string
-      agent?: string
-      info?: { agent?: string; time?: { created?: number } }
-      parts?: Array<{ type?: string }>
-    }>, {
-      preferResponseOnMissingData: true,
-    }).sort((left, right) => {
-      const leftTime = (left as { info?: { time?: { created?: number } } }).info?.time?.created ?? Number.NEGATIVE_INFINITY
-      const rightTime = (right as { info?: { time?: { created?: number } } }).info?.time?.created ?? Number.NEGATIVE_INFINITY
-      if (leftTime !== rightTime) {
-        return rightTime - leftTime
-      }
+    // The sidebar resolves active agents every heartbeat; do not transfer the
+    // entire transcript just to find its newest non-compaction agent.
+    const limit = 20
+    let before: string | undefined
+    while (true) {
+      const response = await client.session.messages({ path: { id: sessionID }, query: { limit, before } })
+      const messages = deps.normalizeSDKResponse(response, [] as Array<{
+        id?: string
+        agent?: string
+        info?: { id?: string; agent?: string; time?: { created?: number } }
+        parts?: Array<{ type?: string }>
+      }>, {
+        preferResponseOnMissingData: true,
+      }).sort((left, right) => {
+        const leftTime = left.info?.time?.created ?? Number.NEGATIVE_INFINITY
+        const rightTime = right.info?.time?.created ?? Number.NEGATIVE_INFINITY
+        if (leftTime !== rightTime) {
+          return rightTime - leftTime
+        }
 
-      const leftId = typeof left.id === "string" ? left.id : ""
-      const rightId = typeof right.id === "string" ? right.id : ""
-      return rightId.localeCompare(leftId)
-    })
+        const leftId = left.info?.id ?? left.id ?? ""
+        const rightId = right.info?.id ?? right.id ?? ""
+        return leftId < rightId ? 1 : leftId > rightId ? -1 : 0
+      })
 
-    for (const message of messages) {
-      if (deps.isCompactionMessage(message)) {
-        continue
-      }
+      for (const message of messages) {
+        if (deps.isCompactionMessage(message)) {
+          continue
+        }
 
-      const agent = message.info?.agent ?? message.agent
-      if (typeof agent === "string") {
-        return agent.toLowerCase()
+        const agent = message.info?.agent ?? message.agent
+        if (typeof agent === "string") {
+          return agent.toLowerCase()
+        }
       }
+      if (messages.length < limit) return null
+      const oldest = messages.at(-1)
+      const next = oldest?.info?.id ?? oldest?.id
+      if (!next || next === before) return null
+      before = next
     }
   } catch (error) {
     if (!(error instanceof Error)) throw error
     return null
   }
-
-  return null
 }
 
 export async function getLastAgentFromSession(
