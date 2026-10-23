@@ -57,6 +57,19 @@ export function validateCwd(cwd: string): { valid: boolean; error?: string } {
 	}
 }
 
+// The child's pipes outlive every JsonRpcConnection that borrows them: a
+// connection detaches its listeners on dispose, yet a write issued before
+// dispose can still fail later (on Windows a closed pipe reports EPIPE
+// asynchronously). An 'error' event with no listener is raised as an unhandled
+// error, so each pipe keeps this guard for its whole life. It reports only when
+// no other owner is listening, so an attached connection keeps sole reporting.
+function guardPipeErrors(stream: NodeJS.EventEmitter, pipe: string): void {
+	stream.on("error", (error: Error) => {
+		if (stream.listenerCount("error") > 1) return;
+		reportBestEffortCleanupError(`server ${pipe}`, error);
+	});
+}
+
 function wrap(proc: ChildProcess, scratch: string): SpawnedProcess {
 	const exitedPromise = new Promise<number>((resolve) => {
 		let spawnFailed = false;
@@ -74,6 +87,9 @@ function wrap(proc: ChildProcess, scratch: string): SpawnedProcess {
 	if (!proc.stdin || !proc.stdout || !proc.stderr) {
 		throw new LspProcessSpawnError("Spawned process is missing one of stdin/stdout/stderr pipes");
 	}
+	guardPipeErrors(proc.stdin, "stdin");
+	guardPipeErrors(proc.stdout, "stdout");
+	guardPipeErrors(proc.stderr, "stderr");
 
 	return {
 		stdin: proc.stdin,
@@ -95,7 +111,7 @@ function wrap(proc: ChildProcess, scratch: string): SpawnedProcess {
 	};
 }
 
-function killProcessTree(proc: ChildProcess, signal: NodeJS.Signals): void {
+export function killProcessTree(proc: ChildProcess, signal: NodeJS.Signals): void {
 	if (process.platform === "win32" && proc.pid) {
 		const result = spawnSync("taskkill", ["/pid", String(proc.pid), "/f", "/t"], {
 			stdio: "ignore",
