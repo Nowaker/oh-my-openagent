@@ -417,6 +417,10 @@ Adding `run-full-ci` or `ci:full-matrix` launches `ci-full-matrix-label.yml`, wh
 | `package-labels.yml` | issues opened/edited + pull_request_target | Auto-applies package labels (`opencode` / `lazycodex` / `lazycodex-generated`) |
 | `stats.yml` | weekly cron (Sun) / dispatch | Runs `script/stats.ts` (npm + GitHub-release download counts) |
 
+## CHANGELOG FRAGMENTS
+
+Never edit `CHANGELOG.md`, the root `changes.md` or any `packages/<name>/changes.md` in a normal PR. A PR that changes a shipped path (`script/changelog-shipping-policy.mjs`) adds exactly one file, `changes/unreleased/<pr-number>.md`: the text that used to go under `## [Unreleased]` (paragraphs or `### Section` bullets), then a `<!-- changes-log: <path> -->` block (heading `## YYYY-MM-DD - <title>`) for each entry that used to be prepended to a `changes.md`. Format: `docs/reference/changelog-fragments.md`. The `changelog-gate` workflow refuses any changelog or log edit on a normal PR and any edit to an existing fragment; the `no-changelog` label waives the fragment only for a PR with no shipped paths. Only the release-state PR (branch `release/*`, opened by the release workflow as `sisyphus-dev-ai`) edits those files: `script/stamp-release-changelog.ts` writes the release section and the log blocks and deletes the fragments, and the PR may carry only the release artifacts listed in `script/changelog-gate.config.ts` (#9961, #10841). Convert an old branch with `bun script/changelog-fragments-cli.ts from-diff --base origin/dev --pr <n>`; a batch PR folds its cars' fragments into its own with `bun script/changelog-fragments-cli.ts fold-batch --base origin/dev --pr <batch>`.
+
 ## PR MERGE POLICY
 
 - **PRs into `dev` MUST use merge commits.**
@@ -450,6 +454,7 @@ Adding `run-full-ci` or `ci:full-matrix` launches `ci-full-matrix-label.yml`, wh
 - **Rules files** (auto-injected by `rules-injector` hook): scans `.omo/rules/`, `.claude/rules/`, `.cursor/rules/`, `.github/instructions/`, plus `.github/copilot-instructions.md` and `.mdc` files.
 - **Process cleanup:** Background-agent error handlers are now log-only — no force-exit on transient errors. Opt out entirely via `OMO_DISABLE_PROCESS_CLEANUP=1` env var.
 - **models.dev has two distinct consumers:** `bun run build:model-capabilities` (shared model-capabilities cache) and `packages/omo-opencode/scripts/` (OpenGateway catalog generator → tracked `opengateway-models.json`, shape-pinned by test). Do not conflate.
+- **The scheduled model-capabilities refresh overwrites hand-scoped entries today:** feature PRs add single entries to `packages/omo-opencode/src/generated/model-capabilities.generated.json` for models `models.dev` does not carry yet, but `bun run build:model-capabilities` rewrites the whole file, so a refresh PR drops them. Changing the refresh to merge is tracked in #10665; until then, check a refresh PR's removed entries before merging. See [`docs/model-capabilities-maintenance.md`](docs/model-capabilities-maintenance.md).
 - **shared-skills sub-projects:** 17 skills; `ultimate-browsing/engine` and `coding-agent-sessions` are Python sub-projects with own tests; `visual-qa` ships a zero-dep bundled CLI (`scripts/visual-qa.mjs`) - regenerate the bundle after TS fixes.
 - **First-prompt watchdog:** `packages/omo-opencode/src/hooks/runtime-fallback/first-prompt-watchdog.ts` detects subagent sessions producing no progress within 90s and triggers fallback / abort.
 - **ParentWakeNotifier:** Background-agent parent-wake state in `packages/omo-opencode/src/features/background-agent/parent-wake-notifier.ts` with dependency-injected client and enqueue callback.
