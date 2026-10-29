@@ -122,6 +122,7 @@
         "values": [
           "qwen3.6-flash",
           "qwen3.8-max-preview",
+          "claude-fable-5-5",
           "claude-fable-5",
           "claude-fable-5-1",
           "claude-haiku-4-5",
@@ -173,6 +174,7 @@
         "values": [
           "qwen3.6-flash",
           "qwen3.8-max-preview",
+          "claude-fable-5-5",
           "claude-fable-5",
           "claude-fable-5-1",
           "claude-haiku-4-5",
@@ -224,6 +226,7 @@
         "values": [
           "qwen3.6-flash",
           "qwen3.8-max-preview",
+          "claude-fable-5-5",
           "claude-fable-5",
           "claude-fable-5-1",
           "claude-haiku-4-5",
@@ -275,6 +278,7 @@
         "values": [
           "qwen3.6-flash",
           "qwen3.8-max-preview",
+          "claude-fable-5-5",
           "claude-fable-5",
           "claude-fable-5-1",
           "claude-haiku-4-5",
@@ -326,6 +330,7 @@
         "values": [
           "qwen3.6-flash",
           "qwen3.8-max-preview",
+          "claude-fable-5-5",
           "claude-fable-5",
           "claude-fable-5-1",
           "claude-haiku-4-5",
@@ -377,6 +382,7 @@
         "values": [
           "qwen3.6-flash",
           "qwen3.8-max-preview",
+          "claude-fable-5-5",
           "claude-fable-5",
           "claude-fable-5-1",
           "claude-haiku-4-5",
@@ -428,6 +434,7 @@
         "values": [
           "qwen3.6-flash",
           "qwen3.8-max-preview",
+          "claude-fable-5-5",
           "claude-fable-5",
           "claude-fable-5-1",
           "claude-haiku-4-5",
@@ -479,6 +486,7 @@
         "values": [
           "qwen3.6-flash",
           "qwen3.8-max-preview",
+          "claude-fable-5-5",
           "claude-fable-5",
           "claude-fable-5-1",
           "claude-haiku-4-5",
@@ -530,6 +538,7 @@
         "values": [
           "qwen3.6-flash",
           "qwen3.8-max-preview",
+          "claude-fable-5-5",
           "claude-fable-5",
           "claude-fable-5-1",
           "claude-haiku-4-5",
@@ -581,6 +590,7 @@
         "values": [
           "qwen3.6-flash",
           "qwen3.8-max-preview",
+          "claude-fable-5-5",
           "claude-fable-5",
           "claude-fable-5-1",
           "claude-haiku-4-5",
@@ -647,13 +657,6 @@
         "required": false,
         "posthog_name": "custom_category_count"
       },
-      "omo.machine_hash": {
-        "type": "string",
-        "pattern": "^[0-9a-f]{64}$",
-        "required": false,
-        "relay_only": true,
-        "posthog_name": "machine_hash"
-      },
       "omo.source": {
         "type": "string",
         "values": [
@@ -709,13 +712,6 @@
         ],
         "required": false,
         "posthog_name": "host_platform"
-      },
-      "omo.machine_hash": {
-        "type": "string",
-        "pattern": "^[0-9a-f]{64}$",
-        "required": false,
-        "relay_only": true,
-        "posthog_name": "machine_hash"
       },
       "omo.source": {
         "type": "string",
@@ -802,13 +798,6 @@
         "required": false,
         "posthog_name": "host_platform"
       },
-      "omo.machine_hash": {
-        "type": "string",
-        "pattern": "^[0-9a-f]{64}$",
-        "required": false,
-        "relay_only": true,
-        "posthog_name": "machine_hash"
-      },
       "session.id": {
         "type": "string",
         "pattern": "^[0-9a-f]{64}$",
@@ -847,13 +836,6 @@
         ],
         "required": false,
         "posthog_name": "host_platform"
-      },
-      "omo.machine_hash": {
-        "type": "string",
-        "pattern": "^[0-9a-f]{64}$",
-        "required": false,
-        "relay_only": true,
-        "posthog_name": "machine_hash"
       },
       "omo.permission": {
         "type": "string",
@@ -895,13 +877,6 @@
         "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
         "required": false,
         "posthog_name": "day_utc"
-      },
-      "omo.machine_hash": {
-        "type": "string",
-        "pattern": "^[0-9a-f]{64}$",
-        "required": false,
-        "relay_only": true,
-        "posthog_name": "machine_hash"
       },
       "omo.start_trigger": {
         "type": "string",
@@ -1047,18 +1022,12 @@
         "required": false,
         "posthog_name": "input_tokens"
       },
-      "omo.machine_hash": {
-        "type": "string",
-        "pattern": "^[0-9a-f]{64}$",
-        "required": false,
-        "relay_only": true,
-        "posthog_name": "machine_hash"
-      },
       "omo.model_id": {
         "type": "string",
         "values": [
           "qwen3.6-flash",
           "qwen3.8-max-preview",
+          "claude-fable-5-5",
           "claude-fable-5",
           "claude-fable-5-1",
           "claude-haiku-4-5",
@@ -1321,13 +1290,6 @@
         "required": false,
         "posthog_name": "kind"
       },
-      "omo.machine_hash": {
-        "type": "string",
-        "pattern": "^[0-9a-f]{64}$",
-        "required": false,
-        "relay_only": true,
-        "posthog_name": "machine_hash"
-      },
       "omo.name": {
         "type": "string",
         "values": [
@@ -1374,13 +1336,6 @@
         "required": false,
         "posthog_name": "feature"
       },
-      "omo.machine_hash": {
-        "type": "string",
-        "pattern": "^[0-9a-f]{64}$",
-        "required": false,
-        "relay_only": true,
-        "posthog_name": "machine_hash"
-      },
       "session.id": {
         "type": "string",
         "pattern": "^[0-9a-f]{64}$",
@@ -1419,18 +1374,12 @@
         "required": false,
         "posthog_name": "fresh_usd"
       },
-      "omo.machine_hash": {
-        "type": "string",
-        "pattern": "^[0-9a-f]{64}$",
-        "required": false,
-        "relay_only": true,
-        "posthog_name": "machine_hash"
-      },
       "omo.model_id": {
         "type": "string",
         "values": [
           "qwen3.6-flash",
           "qwen3.8-max-preview",
+          "claude-fable-5-5",
           "claude-fable-5",
           "claude-fable-5-1",
           "claude-haiku-4-5",
@@ -1601,18 +1550,12 @@
         "required": false,
         "posthog_name": "input_tokens"
       },
-      "omo.machine_hash": {
-        "type": "string",
-        "pattern": "^[0-9a-f]{64}$",
-        "required": false,
-        "relay_only": true,
-        "posthog_name": "machine_hash"
-      },
       "omo.model_top": {
         "type": "string",
         "values": [
           "qwen3.6-flash",
           "qwen3.8-max-preview",
+          "claude-fable-5-5",
           "claude-fable-5",
           "claude-fable-5-1",
           "claude-haiku-4-5",
@@ -1881,13 +1824,6 @@
         "required": false,
         "posthog_name": "incomplete_calls"
       },
-      "omo.machine_hash": {
-        "type": "string",
-        "pattern": "^[0-9a-f]{64}$",
-        "required": false,
-        "relay_only": true,
-        "posthog_name": "machine_hash"
-      },
       "omo.measured_eval_execution_duration_ms_sum": {
         "type": "number",
         "min": 0,
@@ -2016,13 +1952,6 @@
         ],
         "required": false,
         "posthog_name": "detection"
-      },
-      "omo.machine_hash": {
-        "type": "string",
-        "pattern": "^[0-9a-f]{64}$",
-        "required": false,
-        "relay_only": true,
-        "posthog_name": "machine_hash"
       },
       "omo.process_kind": {
         "type": "string",
@@ -2174,13 +2103,6 @@
         "required": false,
         "posthog_name": "keyword_variant"
       },
-      "omo.machine_hash": {
-        "type": "string",
-        "pattern": "^[0-9a-f]{64}$",
-        "required": false,
-        "relay_only": true,
-        "posthog_name": "machine_hash"
-      },
       "omo.prompt.is_real_user": {
         "type": "boolean",
         "required": false,
@@ -2269,6 +2191,7 @@
         "values": [
           "qwen3.6-flash",
           "qwen3.8-max-preview",
+          "claude-fable-5-5",
           "claude-fable-5",
           "claude-fable-5-1",
           "claude-haiku-4-5",
@@ -2349,13 +2272,6 @@
         ],
         "required": false,
         "posthog_name": "default_provider"
-      },
-      "omo.machine_hash": {
-        "type": "string",
-        "pattern": "^[0-9a-f]{64}$",
-        "required": false,
-        "relay_only": true,
-        "posthog_name": "machine_hash"
       },
       "omo.memory_bucket": {
         "type": "string",
@@ -2540,6 +2456,7 @@
         "values": [
           "qwen3.6-flash",
           "qwen3.8-max-preview",
+          "claude-fable-5-5",
           "claude-fable-5",
           "claude-fable-5-1",
           "claude-haiku-4-5",
@@ -2663,6 +2580,7 @@
         "values": [
           "qwen3.6-flash",
           "qwen3.8-max-preview",
+          "claude-fable-5-5",
           "claude-fable-5",
           "claude-fable-5-1",
           "claude-haiku-4-5",
@@ -2786,6 +2704,7 @@
         "values": [
           "qwen3.6-flash",
           "qwen3.8-max-preview",
+          "claude-fable-5-5",
           "claude-fable-5",
           "claude-fable-5-1",
           "claude-haiku-4-5",
@@ -2889,13 +2808,6 @@
         "max": 1000000000,
         "required": false,
         "posthog_name": "m3_turns"
-      },
-      "omo.machine_hash": {
-        "type": "string",
-        "pattern": "^[0-9a-f]{64}$",
-        "required": false,
-        "relay_only": true,
-        "posthog_name": "machine_hash"
       },
       "omo.model_count": {
         "type": "number",
@@ -3044,13 +2956,6 @@
         "required": true,
         "posthog_name": "event_id"
       },
-      "omo.machine_hash": {
-        "type": "string",
-        "pattern": "^[0-9a-f]{64}$",
-        "required": false,
-        "relay_only": true,
-        "posthog_name": "machine_hash"
-      },
       "omo.skill_name": {
         "type": "string",
         "values": [
@@ -3131,6 +3036,7 @@
         "values": [
           "qwen3.6-flash",
           "qwen3.8-max-preview",
+          "claude-fable-5-5",
           "claude-fable-5",
           "claude-fable-5-1",
           "claude-haiku-4-5",
@@ -3182,6 +3088,7 @@
         "values": [
           "qwen3.6-flash",
           "qwen3.8-max-preview",
+          "claude-fable-5-5",
           "claude-fable-5",
           "claude-fable-5-1",
           "claude-haiku-4-5",
@@ -3276,18 +3183,12 @@
         "max": 10000000000,
         "required": true
       },
-      "omo.machine_hash": {
-        "type": "string",
-        "pattern": "^[0-9a-f]{64}$",
-        "required": false,
-        "relay_only": true,
-        "posthog_name": "machine_hash"
-      },
       "omo.model_id": {
         "type": "string",
         "values": [
           "qwen3.6-flash",
           "qwen3.8-max-preview",
+          "claude-fable-5-5",
           "claude-fable-5",
           "claude-fable-5-1",
           "claude-haiku-4-5",
@@ -3457,6 +3358,7 @@
         "values": [
           "qwen3.6-flash",
           "qwen3.8-max-preview",
+          "claude-fable-5-5",
           "claude-fable-5",
           "claude-fable-5-1",
           "claude-haiku-4-5",
@@ -3507,6 +3409,7 @@
         "values": [
           "qwen3.6-flash",
           "qwen3.8-max-preview",
+          "claude-fable-5-5",
           "claude-fable-5",
           "claude-fable-5-1",
           "claude-haiku-4-5",
@@ -3557,6 +3460,7 @@
         "values": [
           "qwen3.6-flash",
           "qwen3.8-max-preview",
+          "claude-fable-5-5",
           "claude-fable-5",
           "claude-fable-5-1",
           "claude-haiku-4-5",
@@ -3846,5 +3750,5 @@
       }
     }
   },
-  "sha256": "5162a7d4185760b68a1cad8f73db420c32acaa00e71d21f926fb2032f2b66507"
+  "sha256": "4e94a3aee3e16c779aeed41fa5df61345c905a17bea84372cb9343cd0ead360d"
 }
