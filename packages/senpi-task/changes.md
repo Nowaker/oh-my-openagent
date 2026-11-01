@@ -1,3 +1,23 @@
+## 2026-10-30 - Rotate configured category and agent model chains (#11905)
+
+Resolve round-robin chains from their reserved starting entry, preserve tuning and availability checks, and carry the remaining ordered models into runtime fallback. Keep omitted and sequential policies unchanged.
+
+## 2026-10-29 - Confirm a host-session child's end before recording a cancel (#11783)
+
+A cancel of a daemon-hosted child this process holds no handle for is written durably, then cancelled only after `endHostSessionChild` confirms the end: a close the host answered, or the three-part proof that the generation the record names is gone (serving listing without the path, no handover-parked entry, a second listing). The pending-cancel finish and the TTL sweep no longer read "not listed on the recorded socket" as ended. A retry driver re-drives an unconfirmed cancel on the deferred backoff with explicit exits, all entrants share one in-flight pass per task, and a handle's end counts only when its port's close was answered (`HostSessionPort.close(): Promise<boolean>`).
+
+## 2026-10-25 - Record child session spawn ancestry (#11298)
+
+Thread parent, root, and task identity through child-session creation and
+respawn paths. `runners/engine-spawned-by.ts` holds the minimum engine
+(`2026.10.24-4`, senpi#4205) and compares versions field by field. The
+standalone `--spawned-by` argument follows the version of the engine actually
+launched (`resolveSenpiLaunchTarget`: the running engine for the compiled engine
+and the rpc-entry fallback, the launched package manifest for SENPI_BIN, sibling,
+PATH and Windows shim targets), and the host path drops `open_session.spawnedBy`
+unless the host's `get_protocol_info.engineVersion` meets the same minimum. An
+absent or unparseable version sends nothing.
+
 ## 2026-10-27 - Workflow category nodes keep the parent model as their last rung (#11439)
 
 A DAG run records the parent session's model at start (`DagRunRecordV1.parentModel`), and scheduler admission, node retry and crash/resume recovery pass it as `parent_model`, so `withParentModelRung` adds the same last rung a task child gets (#10750). Runs persisted before this change behave as before.

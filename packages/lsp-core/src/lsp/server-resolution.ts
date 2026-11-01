@@ -3,6 +3,7 @@ import { dirname, join, resolve } from "node:path";
 
 import { contextCwd } from "../request-context.js";
 import { getDisabledServerIds, getMergedServers, type ServerWithSource } from "./config-loader.js";
+import { withHostJsRuntime } from "./host-js-runtime.js";
 import { BUILTIN_SERVERS, LSP_INSTALL_HINTS } from "./server-definitions.js";
 import { isServerInstalled, resolveServerBinary } from "./server-installation.js";
 import type { ServerLookupResult } from "./types.js";
@@ -43,6 +44,11 @@ function isApplicable(server: ServerWithSource, workingDirectory: string): boole
 	return markers === undefined || hasProjectMarker(workingDirectory, markers);
 }
 
+function usesBuiltinCommand(id: string, command: string[]): boolean {
+	const builtin = BUILTIN_SERVERS[id]?.command;
+	return builtin !== undefined && builtin.length === command.length && builtin.every((part, index) => part === command[index]);
+}
+
 export function findServerForExtension(ext: string): ServerLookupResult {
 	const workingDirectory = contextCwd();
 	const servers = getMergedServers().filter((server) => isApplicable(server, workingDirectory));
@@ -53,7 +59,9 @@ export function findServerForExtension(ext: string): ServerLookupResult {
 		if (binaryPath !== null) {
 			const resolvedServer = {
 				id: server.id,
-				command: withResolvedCommand(server.command, binaryPath),
+				command: usesBuiltinCommand(server.id, server.command)
+					? withHostJsRuntime(server.id, withResolvedCommand(server.command, binaryPath))
+					: withResolvedCommand(server.command, binaryPath),
 				extensions: server.extensions,
 				priority: server.priority,
 			};
