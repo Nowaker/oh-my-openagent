@@ -28555,6 +28555,10 @@
               "type": "number",
               "minimum": 60000
             },
+            "recoverySweepMinAgeMs": {
+              "type": "number",
+              "minimum": 3600000
+            },
             "maxToolCalls": {
               "type": "integer",
               "minimum": 10,
