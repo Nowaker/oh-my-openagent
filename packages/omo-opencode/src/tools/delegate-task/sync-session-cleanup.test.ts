@@ -1,8 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test"
 import { TASK_CLEANUP_DELAY_MS } from "../../features/background-agent/constants"
 import { handedBackSyncSessions } from "../../features/claude-code-session-state"
-import { cancelSyncSessionDeletion, scheduleSyncSessionDeletion } from "./sync-session-cleanup"
-import type { OpencodeClient } from "./types"
+import { cancelSyncSessionCleanup, scheduleSyncSessionCleanup } from "./sync-session-cleanup"
 
 type RecordedTimer = {
   handle: ReturnType<typeof setTimeout>
@@ -52,12 +51,6 @@ function installFakeTimers(): FakeTimers {
   }
 }
 
-function createClient(): { client: OpencodeClient; deleteMock: ReturnType<typeof mock> } {
-  const deleteMock = mock(async (_input: { path: { id: string } }) => ({}))
-  const client = { session: { delete: deleteMock } } as unknown as OpencodeClient
-  return { client, deleteMock }
-}
-
 const SESSION_IDS = ["ses_sscd_a", "ses_sscd_b", "ses_sscd_c", "ses_sscd_d"] as const
 
 describe("sync-session-cleanup", () => {
@@ -69,20 +62,20 @@ describe("sync-session-cleanup", () => {
   })
 
   afterEach(() => {
-    //#given - cancel any still-pending deletion so no timer leaks into the next test file
+    //#given - cancel any still-pending cleanup so no timer leaks into the next test file
     for (const id of SESSION_IDS) {
-      cancelSyncSessionDeletion(id)
+      cancelSyncSessionCleanup(id)
     }
     handedBackSyncSessions.clear()
     fakeTimers.restore()
   })
 
-  test("schedules the deletion with the provided delay", () => {
-    //#given - a client whose session.delete resolves
-    const { client, deleteMock } = createClient()
+  test("releases runtime state with the provided delay", async () => {
+    //#given
+    const retired = Promise.withResolvers<string>()
 
-    //#when - the deletion is scheduled with an explicit delay
-    scheduleSyncSessionDeletion(client, "ses_sscd_a", 120000)
+    //#when
+    scheduleSyncSessionCleanup("ses_sscd_a", 120000, (id) => { retired.resolve(id) })
 
     //#then - exactly one fake timer is recorded carrying that delay
     expect(fakeTimers.timers).toHaveLength(1)
@@ -91,17 +84,13 @@ describe("sync-session-cleanup", () => {
     //#when - the recorded callback fires
     fakeTimers.timers[0]?.callback()
 
-    //#then - session.delete is called once for that session id
-    expect(deleteMock).toHaveBeenCalledTimes(1)
-    expect(deleteMock).toHaveBeenCalledWith({ path: { id: "ses_sscd_a" } })
+    //#then
+    expect(await retired.promise).toBe("ses_sscd_a")
   })
 
   test("falls back to TASK_CLEANUP_DELAY_MS when the delay argument is undefined", () => {
-    //#given - a client whose session.delete resolves
-    const { client } = createClient()
-
-    //#when - the deletion is scheduled without an explicit delay
-    scheduleSyncSessionDeletion(client, "ses_sscd_b", undefined)
+    //#when - cleanup is scheduled without an explicit delay
+    scheduleSyncSessionCleanup("ses_sscd_b", undefined)
 
     //#then - the recorded delay is the module fallback
     expect(fakeTimers.timers).toHaveLength(1)
@@ -111,34 +100,37 @@ describe("sync-session-cleanup", () => {
     expect(TASK_CLEANUP_DELAY_MS).toBe(600000)
   })
 
-  test("cancelSyncSessionDeletion clears the pending timer and prevents the deletion", () => {
-    //#given - a scheduled deletion
-    const { client, deleteMock } = createClient()
-    scheduleSyncSessionDeletion(client, "ses_sscd_c", 120000)
+  test("cancelSyncSessionCleanup clears the pending timer and preserves active runtime", () => {
+    //#given
+    const retire = mock(() => {})
+    handedBackSyncSessions.add("ses_sscd_c")
+    scheduleSyncSessionCleanup("ses_sscd_c", 120000, retire)
     const scheduledHandle = fakeTimers.timers[0]?.handle
 
-    //#when - the deletion is cancelled for that same session id
-    cancelSyncSessionDeletion("ses_sscd_c")
+    //#when
+    cancelSyncSessionCleanup("ses_sscd_c")
 
     //#then - the exact recorded timer handle was cleared, so the callback can never fire
     expect(fakeTimers.clearedHandles).toContain(scheduledHandle)
 
-    //#then - the deletion callback never ran and session.delete was never called
-    expect(deleteMock).not.toHaveBeenCalled()
+    //#then
+    expect(retire).not.toHaveBeenCalled()
+    expect(handedBackSyncSessions.has("ses_sscd_c")).toBe(true)
   })
 
-  test("removes the session id from handedBackSyncSessions after the deletion resolves", async () => {
-    //#given - a handed-back session with a scheduled deletion
-    const { client } = createClient()
+  test("expires handback before asynchronous runtime teardown completes", async () => {
+    //#given
+    const teardown = Promise.withResolvers<void>()
+    const entered = Promise.withResolvers<void>()
     handedBackSyncSessions.add("ses_sscd_d")
-    scheduleSyncSessionDeletion(client, "ses_sscd_d", 120000)
+    scheduleSyncSessionCleanup("ses_sscd_d", 120000, async () => { entered.resolve(); await teardown.promise })
 
-    //#when - the recorded callback fires and the async delete resolves
+    //#when
     fakeTimers.timers[0]?.callback()
-    await Promise.resolve()
-    await Promise.resolve()
+    await entered.promise
 
     //#then - the session is no longer marked as handed back
     expect(handedBackSyncSessions.has("ses_sscd_d")).toBe(false)
+    teardown.resolve()
   })
 })

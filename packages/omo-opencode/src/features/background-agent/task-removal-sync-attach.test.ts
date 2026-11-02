@@ -4,8 +4,6 @@ import type { PluginInput } from "@opencode-ai/plugin"
 import { TASK_CLEANUP_DELAY_MS } from "./constants"
 import { BackgroundManager } from "./manager"
 import type { BackgroundTask } from "./types"
-import { handedBackSyncSessions } from "../claude-code-session-state"
-import { cancelSyncSessionCleanup, scheduleSyncSessionCleanup } from "../../tools/delegate-task/sync-session-cleanup"
 import { getSessionModel, setSessionModel } from "../../shared/session-model-state"
 import { getSessionPromptParams, setSessionPromptParams } from "../../shared/session-prompt-params-state"
 import { getSessionTools, setSessionTools } from "../../shared/session-tools-store"
@@ -14,7 +12,6 @@ import { releaseDelegatedSessionRuntime } from "../../shared/delegated-session-r
 type FakeTimers = {
   getDelay: (timer: ReturnType<typeof setTimeout>) => number | undefined
   run: (timer: ReturnType<typeof setTimeout>) => Promise<void>
-  pending: () => ReturnType<typeof setTimeout>[]
   restore: () => void
 }
 
@@ -99,7 +96,6 @@ function installFakeTimers(): FakeTimers {
   }) as typeof clearTimeout
 
   return {
-    pending: () => [...callbacks.keys()],
     getDelay(timer) {
       return delays.get(timer)
     },
@@ -254,33 +250,4 @@ describe("BackgroundManager.scheduleTaskRemoval with an attached sync continuati
       expect(deleteCalls).toEqual([])
     })
   })
-})
-
-describe("sync handback grace cleanup", () => {
-  for (const resume of [false, true]) {
-    test(`#given a handed-back sync session #when grace expires${resume ? " after resuming" : ""} #then only its handback marker is released`, async () => {
-      const sessionID = `ses_handback_${resume}`
-      fakeTimers = installFakeTimers()
-      handedBackSyncSessions.add(sessionID)
-      try {
-        scheduleSyncSessionCleanup(sessionID)
-        if (resume) {
-          cancelSyncSessionCleanup(sessionID)
-          expect(fakeTimers.pending()).toHaveLength(0)
-          scheduleSyncSessionCleanup(sessionID)
-        }
-        const timers = fakeTimers.pending()
-        expect(timers).toHaveLength(1)
-        expect(handedBackSyncSessions.has(sessionID)).toBe(true)
-
-        for (const timer of timers) await fakeTimers.run(timer)
-
-        expect(handedBackSyncSessions.has(sessionID)).toBe(false)
-        expect(fakeTimers.pending()).toHaveLength(0)
-      } finally {
-        cancelSyncSessionCleanup(sessionID)
-        handedBackSyncSessions.delete(sessionID)
-      }
-    })
-  }
 })
