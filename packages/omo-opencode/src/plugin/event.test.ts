@@ -46,6 +46,7 @@ function createEventHandlerManagers(
 	overrides: Record<string, unknown> = {},
 ): EventHandlerArgs["managers"] {
 	return cast<EventHandlerArgs["managers"]>({
+		backgroundManager: { setSessionRuntimeRetirementHandler() {} },
 		tmuxSessionManager: {
 			onEvent: () => {},
 			onSessionCreated: async () => {},
@@ -1273,6 +1274,7 @@ describe("createEventHandler - event forwarding", () => {
 				clear: () => {},
 			},
 			managers: {
+				backgroundManager: { setSessionRuntimeRetirementHandler() {} },
 				skillMcpManager: {
 					disconnectSession: async (sessionID: string) => {
 						disconnectedSessions.push(sessionID)
@@ -1357,6 +1359,7 @@ describe("createEventHandler - event forwarding", () => {
 				clear: () => {},
 			},
 			managers: {
+				backgroundManager: { setSessionRuntimeRetirementHandler() {} },
 				skillMcpManager: {
 					disconnectSession: async () => {},
 				},

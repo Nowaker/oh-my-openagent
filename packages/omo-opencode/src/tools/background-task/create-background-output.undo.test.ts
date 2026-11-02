@@ -68,6 +68,7 @@ function createMockEventHandler() {
       clear: () => {},
     },
     managers: {
+      backgroundManager: { setSessionRuntimeRetirementHandler() {} },
       skillMcpManager: {
         disconnectSession: async () => {},
       },

@@ -79,6 +79,7 @@ describe("createEventHandler - model fallback", () => {
         clear: () => {},
       },
       managers: unsafeTestValue({
+        backgroundManager: { setSessionRuntimeRetirementHandler() {} },
         tmuxSessionManager: {
           onSessionCreated: async () => {},
           onSessionDeleted: async () => {},
@@ -1144,6 +1145,7 @@ describe("createEventHandler - model fallback", () => {
         clear: () => {},
       },
       managers: unsafeTestValue({
+        backgroundManager: { setSessionRuntimeRetirementHandler() {} },
         tmuxSessionManager: {
           onSessionCreated: async () => {},
           onSessionDeleted: async () => {},

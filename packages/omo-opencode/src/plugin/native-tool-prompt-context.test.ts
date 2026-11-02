@@ -34,6 +34,7 @@ function createHarness(sessionRead: "ok" | "throw" | "malformed" = "ok") {
     pluginConfig: {},
     hooks: {},
     managers: {
+      backgroundManager: { setSessionRuntimeRetirementHandler() {} },
       configHandler: async (config: Record<string, unknown>) => {
         config.agent = {
           sisyphus: createSisyphusAgent("anthropic/claude-opus-5-5"),
@@ -98,6 +99,7 @@ test("a registered Sisyphus follows a runtime model switch after the config hook
     pluginConfig: {},
     hooks: {},
     managers: {
+      backgroundManager: { setSessionRuntimeRetirementHandler() {} },
       configHandler: async (config: Record<string, unknown>) => {
         const sisyphus = createSisyphusAgent(configured)
         setSisyphusRuntimePromptContext({

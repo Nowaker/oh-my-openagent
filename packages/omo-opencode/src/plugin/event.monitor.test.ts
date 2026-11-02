@@ -20,6 +20,7 @@ function asEventHandlerInput(input: EventInput): EventHandlerInput {
 
 function createEventHandlerManagers(overrides: Record<string, unknown> = {}): EventHandlerArgs["managers"] {
 	return cast<EventHandlerArgs["managers"]>({
+		backgroundManager: { setSessionRuntimeRetirementHandler() {} },
 		skillMcpManager: {
 			disconnectSession: async () => {},
 		},
