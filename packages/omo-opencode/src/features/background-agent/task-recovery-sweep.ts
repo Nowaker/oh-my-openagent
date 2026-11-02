@@ -2,7 +2,6 @@ import { createHash } from "node:crypto"
 import { readdir, readFile, stat, unlink, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { z } from "zod"
-import type { OpencodeClient } from "./constants"
 import { TaskOwnerSchema, TaskRecoveryError, type TaskRecoveryStore } from "./task-recovery-store"
 import { probeTaskOwner } from "./task-worker-ownership"
 
@@ -41,7 +40,7 @@ export type SweepRemoval = "abandoned-lock" | "abandoned-temp" | "invalid-record
 export interface TaskRecoverySweepInput {
   readonly store: TaskRecoveryStore
   readonly minAgeMs: number
-  readonly childPresence: (sessionId: string, cwd: string) => Promise<ChildPresence>
+  readonly childPresence: (sessionId: string) => Promise<ChildPresence>
   readonly budget?: number
   readonly intervalMs?: number
   readonly now?: () => number
@@ -60,17 +59,6 @@ type Verdict = { readonly reason: SweepRemoval; readonly sessionId?: string; rea
 
 function isMissing(error: unknown): boolean {
   return error instanceof Error && "code" in error && error.code === "ENOENT"
-}
-
-export async function probeChildPresence(client: OpencodeClient, sessionId: string, cwd: string): Promise<ChildPresence> {
-  try {
-    const response = await client.session.get({ path: { id: sessionId }, query: { directory: cwd } })
-    if (response.data) return "exists"
-    return response.response?.status === 404 ? "missing" : "unknown"
-  } catch (error) {
-    if (!(error instanceof Error)) throw error
-    return "unknown"
-  }
 }
 
 async function generationOf(file: string): Promise<string | undefined> {
@@ -102,7 +90,7 @@ async function judge(input: TaskRecoverySweepInput, file: string, hash: string, 
     return { reason: "invalid-record" }
   }
   if (await (input.probeOwner ?? probeTaskOwner)(record.data) !== "dead") return undefined
-  if (await input.childPresence(record.data.sessionId, record.data.cwd) !== "missing") return undefined
+  if (await input.childPresence(record.data.sessionId) !== "missing") return undefined
   return { reason: "child-gone", sessionId: record.data.sessionId, generation: record.data.generation }
 }
 
