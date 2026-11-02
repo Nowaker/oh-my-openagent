@@ -7,8 +7,9 @@ import { log } from "../../shared/logger"
 import type { OpencodeClient } from "./constants"
 import type { BackgroundTask } from "./types"
 import { TaskRecoveryError, TaskRecoveryStore, type TaskRecoveryRecord } from "./task-recovery-store"
+import { openChildSessionPresence } from "./child-session-presence"
 import {
-  DEFAULT_RECOVERY_SWEEP_MIN_AGE_MS, probeChildPresence, RECOVERY_SWEEP_BUDGET, RECOVERY_SWEEP_INTERVAL_MS,
+  DEFAULT_RECOVERY_SWEEP_MIN_AGE_MS, RECOVERY_SWEEP_BUDGET, RECOVERY_SWEEP_INTERVAL_MS,
   RECOVERY_SWEEP_START_DELAY_MS, sweepTaskRecoveryRecords,
 } from "./task-recovery-sweep"
 import { probeTaskOwner, TaskWorkerOwnership } from "./task-worker-ownership"
@@ -49,13 +50,14 @@ export class TaskRecovery {
   }
 
   private async sweep(): Promise<void> {
+    const sessions = await openChildSessionPresence()
     try {
       const result = await sweepTaskRecoveryRecords({
         store: this.store,
         minAgeMs: this.config?.recoverySweepMinAgeMs ?? DEFAULT_RECOVERY_SWEEP_MIN_AGE_MS,
         intervalMs: RECOVERY_SWEEP_INTERVAL_MS,
         budget: RECOVERY_SWEEP_BUDGET,
-        childPresence: (sessionId, cwd) => probeChildPresence(this.client, sessionId, cwd),
+        childPresence: async (sessionId) => sessions?.lookup(sessionId) ?? "unknown",
         shouldContinue: () => !this.closed,
       })
       if (result.removed.length > 0) {
@@ -65,6 +67,7 @@ export class TaskRecovery {
       if (!(error instanceof Error)) throw error
       log("[background-agent] Task recovery sweep failed:", { error: error.message })
     } finally {
+      sessions?.close()
       this.scheduleSweep(RECOVERY_SWEEP_INTERVAL_MS)
     }
   }

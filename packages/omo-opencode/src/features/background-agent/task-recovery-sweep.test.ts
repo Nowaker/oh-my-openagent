@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { existsSync, mkdirSync, utimesSync, writeFileSync } from "node:fs"
+import { Database } from "bun:sqlite"
+import { existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
+import { join } from "node:path"
 import type { PluginInput } from "@opencode-ai/plugin"
-import type { OpencodeClient } from "./constants"
+import { openChildSessionPresence } from "./child-session-presence"
 import { BackgroundManager } from "./manager"
 import { TaskRecoveryStore, type TaskOwner } from "./task-recovery-store"
-import { probeChildPresence, sweepTaskRecoveryRecords, type ChildPresence } from "./task-recovery-sweep"
+import { sweepTaskRecoveryRecords, type ChildPresence } from "./task-recovery-sweep"
 import { TaskWorkerOwnership } from "./task-worker-ownership"
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -150,18 +152,24 @@ describe("task recovery sweep", () => {
     expect(second.skipped).toBe(true)
   })
 
-  test("#given opencode session lookups #when classifying child presence #then only a 404 counts as missing", async () => {
+  test("#given opencode's session database #when looking up children #then only an absent row counts as missing", async () => {
     // given
-    const reply = (status: number, data?: object) => ({ session: { get: async () => ({ data, error: data ? undefined : {}, response: { status } }) } })
+    const dbDir = mkdtempSync(join(tmpdir(), "omo-session-db-"))
+    const dbPath = join(dbDir, "opencode.db")
+    const db = new Database(dbPath)
+    db.run("CREATE TABLE session (id TEXT PRIMARY KEY)")
+    db.run("INSERT INTO session (id) VALUES ('kept-child')")
+    db.close()
 
     // when
-    const results = await Promise.all([
-      probeChildPresence(reply(200, { id: "child" }) as unknown as OpencodeClient, "child", tmpdir()),
-      probeChildPresence(reply(404) as unknown as OpencodeClient, "child", tmpdir()),
-      probeChildPresence(reply(500) as unknown as OpencodeClient, "child", tmpdir()),
-    ])
+    const sessions = await openChildSessionPresence(dbPath)
+    const results = [sessions?.lookup("kept-child"), sessions?.lookup("deleted-child")]
+    sessions?.close()
+    rmSync(dbDir, { recursive: true, force: true })
+    const withoutDatabase = await openChildSessionPresence(join(tmpdir(), `absent-${crypto.randomUUID()}.db`))
 
     // then
-    expect(results).toEqual(["exists", "missing", "unknown"])
+    expect(results).toEqual(["exists", "missing"])
+    expect(withoutDatabase).toBeUndefined()
   })
 })
