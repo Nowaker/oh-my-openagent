@@ -304,9 +304,21 @@ export class BackgroundManager {
 
   async retireSessionRuntime(sessionID: string): Promise<void> {
     if (this.shutdownTriggered) return
+    if (this.resumingSessions.has(sessionID) || this.syncAttachedSessions.has(sessionID)) return
+    const task = this.findBySession(sessionID)
+    if (task?.status === "running" || task?.status === "pending") return
+    this.taskRecovery.releaseRuntimeOwnership(sessionID)
     releaseDelegatedSessionRuntime(sessionID)
     this.modelFallbackControllerAccessor?.clearSessionFallbackChain(sessionID)
     await this.sessionRuntimeRetirementHandler?.(sessionID)
+  }
+
+  async prepareSyncContinuation(sessionID: string) {
+    const tracked = this.findBySession(sessionID)
+    if (tracked?.status === "running" || tracked?.status === "pending") {
+      throw new TaskRecoveryError(sessionID, "child is still active")
+    }
+    return this.taskRecovery.configurationForSync(sessionID)
   }
 
   constructor(config: BackgroundManagerConfig) {

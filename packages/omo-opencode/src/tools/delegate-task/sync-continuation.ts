@@ -134,11 +134,15 @@ export async function executeSyncContinuation(
   let anchorMessageCount: number | undefined
   let anchorMessageID: string | undefined
   let handedBackToParent = false
+  let retirementAllowed = true
 
   try {
     const resumeContext = await resolveResumeContext(client, continuationID)
     const resumeStore = new SyncResumeStore()
-    const saved = resumeStore.read(continuationID)
+    const syncSaved = resumeStore.read(continuationID)
+    retirementAllowed = syncSaved !== undefined
+    const saved = syncSaved ?? await executorCtx.manager?.prepareSyncContinuation?.(continuationID)
+    retirementAllowed = true
     resumeAgent = resumeContext.resumeAgent ?? saved?.agent
     resumeModel = resumeContext.resumeModel ?? getSessionModel(continuationID) ?? saved?.model
     const sameSavedModel = resumeModel?.providerID === saved?.model?.providerID && resumeModel?.modelID === saved?.model?.modelID
@@ -152,7 +156,10 @@ export async function executeSyncContinuation(
     }
     if (resumeAgent) {
       updateSessionAgent(continuationID, resumeAgent)
-      resumeStore.write({ version: 1, sessionId: continuationID, agent: resumeAgent, model: modelConfig ? { ...modelConfig, variant: resumeVariant } : undefined, tools })
+      // Background children must pass their manager's ownership check on every resume.
+      if (syncSaved || !saved) {
+        resumeStore.write({ version: 1, sessionId: continuationID, agent: resumeAgent, model: modelConfig ? { ...modelConfig, variant: resumeVariant } : undefined, tools })
+      }
     }
     if (resumeModel) setSessionModel(continuationID, resumeModel)
     setSessionTools(continuationID, tools)
@@ -206,7 +213,7 @@ export async function executeSyncContinuation(
      }
      const errorMessage = promptError instanceof Error ? promptError.message : String(promptError)
      detachFromManager?.()
-     scheduleSyncSessionCleanup(continuationID, taskCleanupDelayMs, retireSessionRuntime)
+     if (retirementAllowed) scheduleSyncSessionCleanup(continuationID, taskCleanupDelayMs, retireSessionRuntime)
      return `Failed to send continuation prompt: ${errorMessage}\n\nTask ID: ${continuationID}`
    }
 
