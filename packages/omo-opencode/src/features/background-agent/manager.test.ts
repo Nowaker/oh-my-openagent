@@ -3295,10 +3295,13 @@ describe("BackgroundManager restart recovery", () => {
       expect(getSessionPromptParams(sessionId)).toMatchObject({ temperature: 0.27, options: { reasoningEffort: "high" } })
   })
 
-  test("recovers a retired child through its still-live original owner", async () => {
+  test.each([false, true])("recovers a retired child through its still-live original owner with tracked=%s", async (tracked) => {
     const { first, launched, model, sessionId, calls, continued } = await launchRecoveryChild()
-    await tryCompleteTaskForTest(first, launched)
-    getTaskMap(first).delete(launched.id)
+    const activeTask = getTaskMap(first).get(launched.id)
+    if (!activeTask) throw new Error("launched recovery task is missing")
+    await tryCompleteTaskForTest(first, activeTask)
+    if (!tracked) getTaskMap(first).delete(launched.id)
+    else getTaskMap(first).set("sibling-running", { ...launched, id: "sibling-running", sessionId: "sibling-session", status: "running" })
     await first.retireSessionRuntime(sessionId)
     const recovery = cast<{ taskRecovery: TaskRecovery }>(first).taskRecovery
     const generations = cast<{ generations: Map<string, string> }>(recovery).generations

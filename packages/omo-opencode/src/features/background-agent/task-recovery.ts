@@ -84,6 +84,8 @@ export class TaskRecovery {
 
   generation(sessionId: string): string | undefined { return this.generations.get(sessionId) }
 
+  hasRecord(sessionId: string): boolean { return this.store.read(sessionId) !== undefined }
+
   releaseRuntimeOwnership(sessionId: string): void { this.generations.delete(sessionId) }
 
   async configurationForSync(sessionId: string): Promise<Pick<TaskRecoveryRecord, "agent" | "model" | "tools"> | undefined> {

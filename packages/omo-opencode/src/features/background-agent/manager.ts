@@ -1391,14 +1391,23 @@ The fallback retry session is now created and can be inspected directly.
     this.resumingSessions.add(input.sessionId)
     try {
       const tracked = this.findBySession(input.sessionId)
+      const retired = tracked && TERMINAL_BACKGROUND_TASK_STATUSES.has(tracked.status)
+        && !this.taskRecovery.generation(input.sessionId) && this.taskRecovery.hasRecord(input.sessionId)
+      const recovered = !tracked || Boolean(retired)
       const existingTask = tracked ?? await this.taskRecovery.recover(input.sessionId)
+      if (retired) {
+        const restored = await this.taskRecovery.recover(input.sessionId)
+        existingTask.agent = restored.agent
+        existingTask.model = restored.model
+        existingTask.sessionPermission = restored.sessionPermission
+      }
       if (!this.taskRecovery.owns(input.sessionId)) throw new TaskRecoveryError(input.sessionId, "ownership changed")
       if (!tracked) {
         this.addTask(existingTask)
         subagentSessions.add(input.sessionId)
         setSessionAgent(input.sessionId, existingTask.agent)
       }
-      return await this.resumeOwnedTask(existingTask, input, !tracked)
+      return await this.resumeOwnedTask(existingTask, input, recovered)
     } finally {
       this.resumingSessions.delete(input.sessionId)
     }
