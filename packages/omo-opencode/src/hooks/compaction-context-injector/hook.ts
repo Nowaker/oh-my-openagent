@@ -170,5 +170,10 @@ export function createCompactionContextInjector(options?: {
     }
   }
 
-  return { capture, restore, inject, event }
+  return {
+    capture, restore, inject, event,
+    releaseSession: (sessionID: string): void => {
+      tailStates.delete(sessionID)
+    },
+  }
 }

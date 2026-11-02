@@ -27,6 +27,38 @@ describe("agent-usage-reminder hook", () => {
     return createAgentUsageReminderHook(unsafeTestValue<PluginInput>({}));
   }
 
+  test("release reloads persisted reminder state without resetting a sibling", async () => {
+    // given
+    const hook = createHook();
+    const sessionID = "agent-usage-retired";
+    const siblingID = "agent-usage-sibling";
+    type PersistedState = NonNullable<ReturnType<typeof storage.loadAgentUsageState>>;
+    const persisted = new Map<string, PersistedState>();
+    loadStateSpy.mockImplementation((id: string) => persisted.get(id) ?? null);
+    saveStateSpy.mockImplementation((state: PersistedState) => {
+      persisted.set(state.sessionID, { ...state });
+    });
+    await hook["tool.execute.after"]({ tool: "task", sessionID, callID: "1" }, { title: "", output: "", metadata: {} });
+    await hook["tool.execute.after"]({ tool: "task", sessionID: siblingID, callID: "2" }, { title: "", output: "", metadata: {} });
+    const persistedBefore = persisted.get(sessionID);
+    loadStateSpy.mockClear();
+
+    // when
+    hook.releaseSession(sessionID);
+    hook.releaseSession(sessionID);
+    const targetOutput = { title: "", output: "target", metadata: {} };
+    const siblingOutput = { title: "", output: "sibling", metadata: {} };
+    await hook["tool.execute.after"]({ tool: "grep", sessionID, callID: "3" }, targetOutput);
+    await hook["tool.execute.after"]({ tool: "grep", sessionID: siblingID, callID: "4" }, siblingOutput);
+
+    // then
+    expect(loadStateSpy.mock.calls).toEqual([[sessionID]]);
+    expect(clearStateSpy).not.toHaveBeenCalled();
+    expect(persisted.get(sessionID)).toEqual(persistedBefore);
+    expect(targetOutput.output).toBe("target");
+    expect(siblingOutput.output).toBe("sibling");
+  });
+
   test("caps reminders and does not re-arm after session.compacted", async () => {
     // given - an orchestrator session has already hit the reminder cap
     const hook = createHook();

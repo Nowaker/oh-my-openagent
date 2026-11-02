@@ -121,6 +121,9 @@ export function createAgentUsageReminderHook(_ctx: PluginInput) {
   };
 
   return {
+    releaseSession: (sessionID: string): void => {
+      sessionStates.delete(sessionID);
+    },
     "tool.execute.after": toolExecuteAfter,
     event: eventHandler,
   };

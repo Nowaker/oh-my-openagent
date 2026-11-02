@@ -15,12 +15,14 @@ export function createClaudeCodeHooksHook(
   config: PluginConfig = {},
   contextCollector?: ContextCollector
 ) {
+  const event = createSessionEventHandler(ctx, config, contextCollector)
   return {
+    releaseSession: event.releaseSession,
     "experimental.session.compacting": createPreCompactHandler(ctx, config),
     "chat.message": createChatMessageHandler(ctx, config, contextCollector),
     "tool.execute.before": createToolExecuteBeforeHandler(ctx, config),
     "tool.execute.after": createToolExecuteAfterHandler(ctx, config),
-    event: createSessionEventHandler(ctx, config, contextCollector),
+    event,
     dispose: (): void => {
       disposeSessionEventHandler(contextCollector)
     },

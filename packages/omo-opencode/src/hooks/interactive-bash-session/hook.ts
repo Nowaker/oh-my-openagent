@@ -116,6 +116,12 @@ export function createInteractiveBashSessionHook(ctx: PluginInput) {
   };
 
   return {
+    releaseSession: async (sessionID: string): Promise<void> => {
+      const state = sessionStates.get(sessionID);
+      if (!state) return;
+      sessionStates.delete(sessionID);
+      await killAllTrackedSessions(state);
+    },
     "tool.execute.after": toolExecuteAfter,
     event: eventHandler,
   };

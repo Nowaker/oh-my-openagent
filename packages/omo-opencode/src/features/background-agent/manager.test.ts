@@ -3294,6 +3294,23 @@ describe("BackgroundManager restart recovery", () => {
       expect(getSessionPromptParams(sessionId)).toMatchObject({ temperature: 0.27, options: { reasoningEffort: "high" } })
   })
 
+  test("recovers a retired child through its still-live original owner", async () => {
+    const { first, launched, model, sessionId, calls, continued } = await launchRecoveryChild()
+    await tryCompleteTaskForTest(first, launched)
+    getTaskMap(first).delete(launched.id)
+    await first.retireSessionRuntime(sessionId)
+    releaseAllPromptAsyncReservationsForTesting()
+
+    const resumed = await first.resume({ sessionId, prompt: "continue", parentSessionId: "parent-new", parentMessageId: "msg-new" })
+    await continued.promise
+
+    expect(resumed.id).toBe(launched.id)
+    expect(resumed.model).toEqual(model)
+    expect(calls).toHaveLength(2)
+    expect(calls[1]?.body.tools).toMatchObject({ webfetch: false, task: false, question: false })
+    expect(getSessionPromptParams(sessionId)).toMatchObject({ temperature: 0.27 })
+  })
+
   test("does not prompt or abort a child still owned by another live worker", async () => {
     const { second, sessionId, calls, aborts } = await launchRecoveryChild()
     const before = aborts()

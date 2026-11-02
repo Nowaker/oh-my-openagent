@@ -480,7 +480,7 @@ Control parallel agent execution and concurrency limits. `background_task` (came
 | `messageStalenessTimeoutMs` | `3600000` | Timeout when no progress update was ever received (min: 60000)        |
 | `taskTtlMs`                 | `1800000` | Absolute non-terminal task TTL (min: 300000)                          |
 | `sessionGoneTimeoutMs`      | `60000`   | Timeout when a task session disappears (min: 10000)                   |
-| `taskCleanupDelayMs`        | `600000`  | Delay before terminal tasks and completed sync subagent sessions are removed (min: 60000) |
+| `taskCleanupDelayMs`        | `600000`  | Delay before terminal task and sync-child runtime state leaves memory; session history is retained (min: 60000) |
 | `syncPollTimeoutMs`         | -         | Synchronous polling timeout in milliseconds (min: 60000)             |
 | `recoverySweepMinAgeMs`     | `86400000` | Age before the hourly sweep examines a background-owners recovery file; it removes only records whose owner is dead and child session is gone (min: 3600000) |
 | `maxToolCalls`              | `4000`    | Maximum tool calls per subagent task (min: 10)                        |

@@ -12,6 +12,7 @@ export function clearThinkModeState(sessionID: string): void {
 
 export function createThinkModeHook() {
   return {
+    releaseSession: clearThinkModeState,
     "chat.message": async (
       input: {
         sessionID: string

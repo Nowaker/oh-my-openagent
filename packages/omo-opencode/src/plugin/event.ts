@@ -68,6 +68,14 @@ export function createEventHandler(args: {
     isSessionStopped: (sessionID) => hooks.stopContinuationGuard?.isStopped(sessionID) ?? false,
   });
 
+  managers.backgroundManager.setSessionRuntimeRetirementHandler?.(async (sessionID) => {
+    modelFallbackHandler.clearSession(sessionID);
+    recentSyntheticIdles.delete(sessionID);
+    recentRealIdles.delete(sessionID);
+    recentAnyIdles.delete(sessionID);
+    await hooks.releaseSessionRuntime?.(sessionID);
+  });
+
   const shouldDispatchIdleEvent = (sessionID: string, now: number): boolean => {
     const lastDispatchedAt = recentAnyIdles.get(sessionID);
     if (lastDispatchedAt !== undefined && now - lastDispatchedAt < dedupWindowMs) return false;

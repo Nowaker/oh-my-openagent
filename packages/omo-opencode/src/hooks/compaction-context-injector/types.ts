@@ -1,4 +1,5 @@
 export interface CompactionContextInjector {
+  releaseSession: (sessionID: string) => void
   capture: (sessionID: string) => Promise<void>
   restore: (sessionID: string) => Promise<boolean>
   inject: (sessionID?: string) => string

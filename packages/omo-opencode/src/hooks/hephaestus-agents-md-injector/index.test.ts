@@ -116,4 +116,30 @@ describe("hephaestus agents md injector hook", () => {
     expect(firstOutput.parts[0]?.text).toContain("Inject me once.")
     expect(secondOutput.parts[0]?.text).toBe("Second")
   })
+
+  test("release evicts the retired session without resetting sibling injection", async () => {
+    // given
+    temporaryDirectory = mkdtempSync(join(tmpdir(), "hephaestus-release-"))
+    writeFileSync(join(temporaryDirectory, "AGENTS.md"), "session context")
+    const hook = createHephaestusAgentsMdInjectorHook(unsafeTestValue({
+      directory: temporaryDirectory,
+      client: { session: { messages: async () => [] } },
+    }))
+    const input = { sessionID: "hephaestus-retired", agent: HEPHAESTUS_DISPLAY }
+    const siblingInput = { sessionID: "hephaestus-sibling", agent: HEPHAESTUS_DISPLAY }
+    await hook["chat.message"](input, createOutput())
+    await hook["chat.message"](siblingInput, createOutput())
+
+    // when
+    hook.releaseSession(input.sessionID)
+    hook.releaseSession(input.sessionID)
+    const resumed = createOutput("resume")
+    const sibling = createOutput("sibling")
+    await hook["chat.message"](input, resumed)
+    await hook["chat.message"](siblingInput, sibling)
+
+    // then
+    expect(resumed.parts[0]?.text).toContain(`[Directory Context: ${realpathSync(join(temporaryDirectory, "AGENTS.md"))}]`)
+    expect(sibling.parts[0]?.text).toBe("sibling")
+  })
 })

@@ -13,6 +13,7 @@ import { isPlanFamily } from "./constants"
 import { formatDetailedError } from "./error-formatting"
 import { buildTaskPrompt } from "./prompt-builder"
 import type { DelegatedModelConfig, DelegateTaskArgs, OpencodeClient } from "./types"
+import { SyncResumeStore } from "./sync-resume-store"
 
 type SendSyncPromptDeps = {
   promptWithModelSuggestionRetry: typeof promptWithModelSuggestionRetry
@@ -22,7 +23,7 @@ const sendSyncPromptDeps: SendSyncPromptDeps = {
   promptWithModelSuggestionRetry,
 }
 
-function buildPromptGenerationParams(model: DelegatedModelConfig | undefined): Record<string, unknown> {
+export function buildPromptGenerationParams(model: DelegatedModelConfig | undefined): Record<string, unknown> {
   if (!model) {
     return {}
   }
@@ -64,8 +65,8 @@ export function buildSyncPromptTools(
     task: isPlanFamily(agentToUse),
     call_omo_agent: true,
     question: false,
-    ...userDenied,
     ...getAgentToolRestrictions(agentToUse),
+    ...userDenied,
   }
 }
 
@@ -121,6 +122,13 @@ export async function sendSyncPrompt(
   }
 
   try {
+    new SyncResumeStore().write({
+      version: 1,
+      sessionId: input.sessionID,
+      agent: stripInvisibleAgentCharacters(input.agentToUse),
+      model: input.categoryModel,
+      tools,
+    })
     await deps.promptWithModelSuggestionRetry(client, routePromptRetry(promptArgs, input.directory), {
       queueBehavior: "defer",
       checkStatus: false,

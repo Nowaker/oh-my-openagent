@@ -128,6 +128,8 @@ When running inside tmux:
 - Each pane shows agent output live
 - Auto-cleanup when agents complete
 
+Task completion, cancellation, and synchronous continuation cleanup release runtime tracking and panes without deleting the child OpenCode session or its messages. Retained children remain readable and resumable with their session IDs after the cleanup grace period; explicit session deletion still removes them.
+
 When running inside cmux (`cmux omo-agent-toolkit`), the same pane integration is routed through cmux's tmux compatibility command. OMO detects the cmux environment from `CMUX_SOCKET_PATH` or a cmux-provided `TMUX` value, so `tmux.enabled` can create cmux panes even when a real `tmux` binary is not installed.
 
 Customize agent models, prompts, and permissions in the `[opencode]` block of `~/.omo/omo.jsonc`.

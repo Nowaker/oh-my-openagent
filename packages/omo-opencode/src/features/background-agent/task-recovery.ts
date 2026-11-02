@@ -122,7 +122,8 @@ export class TaskRecovery {
     return this.store.locked(sessionId, async () => {
       const record = this.store.read(sessionId)
       if (!record) throw new TaskRecoveryError(sessionId, "no provable native owner metadata (legacy or unrelated child)")
-      if (await probeTaskOwner(record) !== "dead") throw new TaskRecoveryError(sessionId, "owner is live or its liveness is unknown")
+      const ownedHere = this.generations.get(sessionId) === record.generation
+      if (!ownedHere && await probeTaskOwner(record) !== "dead") throw new TaskRecoveryError(sessionId, "owner is live or its liveness is unknown")
       const response = await this.client.session.get({ path: { id: sessionId }, query: { directory: record.cwd } })
       const session = RecoverableSessionSchema.safeParse(response.data)
       if (response.error || !session.success || session.data.id !== sessionId || session.data.parentID !== record.parentSessionId

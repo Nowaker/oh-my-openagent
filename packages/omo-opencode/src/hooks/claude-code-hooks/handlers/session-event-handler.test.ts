@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
+import type { PluginInput } from "@opencode-ai/plugin"
+import { unsafeTestValue } from "../../../../../../test-support/unsafe-test-value"
 
 import { ContextCollector } from "../../../features/context-injector"
 import { cacheToolInput, getToolInput, stopToolInputCacheCleanup } from "../tool-input-cache"
@@ -24,6 +26,40 @@ describe("createSessionEventHandler", () => {
   afterEach(() => {
     clearAllSessionHookState()
     stopTranscriptCacheCleanup()
+  })
+
+  test("release evicts parent and hook flags only for the retired session", async () => {
+    // given
+    const fetched: string[] = []
+    const collector = new ContextCollector()
+    const handler = createSessionEventHandler(unsafeTestValue<PluginInput>({
+      directory: "/test",
+      client: { session: { get: async ({ path }: { path: { id: string } }) => {
+        fetched.push(path.id)
+        return { data: { parentID: "parent" } }
+      } } },
+    }), { disabledHooks: true }, collector)
+    for (const sessionID of ["claude-retired", "claude-sibling"]) {
+      await handler({ event: { type: "session.idle", properties: { sessionID } } })
+      sessionFirstMessageProcessed.add(sessionID)
+      setStopHookActive(sessionID, true)
+      collector.register(sessionID, { id: "hook-context", source: "custom", content: sessionID })
+    }
+
+    // when
+    handler.releaseSession("claude-retired")
+    handler.releaseSession("claude-retired")
+
+    // then
+    expect(sessionFirstMessageProcessed.has("claude-retired")).toBe(false)
+    expect(sessionFirstMessageProcessed.has("claude-sibling")).toBe(true)
+    expect(getStopHookActive("claude-retired")).toBe(false)
+    expect(getStopHookActive("claude-sibling")).toBe(true)
+    expect(collector.hasPending("claude-retired")).toBe(false)
+    expect(collector.hasPending("claude-sibling")).toBe(true)
+    await handler({ event: { type: "session.idle", properties: { sessionID: "claude-retired" } } })
+    await handler({ event: { type: "session.idle", properties: { sessionID: "claude-sibling" } } })
+    expect(fetched).toEqual(["claude-retired", "claude-sibling", "claude-retired"])
   })
 
   test("#given deleted session with retained caches #when session deleted arrives #then per-session resources are cleared", async () => {

@@ -41,7 +41,7 @@ export function createRulesInjectorHook(
 	options?: { skipClaudeUserRules?: boolean },
 ) {
 	const truncator = createDynamicTruncator(ctx, modelCacheState);
-	const { getSessionCache, clearSessionCache } = createSessionCacheStore();
+	const { getSessionCache, clearSessionCache, releaseSession } = createSessionCacheStore();
 	const { getSessionRuleScanCache, clearSessionRuleScanCache } =
 		createSessionRuleScanCacheStore();
 	const transcriptHydration = createTranscriptHydrationStore({
@@ -108,6 +108,11 @@ export function createRulesInjectorHook(
 	};
 
 	return {
+		releaseSession: (sessionID: string): void => {
+			releaseSession(sessionID);
+			clearSessionRuleScanCache(sessionID);
+			transcriptHydration.clearSession(sessionID);
+		},
 		"tool.execute.before": toolExecuteBefore,
 		"tool.execute.after": toolExecuteAfter,
 		event: eventHandler,

@@ -93,6 +93,27 @@ afterEach(() => {
 })
 
 describe("category-skill-reminder hook", () => {
+  test("release removes only the retired session's pending reminder", async () => {
+    // given
+    const hook = createHook()
+    const sessionID = "category-retired"
+    const siblingID = "category-sibling"
+    await useTools({ hook, sessionID, agent: "sisyphus", tools: ["read", "grep", "glob"] })
+    await useTools({ hook, sessionID: siblingID, agent: "sisyphus", tools: ["read", "grep", "glob"] })
+    const retiredTurn = createUserTurn(sessionID, "retired")
+    const siblingTurn = createUserTurn(siblingID, "sibling")
+
+    // when
+    hook.releaseSession(sessionID)
+    hook.releaseSession(sessionID)
+    await transformMessages(hook, [retiredTurn])
+    await transformMessages(hook, [siblingTurn])
+
+    // then
+    expect(findReminderParts([retiredTurn])).toHaveLength(0)
+    expect(findReminderParts([siblingTurn])).toHaveLength(1)
+  })
+
   test.each(["Sisyphus", "Atlas", "sisyphus-junior"])(
     "#given target agent %s #when three delegatable tools finish #then one reminder is injected before the user text",
     async (agent) => {

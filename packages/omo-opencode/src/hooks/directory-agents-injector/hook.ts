@@ -23,6 +23,7 @@ interface ToolExecuteOutput {
 }
 
 interface DirectoryAgentsInjectorHook {
+  releaseSession: (sessionID: string) => void;
   "tool.execute.before"?: (input: ToolExecuteInput, output: { args: unknown }) => Promise<void>;
   "tool.execute.after": (input: ToolExecuteInput, output: ToolExecuteOutput) => Promise<void>;
   event: (input: EventInput) => Promise<void>;
@@ -82,6 +83,9 @@ export function createDirectoryAgentsInjectorHook(
   };
 
   return {
+    releaseSession: (sessionID: string): void => {
+      sessionCaches.delete(sessionID);
+    },
     "tool.execute.after": toolExecuteAfter,
     event: eventHandler,
   };
