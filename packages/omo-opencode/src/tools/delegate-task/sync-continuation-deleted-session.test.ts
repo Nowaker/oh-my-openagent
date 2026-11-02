@@ -2,7 +2,7 @@ import { afterEach, describe, expect, mock, test } from "bun:test"
 import { unsafeTestValue } from "../../../../../test-support/unsafe-test-value"
 import { executeSyncContinuation } from "./sync-continuation"
 import type { SyncContinuationDeps } from "./sync-continuation-deps"
-import { cancelSyncSessionDeletion } from "./sync-session-cleanup"
+import { cancelSyncSessionCleanup } from "./sync-session-cleanup"
 import type { ExecutorContext } from "./executor-types"
 import type { OpencodeClient, ToolContextWithMetadata } from "./types"
 
@@ -42,8 +42,8 @@ function createExecutorContext(client: OpencodeClient, attachSyncContinuation = 
 
 describe("executeSyncContinuation for a deleted session", () => {
   afterEach(() => {
-    cancelSyncSessionDeletion("ses_deleted_child")
-    cancelSyncSessionDeletion("ses_live_child")
+    cancelSyncSessionCleanup("ses_deleted_child")
+    cancelSyncSessionCleanup("ses_live_child")
   })
 
   test("#given the child session was deleted #when it is continued #then it fails fast without prompting or polling", async () => {

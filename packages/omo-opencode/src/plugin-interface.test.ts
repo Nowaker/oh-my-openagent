@@ -18,6 +18,11 @@ import {
   updateSessionAgent,
 } from "./features/claude-code-session-state"
 
+function createManagersForInterfaceTest() {
+  return unsafeTestValue<Parameters<typeof createPluginInterface>[0]["managers"]>({
+    backgroundManager: { setSessionRuntimeRetirementHandler() {} },
+  })
+}
 
 describe("createPluginInterface - command.execute.before", () => {
   let testDir = ""
@@ -51,7 +56,7 @@ describe("createPluginInterface - command.execute.before", () => {
         markSessionCreated: () => {},
         clear: () => {},
       },
-      managers: {} as never,
+      managers: createManagersForInterfaceTest(),
       hooks: {
         autoSlashCommand: createAutoSlashCommandHook({ skills: [] }),
         ulwExecute: createUlwExecuteHook({
@@ -98,7 +103,7 @@ describe("createPluginInterface - command.execute.before", () => {
         markSessionCreated: () => {},
         clear: () => {},
       },
-      managers: {} as never,
+      managers: createManagersForInterfaceTest(),
       hooks: {
         autoSlashCommand: createAutoSlashCommandHook({ skills: [] }),
         ulwExecute: createUlwExecuteHook({
@@ -143,7 +148,7 @@ describe("createPluginInterface - command.execute.before", () => {
         markSessionCreated: () => {},
         clear: () => {},
       },
-      managers: {} as never,
+      managers: createManagersForInterfaceTest(),
       hooks: {
         autoSlashCommand: createAutoSlashCommandHook({ skills: [] }),
         ulwExecute: createUlwExecuteHook({
@@ -204,7 +209,7 @@ describe("createPluginInterface - goal native command smoke", () => {
         markSessionCreated: () => {},
         clear: () => {},
       },
-      managers: {} as never,
+      managers: createManagersForInterfaceTest(),
       hooks: {
         autoSlashCommand: createAutoSlashCommandHook({ skills: [] }),
         goal: {
@@ -269,7 +274,7 @@ describe("createPluginInterface - post-compaction ULW restoration", () => {
         markSessionCreated: () => {},
         clear: () => {},
       },
-      managers: {} as never,
+      managers: createManagersForInterfaceTest(),
       hooks: { keywordDetector } as never,
       tools: {},
     })
@@ -344,7 +349,7 @@ describe("createPluginInterface - backward compatibility", () => {
         markSessionCreated: () => {},
         clear: () => {},
       },
-      managers: {} as never,
+      managers: createManagersForInterfaceTest(),
       hooks: {} as never,
       tools: {},
     })
@@ -383,7 +388,7 @@ describe("createPluginInterface - chat.params variant injection", () => {
         markSessionCreated: () => {},
         clear: () => {},
       },
-      managers: {} as never,
+      managers: createManagersForInterfaceTest(),
       hooks: {} as never,
       tools: {},
     })
@@ -418,7 +423,7 @@ describe("createPluginInterface - chat.params variant injection", () => {
         markSessionCreated: () => {},
         clear: () => {},
       },
-      managers: {} as never,
+      managers: createManagersForInterfaceTest(),
       hooks: {} as never,
       tools: {},
     })

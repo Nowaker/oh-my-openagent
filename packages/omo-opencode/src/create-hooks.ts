@@ -96,6 +96,18 @@ export function createHooks(args: {
 
   return {
     ...hooks,
+    releaseSessionRuntime: async (sessionID: string): Promise<void> => {
+      hooks.thinkMode?.releaseSession(sessionID)
+      hooks.compactionContextInjector?.releaseSession(sessionID)
+      hooks.directoryAgentsInjector?.releaseSession(sessionID)
+      hooks.directoryReadmeInjector?.releaseSession(sessionID)
+      hooks.rulesInjector?.releaseSession(sessionID)
+      hooks.claudeCodeHooks?.releaseSession(sessionID)
+      hooks.agentUsageReminder?.releaseSession(sessionID)
+      hooks.categorySkillReminder?.releaseSession(sessionID)
+      hooks.hephaestusAgentsMdInjector?.releaseSession(sessionID)
+      await hooks.interactiveBashSession?.releaseSession(sessionID)
+    },
     disposeHooks: (): void => {
       disposeCreatedHooks(hooks)
     },

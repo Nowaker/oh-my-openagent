@@ -183,6 +183,9 @@ export function createCategorySkillReminderHook(
   }
 
   return {
+    releaseSession: (sessionID: string): void => {
+      sessionStates.delete(sessionID)
+    },
     "tool.execute.after": toolExecuteAfter,
     "experimental.chat.messages.transform": messagesTransform,
     event: eventHandler,

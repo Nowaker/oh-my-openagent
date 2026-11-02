@@ -107,6 +107,9 @@ export function createHephaestusAgentsMdInjectorHook(
   }
 
   return {
+    releaseSession: (sessionID: string): void => {
+      injectedSessions.delete(sessionID)
+    },
     "chat.message": chatMessage,
     event: eventHandler,
   }

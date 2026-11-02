@@ -1,4 +1,7 @@
 const { describe, test, expect, beforeEach, afterEach, mock, spyOn } = require("bun:test")
+const { mkdtempSync, rmSync } = require("node:fs")
+const { join } = require("node:path")
+const { getDataDir } = require("../../shared/data-path")
 
 const TEAM_TOOL_DENIALS = {
   team_create: false,
@@ -21,8 +24,13 @@ describe("executeSyncContinuation - toast cleanup error paths", () => {
   let removeTaskCalls: string[] = []
   let addTaskCalls: AddTaskArg[] = []
   let resetToastManager: (() => void) | null = null
+  let dataHome: string
+  let originalDataHome: string | undefined
 
   beforeEach(() => {
+    originalDataHome = process.env.XDG_DATA_HOME
+    dataHome = mkdtempSync(join(getDataDir(), "sync-continuation-test-"))
+    process.env.XDG_DATA_HOME = dataHome
     //#given - configure fast timing for all tests
     const { __setTimingConfig } = require("./timing")
     __setTimingConfig({
@@ -54,6 +62,9 @@ describe("executeSyncContinuation - toast cleanup error paths", () => {
   })
 
   afterEach(() => {
+    if (originalDataHome === undefined) delete process.env.XDG_DATA_HOME
+    else process.env.XDG_DATA_HOME = originalDataHome
+    rmSync(dataHome, { recursive: true, force: true })
     //#given - reset timing after each test
     const { __resetTimingConfig } = require("./timing")
     __resetTimingConfig()

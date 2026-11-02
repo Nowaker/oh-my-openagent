@@ -3,7 +3,7 @@ import { getTaskToastManager } from "../../features/task-toast-manager"
 import type { ModelFallbackInfo } from "../../features/task-toast-manager/types"
 import type { FallbackEntry } from "../../shared/model-requirements"
 import { log } from "../../shared/logger"
-import { scheduleSyncSessionDeletion } from "./sync-session-cleanup"
+import { scheduleSyncSessionCleanup } from "./sync-session-cleanup"
 import { formatDetailedError } from "./error-formatting"
 import type { ExecutorContext, ParentContext } from "./executor-types"
 import { reserveSyncSubagentSpawn } from "./sync-spawn-reservation"
@@ -181,7 +181,7 @@ export async function executeSyncTask(
           log(`[task] Failed to abort completed sync session:`, error)
         })
       }
-      scheduleSyncSessionDeletion(client, syncSessionID, taskCleanupDelayMs)
+      scheduleSyncSessionCleanup(syncSessionID, taskCleanupDelayMs, manager?.retireSessionRuntime?.bind(manager))
     }
     if (concurrencyAcquired && typeof manager?.releaseSyncSubagentConcurrency === "function") {
       manager.releaseSyncSubagentConcurrency(concurrencyModel)

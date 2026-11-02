@@ -1,10 +1,9 @@
 import type { DelegateTaskArgs, ToolContextWithMetadata } from "./types"
 import type { ExecutorContext, ParentContext, SessionMessage } from "./executor-types"
-import { getDeliverableTag, isPlanFamily } from "./constants"
-import { handedBackSyncSessions } from "../../features/claude-code-session-state"
+import { getDeliverableTag } from "./constants"
+import { handedBackSyncSessions, updateSessionAgent } from "../../features/claude-code-session-state"
 import { publishToolMetadata } from "../../features/tool-metadata-store"
 import { getTaskToastManager } from "../../features/task-toast-manager"
-import { getAgentToolRestrictions } from "../../shared/agent-tool-restrictions"
 import { getMessageDir, normalizeSDKResponse } from "../../shared"
 import { promptWithModelSuggestionRetry } from "../../shared/model-suggestion-retry"
 import { resolveMessageContext } from "../../features/hook-message-injector"
@@ -16,8 +15,12 @@ import { buildTaskMetadataBlock } from "../../features/tool-metadata-store/task-
 import { getTaskID } from "./task-id"
 import { resolveMetadataModel } from "./resolve-metadata-model"
 import { log } from "../../shared/logger"
-import { cancelSyncSessionDeletion, scheduleSyncSessionDeletion } from "./sync-session-cleanup"
 import { formatDeletedSyncSessionError, isSyncSessionDeleted } from "./sync-session-existence"
+import { cancelSyncSessionCleanup, scheduleSyncSessionCleanup } from "./sync-session-cleanup"
+import { getSessionModel, setSessionModel } from "../../shared/session-model-state"
+import { applySessionPromptParams } from "../../shared/session-prompt-params-helpers"
+import { buildPromptGenerationParams, buildSyncPromptTools } from "./sync-prompt-sender"
+import { SyncResumeStore } from "./sync-resume-store"
 
 type ResumeModel = { providerID: string; modelID: string }
 
@@ -63,22 +66,19 @@ async function resolveResumeContext(
     const messagesResp = await client.session.messages({ path: { id: continuationID } })
     const messages = normalizeSDKResponse(messagesResp, [] as SessionMessage[])
 
+    const context: ResumeContext = { anchorMessageCount: messages.length, anchorMessageID: messages.at(-1)?.info?.id }
     for (let index = messages.length - 1; index >= 0; index--) {
       const info = messages[index].info
-      if (info?.agent || info?.model || (info?.modelID && info?.providerID)) {
-        return {
-          resumeAgent: info.agent,
-          resumeModel: info.model ?? (info.providerID && info.modelID
-            ? { providerID: info.providerID, modelID: info.modelID }
-            : undefined),
-          resumeVariant: info.variant,
-          anchorMessageCount: messages.length,
-          anchorMessageID: messages.at(-1)?.info?.id,
-        }
+      context.resumeAgent ??= info?.agent
+      if (!context.resumeModel) {
+        context.resumeModel = info?.model ?? (info?.providerID && info.modelID
+          ? { providerID: info.providerID, modelID: info.modelID }
+          : undefined)
+        if (context.resumeModel) context.resumeVariant = info?.variant ?? info?.model?.variant
       }
+      if (context.resumeAgent && context.resumeModel) break
     }
-
-    return { anchorMessageCount: messages.length, anchorMessageID: messages.at(-1)?.info?.id }
+    return context
   } catch (error) {
     if (!(error instanceof Error)) throw error
     const resumeMessageDir = getMessageDir(continuationID)
@@ -113,7 +113,8 @@ export async function executeSyncContinuation(
     log("[task] Refusing to continue deleted sync session", { sessionID: continuationID })
     return formatDeletedSyncSessionError(continuationID)
   }
-  cancelSyncSessionDeletion(continuationID)
+  cancelSyncSessionCleanup(continuationID)
+  const retireSessionRuntime = executorCtx.manager?.retireSessionRuntime?.bind(executorCtx.manager)
   const detachFromManager = executorCtx.manager?.attachSyncContinuation?.(continuationID)
   const taskId = `resume_sync_${continuationID.slice(0, 8)}`
   const startTime = new Date()
@@ -133,12 +134,35 @@ export async function executeSyncContinuation(
   let anchorMessageCount: number | undefined
   let anchorMessageID: string | undefined
   let handedBackToParent = false
+  let retirementAllowed = true
 
   try {
     const resumeContext = await resolveResumeContext(client, continuationID)
-    resumeAgent = resumeContext.resumeAgent
-    resumeModel = resumeContext.resumeModel
-    resumeVariant = resumeContext.resumeVariant
+    const resumeStore = new SyncResumeStore()
+    const syncSaved = resumeStore.read(continuationID)
+    retirementAllowed = syncSaved !== undefined
+    const saved = syncSaved ?? await executorCtx.manager?.prepareSyncContinuation?.(continuationID)
+    retirementAllowed = true
+    resumeAgent = resumeContext.resumeAgent ?? saved?.agent
+    resumeModel = resumeContext.resumeModel ?? getSessionModel(continuationID) ?? saved?.model
+    const sameSavedModel = resumeModel?.providerID === saved?.model?.providerID && resumeModel?.modelID === saved?.model?.modelID
+    const modelConfig = resumeModel ? { ...saved?.model, ...resumeModel, variant: sameSavedModel ? saved?.model?.variant : undefined } : undefined
+    const lowered = applySessionPromptParams(continuationID, modelConfig)
+    resumeVariant = resumeContext.resumeVariant ?? (modelConfig?.reasoning !== undefined ? lowered.variant : modelConfig?.variant)
+    const promptModel = modelConfig?.reasoning !== undefined ? { ...modelConfig, reasoningEffort: lowered.reasoningEffort } : modelConfig
+    const tools = { ...saved?.tools, ...buildSyncPromptTools(resumeAgent ?? "continue") }
+    for (const [tool, allowed] of Object.entries(saved?.tools ?? {})) {
+      if (!allowed) tools[tool] = false
+    }
+    if (resumeAgent) {
+      updateSessionAgent(continuationID, resumeAgent)
+      // Background children must pass their manager's ownership check on every resume.
+      if (syncSaved || !saved) {
+        resumeStore.write({ version: 1, sessionId: continuationID, agent: resumeAgent, model: modelConfig ? { ...modelConfig, variant: resumeVariant } : undefined, tools })
+      }
+    }
+    if (resumeModel) setSessionModel(continuationID, resumeModel)
+    setSessionTools(continuationID, tools)
     anchorMessageCount = resumeContext.anchorMessageCount
     anchorMessageID = resumeContext.anchorMessageID
 
@@ -165,16 +189,8 @@ export async function executeSyncContinuation(
     }
     await publishToolMetadata(ctx, syncContMeta)
 
-    const allowTask = isPlanFamily(resumeAgent)
     const tddEnabled = sisyphusAgentConfig?.tdd
     const effectivePrompt = buildTaskPrompt(args.prompt, resumeAgent, tddEnabled)
-    const tools = {
-      task: allowTask,
-      call_omo_agent: true,
-      question: false,
-      ...(resumeAgent ? getAgentToolRestrictions(resumeAgent) : {}),
-    }
-    setSessionTools(continuationID, tools)
 
     await promptWithModelSuggestionRetry(client, {
       path: { id: continuationID },
@@ -182,6 +198,7 @@ export async function executeSyncContinuation(
         ...(resumeAgent !== undefined ? { agent: resumeAgent } : {}),
         ...(resumeModel !== undefined ? { model: resumeModel } : {}),
         ...(resumeVariant !== undefined ? { variant: resumeVariant } : {}),
+        ...buildPromptGenerationParams(promptModel),
         system: systemContent,
         tools,
         parts: [{ type: "text", text: effectivePrompt }],
@@ -196,7 +213,7 @@ export async function executeSyncContinuation(
      }
      const errorMessage = promptError instanceof Error ? promptError.message : String(promptError)
      detachFromManager?.()
-     scheduleSyncSessionDeletion(client, continuationID, taskCleanupDelayMs)
+     if (retirementAllowed) scheduleSyncSessionCleanup(continuationID, taskCleanupDelayMs, retireSessionRuntime)
      return `Failed to send continuation prompt: ${errorMessage}\n\nTask ID: ${continuationID}`
    }
 
@@ -277,6 +294,6 @@ ${buildTaskMetadataBlock({
      // Every terminal continuation path must restore the cleanup grace timer,
      // including prompt/poll failures after revival cancelled the old timer.
      detachFromManager?.()
-     scheduleSyncSessionDeletion(client, continuationID, taskCleanupDelayMs)
+     scheduleSyncSessionCleanup(continuationID, taskCleanupDelayMs, retireSessionRuntime)
    }
 }

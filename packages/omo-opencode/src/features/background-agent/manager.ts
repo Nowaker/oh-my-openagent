@@ -31,6 +31,7 @@ import {
 import { SessionCategoryRegistry } from "../../shared/session-category-registry"
 import { applySessionPromptParams } from "../../shared/session-prompt-params-helpers"
 import { setSessionTools } from "../../shared/session-tools-store"
+import { releaseDelegatedSessionRuntime } from "../../shared/delegated-session-runtime"
 import { clearSessionAgent, setSessionAgent, subagentSessions, updateSessionAgent } from "../claude-code-session-state"
 import { MESSAGE_STORAGE } from "../hook-message-injector"
 import { getTaskToastManager } from "../task-toast-manager"
@@ -269,6 +270,7 @@ export class BackgroundManager {
   private onSubagentSessionCreated?: OnSubagentSessionCreated
   private onSubagentSessionDeleted?: OnSubagentSessionDeleted
   private onShutdown?: () => void | Promise<void>
+  private sessionRuntimeRetirementHandler?: (sessionID: string) => Promise<void>
 
   private queuesByKey: Map<string, QueueItem[]> = new Map()
   private processingKeys: Set<string> = new Set()
@@ -295,6 +297,29 @@ export class BackgroundManager {
   private readonly scheduledFlushSettledWaiters = new Map<string, Array<() => void>>()
   private readonly taskRecovery: TaskRecovery
   private readonly resumingSessions = new Set<string>()
+
+  setSessionRuntimeRetirementHandler(handler: (sessionID: string) => Promise<void>): void {
+    this.sessionRuntimeRetirementHandler = handler
+  }
+
+  async retireSessionRuntime(sessionID: string): Promise<void> {
+    if (this.shutdownTriggered) return
+    if (this.resumingSessions.has(sessionID) || this.syncAttachedSessions.has(sessionID)) return
+    const task = this.findBySession(sessionID)
+    if (task?.status === "running" || task?.status === "pending") return
+    this.taskRecovery.releaseRuntimeOwnership(sessionID)
+    releaseDelegatedSessionRuntime(sessionID)
+    this.modelFallbackControllerAccessor?.clearSessionFallbackChain(sessionID)
+    await this.sessionRuntimeRetirementHandler?.(sessionID)
+  }
+
+  async prepareSyncContinuation(sessionID: string) {
+    const tracked = this.findBySession(sessionID)
+    if (tracked?.status === "running" || tracked?.status === "pending") {
+      throw new TaskRecoveryError(sessionID, "child is still active")
+    }
+    return this.taskRecovery.configurationForSync(sessionID)
+  }
 
   constructor(config: BackgroundManagerConfig) {
     const { pluginContext, ...options } = config
@@ -1366,14 +1391,23 @@ The fallback retry session is now created and can be inspected directly.
     this.resumingSessions.add(input.sessionId)
     try {
       const tracked = this.findBySession(input.sessionId)
+      const retired = tracked && TERMINAL_BACKGROUND_TASK_STATUSES.has(tracked.status)
+        && !this.taskRecovery.generation(input.sessionId) && this.taskRecovery.hasRecord(input.sessionId)
+      const recovered = !tracked || Boolean(retired)
       const existingTask = tracked ?? await this.taskRecovery.recover(input.sessionId)
+      if (retired) {
+        const restored = await this.taskRecovery.recover(input.sessionId)
+        existingTask.agent = restored.agent
+        existingTask.model = restored.model
+        existingTask.sessionPermission = restored.sessionPermission
+      }
       if (!this.taskRecovery.owns(input.sessionId)) throw new TaskRecoveryError(input.sessionId, "ownership changed")
       if (!tracked) {
         this.addTask(existingTask)
         subagentSessions.add(input.sessionId)
         setSessionAgent(input.sessionId, existingTask.agent)
       }
-      return await this.resumeOwnedTask(existingTask, input, !tracked)
+      return await this.resumeOwnedTask(existingTask, input, recovered)
     } finally {
       this.resumingSessions.delete(input.sessionId)
     }
@@ -1569,7 +1603,7 @@ The fallback retry session is now created and can be inspected directly.
           ...(resumeModel ? { model: resumeModel } : {}),
           ...(resumeVariant ? { variant: resumeVariant } : {}),
           tools: (() => {
-            const tools = {
+            const tools: Record<string, boolean> = {
               ...resumeTools,
               task: false,
               call_omo_agent: true,
@@ -1577,6 +1611,9 @@ The fallback retry session is now created and can be inspected directly.
               ...getAgentToolRestrictions(existingTask.agent, {
                 includeTeamToolDenylist: existingTask.teamRunId === undefined,
               }),
+            }
+            for (const [name, allowed] of Object.entries(resumeTools)) {
+              if (!allowed) tools[name] = false
             }
             setSessionTools(existingTask.sessionId!, tools)
             return tools
@@ -2516,7 +2553,7 @@ The task was re-queued on a fallback model after a retryable failure.
       this.completionTimers.delete(taskId)
     }
 
-    const timer = setTimeout(async () => {
+    const timer = setTimeout(() => {
       this.completionTimers.delete(taskId)
       const task = this.tasks.get(taskId)
       if (!task) return
@@ -2544,12 +2581,9 @@ The task was re-queued on a fallback model after a retryable failure.
         subagentSessions.delete(task.sessionId)
         clearDelegatedChildSessionBootstrap(task.sessionId)
         SessionCategoryRegistry.remove(task.sessionId)
-        const deleteSession = this.client.session.delete?.bind(this.client.session)
-        if (typeof deleteSession === "function") {
-          await deleteSession({ path: { id: task.sessionId } }).catch((error: unknown) => {
-            log("[background-agent] Failed to delete completed subagent session:", { sessionID: task.sessionId, error: String(error) })
-          })
-        }
+        void this.retireSessionRuntime(task.sessionId).catch((error: unknown) => {
+          log("[background-agent] Failed to retire subagent runtime:", { sessionID: task.sessionId, error: String(error) })
+        })
       }
       log("[background-agent] Removed completed task from memory:", taskId)
     }, this.config?.taskCleanupDelayMs ?? TASK_CLEANUP_DELAY_MS)
@@ -3333,6 +3367,7 @@ The task was re-queued on a fallback model after a retryable failure.
   async shutdown(): Promise<void> {
     if (this.shutdownTriggered) return
     this.shutdownTriggered = true
+    this.sessionRuntimeRetirementHandler = undefined
     log("[background-agent] Shutting down BackgroundManager")
     this.stopPolling()
     const trackedSessionIDs = new Set<string>()

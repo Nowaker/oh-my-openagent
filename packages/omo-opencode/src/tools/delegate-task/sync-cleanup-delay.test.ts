@@ -4,7 +4,7 @@ import { handedBackSyncSessions } from "../../features/claude-code-session-state
 import { unsafeTestValue } from "../../../../../test-support/unsafe-test-value"
 import { executeSyncContinuation } from "./sync-continuation"
 import type { SyncContinuationDeps } from "./sync-continuation-deps"
-import { cancelSyncSessionDeletion, scheduleSyncSessionDeletion } from "./sync-session-cleanup"
+import { cancelSyncSessionCleanup, scheduleSyncSessionCleanup } from "./sync-session-cleanup"
 import { executeSyncTask } from "./sync-task"
 import type { SyncTaskDeps } from "./sync-task-deps"
 import type { ExecutorContext } from "./executor-types"
@@ -89,14 +89,14 @@ describe("sync cleanup delay threading", () => {
   })
 
   afterEach(() => {
-    for (const id of SESSION_IDS) cancelSyncSessionDeletion(id)
+    for (const id of SESSION_IDS) cancelSyncSessionCleanup(id)
     for (const timer of recordedTimers) clearTimeout(timer.handle)
     clearTimerSpy.mockRestore()
     timerSpy.mockRestore()
     handedBackSyncSessions.clear()
   })
 
-  test("#when a sync task completes with a configured delay #then its deletion uses that delay", async () => {
+  test("#when a sync task completes with a configured delay #then runtime cleanup uses that delay without deleting history", async () => {
     const sessionID = SESSION_IDS[0]
     const { client, deleteSession } = createClient()
 
@@ -109,10 +109,11 @@ describe("sync cleanup delay threading", () => {
     const deletionTimer = pendingTimers().slice(-1)[0]
     expect(deletionTimer?.delay).toBe(120000)
     deletionTimer?.callback()
-    expect(deleteSession).toHaveBeenCalledWith({ path: { id: sessionID } })
+    expect(handedBackSyncSessions.has(sessionID)).toBe(false)
+    expect(deleteSession).not.toHaveBeenCalled()
   })
 
-  test("#when a sync task completes without a configured delay #then its deletion uses the default", async () => {
+  test("#when a sync task completes without a configured delay #then runtime cleanup uses the default", async () => {
     const sessionID = SESSION_IDS[1]
     const { client } = createClient()
 
@@ -125,10 +126,10 @@ describe("sync cleanup delay threading", () => {
     expect(pendingTimers().slice(-1)[0]?.delay).toBe(TASK_CLEANUP_DELAY_MS)
   })
 
-  test("#when a continuation completes #then it cancels and re-arms deletion with the configured delay", async () => {
+  test("#when a continuation completes #then it cancels and re-arms cleanup with the configured delay", async () => {
     const sessionID = SESSION_IDS[2]
     const { client } = createClient()
-    scheduleSyncSessionDeletion(client, sessionID)
+    scheduleSyncSessionCleanup(sessionID)
     const earlierTimer = recordedTimers[0]
 
     await executeSyncContinuation(
@@ -140,7 +141,7 @@ describe("sync cleanup delay threading", () => {
     expect(pendingTimers().slice(-1)[0]?.delay).toBe(120000)
   })
 
-  test("#when a continuation prompt fails #then deletion is re-armed with the configured delay", async () => {
+  test("#when a continuation prompt fails #then cleanup is re-armed with the configured delay", async () => {
     const sessionID = SESSION_IDS[3]
     const { client } = createClient(mock(async () => { throw new Error("Session not found") }))
 

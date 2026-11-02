@@ -84,6 +84,18 @@ export class TaskRecovery {
 
   generation(sessionId: string): string | undefined { return this.generations.get(sessionId) }
 
+  hasRecord(sessionId: string): boolean { return this.store.read(sessionId) !== undefined }
+
+  releaseRuntimeOwnership(sessionId: string): void { this.generations.delete(sessionId) }
+
+  async configurationForSync(sessionId: string): Promise<Pick<TaskRecoveryRecord, "agent" | "model" | "tools"> | undefined> {
+    if (!this.store.read(sessionId)) return undefined
+    const task = await this.recover(sessionId)
+    const tools = this.tools(sessionId)
+    if (!tools) throw new TaskRecoveryError(sessionId, "recovered tool restrictions are unavailable")
+    return { agent: task.agent, model: task.model, tools }
+  }
+
   owns(sessionId: string | undefined, generation?: string): boolean {
     if (this.closed) return false
     if (!sessionId || !this.generations.has(sessionId)) return true
@@ -119,10 +131,13 @@ export class TaskRecovery {
   }
 
   async recover(sessionId: string): Promise<BackgroundTask> {
+    if (this.closed) throw new TaskRecoveryError(sessionId, "owner shut down")
     return this.store.locked(sessionId, async () => {
       const record = this.store.read(sessionId)
       if (!record) throw new TaskRecoveryError(sessionId, "no provable native owner metadata (legacy or unrelated child)")
-      if (await probeTaskOwner(record) !== "dead") throw new TaskRecoveryError(sessionId, "owner is live or its liveness is unknown")
+      const owner = await this.worker.open()
+      const ownedHere = record.owner.id === owner.id && record.owner.hostname === owner.hostname && record.owner.port === owner.port
+      if (!ownedHere && await probeTaskOwner(record) !== "dead") throw new TaskRecoveryError(sessionId, "owner is live or its liveness is unknown")
       const response = await this.client.session.get({ path: { id: sessionId }, query: { directory: record.cwd } })
       const session = RecoverableSessionSchema.safeParse(response.data)
       if (response.error || !session.success || session.data.id !== sessionId || session.data.parentID !== record.parentSessionId
@@ -139,7 +154,6 @@ export class TaskRecovery {
       const model = record.model ?? last?.model ?? (last?.providerID && last.modelID
         ? { providerID: last.providerID, modelID: last.modelID, variant: last.variant ?? undefined } : undefined)
       if (this.closed) throw new TaskRecoveryError(sessionId, "recovering owner shut down")
-      const owner = await this.worker.open()
       const generation = randomUUID()
       this.store.write({ ...record, model, owner, generation })
       this.generations.set(sessionId, generation)
@@ -185,6 +199,7 @@ export class TaskRecovery {
 
   close(): void {
     this.closed = true
+    this.generations.clear()
     clearTimeout(this.sweepTimer)
     this.worker.close()
   }

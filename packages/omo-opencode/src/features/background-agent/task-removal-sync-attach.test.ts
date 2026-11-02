@@ -4,6 +4,10 @@ import type { PluginInput } from "@opencode-ai/plugin"
 import { TASK_CLEANUP_DELAY_MS } from "./constants"
 import { BackgroundManager } from "./manager"
 import type { BackgroundTask } from "./types"
+import { getSessionModel, setSessionModel } from "../../shared/session-model-state"
+import { getSessionPromptParams, setSessionPromptParams } from "../../shared/session-prompt-params-state"
+import { getSessionTools, setSessionTools } from "../../shared/session-tools-store"
+import { releaseDelegatedSessionRuntime } from "../../shared/delegated-session-runtime"
 
 type FakeTimers = {
   getDelay: (timer: ReturnType<typeof setTimeout>) => number | undefined
@@ -15,6 +19,8 @@ let managerUnderTest: BackgroundManager | undefined
 let fakeTimers: FakeTimers | undefined
 
 afterEach(() => {
+  releaseDelegatedSessionRuntime("ses_sibling")
+  releaseDelegatedSessionRuntime("ses_child")
   managerUnderTest?.shutdown()
   fakeTimers?.restore()
   managerUnderTest = undefined
@@ -43,6 +49,7 @@ function createManager(): { manager: BackgroundManager; deleteCalls: string[] } 
     worktree: tmpdir(),
     serverUrl: new URL("http://localhost"),
     $: {} as PluginInput["$"],
+    experimental_workspace: { register: () => {} },
   }
 
   const manager = new BackgroundManager({ pluginContext: ctx, config: undefined, enableParentSessionNotifications: false })
@@ -158,7 +165,7 @@ describe("BackgroundManager.scheduleTaskRemoval with an attached sync continuati
       expect(deleteCalls).toEqual([])
     })
 
-    test("#when the sync continuation detaches #then a fresh cleanup timer is armed and firing it removes the task and deletes the session once", async () => {
+    test("#when the sync continuation detaches #then cleanup removes the task but retains the session", async () => {
       // given
       const { manager, deleteCalls } = createManager()
       managerUnderTest = manager
@@ -167,8 +174,16 @@ describe("BackgroundManager.scheduleTaskRemoval with an attached sync continuati
       getTasks(manager).set(task.id, task)
       scheduleTaskRemovalForTest(manager, task.id)
       const detach = manager.attachSyncContinuation("ses_child")
+      const retired: string[] = []
+      manager.setSessionRuntimeRetirementHandler(async (sessionID) => { retired.push(sessionID) })
+      setSessionModel("ses_child", { providerID: "fixture", modelID: "child" })
+      setSessionPromptParams("ses_child", { temperature: 0.37 })
+      setSessionTools("ses_child", { bash: false })
+      setSessionTools("ses_sibling", { read: false })
       await fakeTimers.run(getRequiredTimer(manager, task.id))
       expect(getCompletionTimers(manager).has(task.id)).toBe(false)
+      expect(retired).toEqual([])
+      expect(getSessionTools("ses_child")).toEqual({ bash: false })
 
       // when
       detach()
@@ -183,7 +198,13 @@ describe("BackgroundManager.scheduleTaskRemoval with an attached sync continuati
       // then
       expect(getTasks(manager).has(task.id)).toBe(false)
       expect(manager.findBySession("ses_child")).toBeUndefined()
-      expect(deleteCalls).toEqual(["ses_child"])
+      expect(getCompletionTimers(manager).size).toBe(0)
+      expect(deleteCalls).toEqual([])
+      expect(retired).toEqual(["ses_child"])
+      expect(getSessionModel("ses_child")).toBeUndefined()
+      expect(getSessionPromptParams("ses_child")).toBeUndefined()
+      expect(getSessionTools("ses_child")).toBeUndefined()
+      expect(getSessionTools("ses_sibling")).toEqual({ read: false })
     })
 
     test("#when the sync continuation detaches before the timer fires #then the pending timer is left alone", async () => {
@@ -208,7 +229,8 @@ describe("BackgroundManager.scheduleTaskRemoval with an attached sync continuati
 
       // then
       expect(getTasks(manager).has(task.id)).toBe(false)
-      expect(deleteCalls).toEqual(["ses_child"])
+      expect(getCompletionTimers(manager).size).toBe(0)
+      expect(deleteCalls).toEqual([])
     })
   })
 

@@ -10,6 +10,7 @@ export type SessionInjectedRulesCache = {
 export function createSessionCacheStore(): {
   getSessionCache: (sessionID: string) => SessionInjectedRulesCache;
   clearSessionCache: (sessionID: string) => void;
+  releaseSession: (sessionID: string) => void;
 } {
   const sessionCaches = new Map<string, SessionInjectedRulesCache>();
 
@@ -29,7 +30,13 @@ export function createSessionCacheStore(): {
     clearInjectedRules(sessionID);
   }
 
-  return { getSessionCache, clearSessionCache };
+  return {
+    getSessionCache,
+    clearSessionCache,
+    releaseSession: (sessionID: string): void => {
+      sessionCaches.delete(sessionID);
+    },
+  };
 }
 
 export function createSessionRuleScanCacheStore(): {

@@ -24,6 +24,8 @@ import { BackgroundManager } from "./manager"
 import { _resetForTesting as resetProcessCleanupState } from "./process-cleanup"
 import { clearBackgroundTaskRegistryForTesting } from "./task-registry"
 import type { BackgroundTask, ResumeInput } from "./types"
+import type { TaskRecovery } from "./task-recovery"
+import { getSessionTools } from "../../shared/session-tools-store"
 
 afterAll(() => { mock.restore() })
 
@@ -3269,7 +3271,7 @@ describe("BackgroundManager restart recovery", () => {
     stubNotifyParentSession(first)
     stubNotifyParentSession(second)
     const launched = await first.launch({ agent, description: "recovery", prompt: "initial", model, category: "quick", teamRunId: "team-recovery",
-      userPermission: { webfetch: "deny" }, parentSessionId: "parent-original", parentMessageId: "msg-original" })
+      userPermission: { webfetch: "deny", call_omo_agent: "deny" }, parentSessionId: "parent-original", parentMessageId: "msg-original" })
     await dispatched.promise
     return { first, second, launched, model, sessionId, calls, child, continued, client, aborts: () => aborts }
   }
@@ -3294,10 +3296,50 @@ describe("BackgroundManager restart recovery", () => {
       expect(getSessionPromptParams(sessionId)).toMatchObject({ temperature: 0.27, options: { reasoningEffort: "high" } })
   })
 
+  test.each([false, true])("recovers a retired child through its still-live original owner with tracked=%s", async (tracked) => {
+    const { first, launched, model, sessionId, calls, continued } = await launchRecoveryChild("general")
+    const activeTask = getTaskMap(first).get(launched.id)
+    if (!activeTask) throw new Error("launched recovery task is missing")
+    await tryCompleteTaskForTest(first, activeTask)
+    if (!tracked) getTaskMap(first).delete(launched.id)
+    else getTaskMap(first).set("sibling-running", { ...launched, id: "sibling-running", sessionId: "sibling-session", status: "running" })
+    await first.retireSessionRuntime(sessionId)
+    const recovery = cast<{ taskRecovery: TaskRecovery }>(first).taskRecovery
+    const generations = cast<{ generations: Map<string, string> }>(recovery).generations
+    expect(generations.size).toBe(0)
+    for (let index = 0; index < 4; index++) {
+      const retiredID = `${sessionId}_${index}`
+      await recovery.persist({ ...launched, sessionId: retiredID }, { bash: false }, tmpdir())
+      await first.retireSessionRuntime(retiredID)
+      expect(generations.size).toBe(0)
+    }
+    const syncConfiguration = await first.prepareSyncContinuation(sessionId)
+    expect(syncConfiguration?.agent).toBe("general")
+    expect(syncConfiguration?.model).toEqual(model)
+    expect(syncConfiguration?.tools).toMatchObject({ webfetch: false, task: false, question: false })
+    await first.retireSessionRuntime(sessionId)
+    expect(generations.size).toBe(0)
+    releaseAllPromptAsyncReservationsForTesting()
+
+    const resumed = await first.resume({ sessionId, prompt: "continue", parentSessionId: "parent-new", parentMessageId: "msg-new" })
+    await continued.promise
+    await first.retireSessionRuntime(sessionId)
+
+    expect(resumed.id).toBe(launched.id)
+    expect(generations.size).toBe(1)
+    expect(resumed.model).toEqual(model)
+    expect(calls).toHaveLength(2)
+    expect(calls[1]?.body.tools).toMatchObject({ webfetch: false, task: false, question: false, call_omo_agent: false })
+    expect(getSessionTools(sessionId)).toMatchObject({ webfetch: false, call_omo_agent: false })
+    expect(getSessionPromptParams(sessionId)).toMatchObject({ temperature: 0.27 })
+  })
+
   test("does not prompt or abort a child still owned by another live worker", async () => {
-    const { second, sessionId, calls, aborts } = await launchRecoveryChild()
+    const { first, second, sessionId, calls, aborts } = await launchRecoveryChild()
     const before = aborts()
     await expect(second.resume({ sessionId, prompt: "continue", parentSessionId: "parent-new", parentMessageId: "msg-new" })).rejects.toThrow("owner is live")
+    await expect(second.prepareSyncContinuation(sessionId)).rejects.toThrow("owner is live")
+    await expect(first.prepareSyncContinuation(sessionId)).rejects.toThrow("child is still active")
     expect(calls).toHaveLength(1)
     expect(aborts()).toBe(before)
   })

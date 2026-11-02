@@ -25,6 +25,34 @@ afterEach(() => {
 });
 
 describe("createSessionCacheStore", () => {
+  it("releases warm state without deleting persisted rules or evicting a sibling", () => {
+    // given
+    const sessionID = createSessionID("retired-session");
+    const siblingID = createSessionID("sibling-session");
+    saveInjectedRules(sessionID, {
+      contentHashes: new Set(["persisted-hash"]),
+      realPaths: new Set(["/rules/persisted.md"]),
+    });
+    const store = createSessionCacheStore();
+    const warmCache = store.getSessionCache(sessionID);
+    warmCache.contentHashes.add("memory-only-hash");
+    const siblingCache = store.getSessionCache(siblingID);
+    siblingCache.contentHashes.add("sibling-hash");
+
+    // when
+    store.releaseSession(sessionID);
+    store.releaseSession(sessionID);
+    const reloadedCache = store.getSessionCache(sessionID);
+
+    // then
+    expect(reloadedCache).not.toBe(warmCache);
+    expect([...reloadedCache.contentHashes]).toEqual(["persisted-hash"]);
+    expect([...reloadedCache.realPaths]).toEqual(["/rules/persisted.md"]);
+    expect(existsSync(getStoragePath(sessionID))).toBe(true);
+    expect(store.getSessionCache(siblingID)).toBe(siblingCache);
+    expect([...siblingCache.contentHashes]).toEqual(["sibling-hash"]);
+  });
+
   it("keeps factory instances isolated for the same session", () => {
     // given
     const sessionID = createSessionID("cache-isolation");

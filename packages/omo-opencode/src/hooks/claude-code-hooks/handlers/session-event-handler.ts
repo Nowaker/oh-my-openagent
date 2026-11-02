@@ -25,7 +25,13 @@ export function createSessionEventHandler(
 ) {
 	const parentSessionIdCache = new Map<string, string | undefined>()
 
-	return async (input: { event: { type: string; properties?: unknown } }) => {
+	const releaseSession = (sessionID: string): void => {
+		parentSessionIdCache.delete(sessionID)
+		contextCollector?.clear(sessionID)
+		clearSessionEndHookState(sessionID)
+	}
+
+	const eventHandler = async (input: { event: { type: string; properties?: unknown } }) => {
 		const { event } = input
 
 		if (event.type === "session.error") {
@@ -150,6 +156,8 @@ export function createSessionEventHandler(
 
 		clearSessionHookState(sessionID)
 	}
+
+	return Object.assign(eventHandler, { releaseSession })
 }
 
 export function disposeSessionEventHandler(contextCollector?: ContextCollector): void {
