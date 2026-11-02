@@ -35,6 +35,7 @@ function asChatPluginConfig(config: unknown): ChatMessageHandlerArgs["pluginConf
 
 function createEventHandlerManagers(): EventHandlerArgs["managers"] {
 	return unsafeTestValue<EventHandlerArgs["managers"]>({
+		backgroundManager: { setSessionRuntimeRetirementHandler() {} },
 		tmuxSessionManager: {
 			onSessionCreated: async () => {},
 			onSessionDeleted: async () => {},

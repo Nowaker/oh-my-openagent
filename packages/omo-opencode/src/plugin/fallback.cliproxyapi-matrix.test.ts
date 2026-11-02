@@ -31,6 +31,7 @@ function createEventHandlerManagers(
 ): EventHandlerArgs["managers"] {
   return unsafeTestValue<EventHandlerArgs["managers"]>({
     ...({} as EventHandlerArgs["managers"]),
+    backgroundManager: { setSessionRuntimeRetirementHandler() {} },
     tmuxSessionManager: {
       onSessionCreated: async () => {},
       onSessionDeleted: async () => {},

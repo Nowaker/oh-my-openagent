@@ -77,6 +77,7 @@ describe("createEventHandler - model-fallback auto-continuation pins agent/model
         clear: () => {},
       },
       managers: unsafeTestValue({
+        backgroundManager: { setSessionRuntimeRetirementHandler() {} },
         tmuxSessionManager: {
           onSessionCreated: async () => {},
           onSessionDeleted: async () => {},
