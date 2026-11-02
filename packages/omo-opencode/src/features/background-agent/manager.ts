@@ -1603,7 +1603,7 @@ The fallback retry session is now created and can be inspected directly.
           ...(resumeModel ? { model: resumeModel } : {}),
           ...(resumeVariant ? { variant: resumeVariant } : {}),
           tools: (() => {
-            const tools = {
+            const tools: Record<string, boolean> = {
               ...resumeTools,
               task: false,
               call_omo_agent: true,
@@ -1611,6 +1611,9 @@ The fallback retry session is now created and can be inspected directly.
               ...getAgentToolRestrictions(existingTask.agent, {
                 includeTeamToolDenylist: existingTask.teamRunId === undefined,
               }),
+            }
+            for (const [name, allowed] of Object.entries(resumeTools)) {
+              if (!allowed) tools[name] = false
             }
             setSessionTools(existingTask.sessionId!, tools)
             return tools
