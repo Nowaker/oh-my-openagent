@@ -23,6 +23,7 @@ export interface Todo {
 }
 
 export interface SessionState {
+  continuationGeneration?: string
   countdownTimer?: ReturnType<typeof setTimeout>
   countdownInterval?: ReturnType<typeof setInterval>
   isRecovering?: boolean

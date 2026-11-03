@@ -14,6 +14,8 @@ import { BOULDER_CONTINUATION_PROMPT } from "./system-reminder-templates"
 import { markContinuationInjectedAwaitingToolProgress } from "./tool-progress"
 import { resolveRecentPromptContextForSession } from "./recent-model-resolver"
 import type { BackgroundTaskStatusProvider, SessionState } from "./types"
+import { captureContinuationPermit, continuationPermitCurrent } from "../../features/run-continuation-state/host-authority"
+import { readBoulderState } from "../../features/boulder-state"
 
 export type BoulderContinuationResult =
   | "injected"
@@ -62,6 +64,10 @@ export async function injectBoulderContinuation(input: {
     return "skipped_background_tasks"
   }
 
+  const boulder = readBoulderState(ctx.directory)
+  const permit = await captureContinuationPermit(ctx, sessionID, { kind: "boulder", workId: boulder?.active_work_id ?? "" })
+  if (!permit || !await continuationPermitCurrent(ctx, sessionID, permit)) return "skipped_active_session"
+
   const worktreeContext = worktreePath ? `\n\n[Worktree: ${worktreePath}]` : ""
   const preferredSessionContext = preferredTaskSessionId
     ? `\n\n[Preferred reuse session for current top-level plan task${preferredTaskTitle ? `: ${preferredTaskTitle}` : ""}: ${preferredTaskSessionId}]`
@@ -103,6 +109,7 @@ export async function injectBoulderContinuation(input: {
       settleMs: idleSettleMs,
       queueBehavior: "defer",
       semanticDedupeHoldMs: CONTINUATION_COOLDOWN_MS,
+      shouldDispatch: () => continuationPermitCurrent(ctx, sessionID, permit),
       input: {
         path: { id: sessionID },
         body: {

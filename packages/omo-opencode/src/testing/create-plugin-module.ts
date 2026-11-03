@@ -41,6 +41,7 @@ import {
 } from "../shared/live-server-route"
 import { startBackgroundCheck as startTmuxCheck } from "../tools/interactive-bash"
 import { runOpenCodeStartupMigration } from "../startup-migration"
+import { registerContinuationConsumer } from "../features/run-continuation-state/loaded-consumer"
 
 type StartupToastClient = {
   readonly tui?: {
@@ -342,11 +343,13 @@ export function createPluginModule(overrides: Partial<PluginModuleDeps> = {}): P
       "experimental.compaction.autocontinue": createCompactionAutocontinueHandler(hooks),
 
       dispose: async (): Promise<void> => {
+        unregisterContinuationConsumer()
         runtimeSkillSource?.stop()
         await dispose()
       },
     }
 
+    const unregisterContinuationConsumer = registerContinuationConsumer(input.client)
     return pluginHooks
   }
 

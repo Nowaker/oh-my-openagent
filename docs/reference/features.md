@@ -435,6 +435,12 @@ The main agent executes the approved work plan in the same session: it injects t
 
 Stops todo continuation, clears the active Goal, and clears boulder state. Use when you want the agent to stop its current multi-step workflow.
 
+The stop marker survives process restart and ordinary messages. An explicit fresh plan clears the marker; replying to a question does not.
+
+When Vibeterm supplies continuation authority, automatic todo and Boulder continuation also require its current session-bound host, work generation, and plan. Imported or forked history remains visible but inert. Diagnostic and restart wake-ups execute their supplied prompt without reactivating historical todos. New explicit work starts a local generation that excludes inherited task identities, and a question answer can resume only its issuing bound generation. OMO checks authority before its countdown and again at actual prompt dispatch. Native sessions without Vibeterm policy retain their existing continuation behavior.
+
+After constructing its hook interface, OMO registers a versioned continuation consumer bound to that OpenCode SDK client. Vibeterm's guarded question-answer operation requires the registration when OMO is configured, regardless of which plugin loaded first. Disposal removes it before hook cleanup, so an old or disposed consumer cannot admit a waking answer.
+
 ### /handoff
 
 **Purpose**: Create a detailed context summary for continuing work in a new session

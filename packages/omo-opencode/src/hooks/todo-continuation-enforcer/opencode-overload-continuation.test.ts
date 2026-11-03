@@ -6,6 +6,7 @@ import { describe, expect, test } from "bun:test"
 
 import { _resetForTesting, setMainSession } from "../../features/claude-code-session-state"
 import { createTodoContinuationEnforcer } from "."
+import { OMO_INTERNAL_INITIATOR_MARKER } from "../../shared/internal-initiator-marker"
 
 type PromptCall = {
   sessionID: string
@@ -20,9 +21,10 @@ type PromptInput = {
 type TimerCallback = (...args: unknown[]) => void
 type FakeTimerID = number & ReturnType<typeof setTimeout> & ReturnType<typeof setInterval>
 
-function createPluginInput(promptCalls: PromptCall[]): PluginInput {
+function createPluginInput(promptCalls: PromptCall[], onPrompt: () => void): PluginInput {
   const directory = "/tmp/opencode-overload-continuation-test"
   const client = createOpencodeClient({ directory })
+  Reflect.set(client.session, "get", async () => ({ data: { metadata: {} } }))
   Reflect.set(client.session, "todo", async () => ({
     data: [
       { id: "1", content: "Keep working", status: "pending", priority: "high" },
@@ -34,6 +36,7 @@ function createPluginInput(promptCalls: PromptCall[]): PluginInput {
       sessionID: input.path.id,
       text: input.body.parts[0]?.text ?? "",
     })
+    onPrompt()
     return {}
   })
   Reflect.set(client.tui, "showToast", async () => ({}))
@@ -60,9 +63,10 @@ describe("todo-continuation-enforcer OpenCode overload errors", () => {
       // given
       const sessionID = "main-opencode-overload"
       const promptCalls: PromptCall[] = []
+      const injected = Promise.withResolvers<void>()
       _resetForTesting()
       setMainSession(sessionID)
-      const hook = createTodoContinuationEnforcer(createPluginInput(promptCalls))
+      const hook = createTodoContinuationEnforcer(createPluginInput(promptCalls, injected.resolve))
       const original = {
         setTimeout: globalThis.setTimeout,
         clearTimeout: globalThis.clearTimeout,
@@ -70,6 +74,7 @@ describe("todo-continuation-enforcer OpenCode overload errors", () => {
         clearInterval: globalThis.clearInterval,
       }
       const scheduledTimeouts: Array<{ delay: number; callback: TimerCallback; args: unknown[] }> = []
+      const deadline = original.setTimeout(() => injected.reject(new Error("continuation dispatch was not observed")), 5000)
       const fakeSetTimeout = (handler: TimerHandler, delay?: number, ...callbackArgs: unknown[]) => {
         if (typeof handler !== "function") {
           return original.setTimeout(handler, delay, ...callbackArgs)
@@ -116,15 +121,15 @@ describe("todo-continuation-enforcer OpenCode overload errors", () => {
         const countdownTimer = scheduledTimeouts.find((timer) => timer.delay === 2000)
         expect(countdownTimer).toBeDefined()
         countdownTimer?.callback(...countdownTimer.args)
-        for (let index = 0; index < 25; index++) {
-          await Promise.resolve()
-        }
+        await injected.promise
 
         // then
         expect(promptCalls).toHaveLength(1)
         expect(promptCalls[0]?.sessionID).toBe(sessionID)
-        expect(promptCalls[0]?.text).toContain("TODO CONTINUATION")
+        expect(promptCalls[0]?.text).toContain(OMO_INTERNAL_INITIATOR_MARKER)
       } finally {
+        original.clearTimeout(deadline)
+        hook.dispose()
         Reflect.set(globalThis, "setTimeout", original.setTimeout)
         Reflect.set(globalThis, "clearTimeout", original.clearTimeout)
         Reflect.set(globalThis, "setInterval", original.setInterval)

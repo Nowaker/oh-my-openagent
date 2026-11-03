@@ -38,6 +38,7 @@ import { isUnrecoverableRequestError } from "./unrecoverable-request-error"
 import { getIncompleteCount } from "./todo"
 import type { ResolvedMessageInfo, Todo } from "./types"
 import type { SessionStateStore } from "./session-state"
+import { captureContinuationPermit, continuationPermitCurrent, type ContinuationPermit } from "../../features/run-continuation-state/host-authority"
 
 function hasWritePermission(tools: Record<string, ToolPermission> | undefined): boolean {
   const editPermission = tools?.edit
@@ -56,6 +57,7 @@ export async function injectContinuation(args: {
   resolvedInfo?: ResolvedMessageInfo
   sessionStateStore: SessionStateStore
   isContinuationStopped?: (sessionID: string) => boolean
+  continuationPermit?: ContinuationPermit
 }): Promise<void> {
   const {
     ctx,
@@ -108,10 +110,19 @@ export async function injectContinuation(args: {
     return
   }
 
-  const freshIncompleteCount = getIncompleteCount(todos)
+  let freshIncompleteCount = getIncompleteCount(todos)
   if (freshIncompleteCount === 0) {
     log(`[${HOOK_NAME}] Skipped injection: no incomplete todos`, { sessionID })
     return
+  }
+
+  const permit = args.continuationPermit ?? await captureContinuationPermit(ctx, sessionID, { kind: "todos",
+    keys: todos.filter(todo => todo.status !== "completed" && todo.status !== "cancelled").map(todo => todo.content).sort() })
+  if (!permit || !await continuationPermitCurrent(ctx, sessionID, permit)) return
+  if (permit.kind === "scoped" && permit.lease.plan.kind === "todos") {
+    const keys = permit.lease.plan.keys
+    todos = todos.filter(todo => keys.includes(todo.content))
+    freshIncompleteCount = getIncompleteCount(todos)
   }
 
   let agentName = resolvedInfo?.agent ?? getSessionAgent(sessionID)
@@ -225,6 +236,8 @@ ${todoList}`
       settleMs: 0,
       queueBehavior: "defer",
       semanticDedupeHoldMs: CONTINUATION_COOLDOWN_MS,
+      shouldDispatch: async () => !isContinuationStopped?.(sessionID) &&
+        await continuationPermitCurrent(ctx, sessionID, permit),
       input: {
         path: { id: sessionID },
         body: {

@@ -11,6 +11,7 @@ import {
 import type { ResolvedMessageInfo } from "./types"
 import type { SessionStateStore } from "./session-state"
 import { injectContinuation } from "./continuation-injection"
+import type { ContinuationPermit } from "../../features/run-continuation-state/host-authority"
 
 async function showCountdownToast(
   ctx: PluginInput,
@@ -39,6 +40,7 @@ export function startCountdown(args: {
   skipAgents: string[]
   sessionStateStore: SessionStateStore
   isContinuationStopped?: (sessionID: string) => boolean
+  continuationPermit?: ContinuationPermit
 }): void {
   const {
     ctx,
@@ -49,6 +51,7 @@ export function startCountdown(args: {
     skipAgents,
     sessionStateStore,
     isContinuationStopped,
+    continuationPermit,
   } = args
 
   const state = sessionStateStore.getState(sessionID)
@@ -75,6 +78,7 @@ export function startCountdown(args: {
       resolvedInfo,
       sessionStateStore,
       isContinuationStopped,
+      continuationPermit,
     })
   }, COUNTDOWN_SECONDS * 1000)
 

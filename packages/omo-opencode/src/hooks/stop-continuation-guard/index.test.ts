@@ -95,6 +95,16 @@ describe("stop-continuation-guard", () => {
     expect(guard.isStopped("non-existent-session")).toBe(false)
   })
 
+  test("restores a persisted stop in a new hook instance and keeps ordinary messages stopped", async () => {
+    const input = createMockPluginInput()
+    createStopContinuationGuardHook(input).stop("stopped-before-restart")
+    const restarted = createStopContinuationGuardHook(input)
+    await restarted["chat.message"]({ sessionID: "stopped-before-restart" })
+    expect(restarted.isStopped("stopped-before-restart")).toBe(true)
+    restarted.clear("stopped-before-restart")
+    expect(createStopContinuationGuardHook(input).isStopped("stopped-before-restart")).toBe(false)
+  })
+
   test("should clear stopped state for a session", () => {
     // given - a session that was stopped
     const guard = createStopContinuationGuardHook(createMockPluginInput())

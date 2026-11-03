@@ -6,6 +6,7 @@ export interface ContinuationMarkerSourceEntry {
   state: ContinuationMarkerState
   reason?: string
   updatedAt: string
+  generation?: string
 }
 
 export interface ContinuationMarker {

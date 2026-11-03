@@ -16,6 +16,7 @@ import type { SessionStateStore } from "./session-state"
 import { shouldStopForStagnation } from "./stagnation-detection"
 import { getIncompleteCount } from "./todo"
 import type { MessageWithInfo, ResolvedMessageInfo, Todo } from "./types"
+import { captureContinuationPermit, continuationBridge } from "../../features/run-continuation-state/host-authority"
 
 export async function handleSessionIdle(args: {
   ctx: PluginInput
@@ -36,7 +37,11 @@ export async function handleSessionIdle(args: {
 
   log(`[${HOOK_NAME}] session.idle`, { sessionID })
 
+  const generation = continuationBridge()?.binding(sessionID)?.generation
+  const existing = sessionStateStore.getExistingState(sessionID)
+  if (generation && existing?.continuationGeneration !== generation) sessionStateStore.cleanup(sessionID)
   const state = sessionStateStore.getState(sessionID)
+  if (generation) state.continuationGeneration = generation
   const observedCompactionEpoch = state.recentCompactionEpoch
 
   if (state.allTodosCompletedAt) {
@@ -219,10 +224,18 @@ export async function handleSessionIdle(args: {
     return
   }
 
+  const continuationPermit = await captureContinuationPermit(ctx, sessionID, { kind: "todos",
+    keys: todos.filter(todo => todo.status !== "completed" && todo.status !== "cancelled").map(todo => todo.content).sort() })
+  if (!continuationPermit) return
+  const eligibleTodos = continuationPermit.kind === "scoped" && continuationPermit.lease.plan.kind === "todos"
+    ? todos.filter(todo => continuationPermit.lease.plan.kind === "todos" && continuationPermit.lease.plan.keys.includes(todo.content)) : todos
+  const eligibleCount = getIncompleteCount(eligibleTodos)
+  if (!eligibleCount) return
+
   const progressUpdate = sessionStateStore.trackContinuationProgress(
     sessionID,
-    incompleteCount,
-    todos,
+    eligibleCount,
+    eligibleTodos,
   )
   if (state.continuationBlockReason) {
     log(`[${HOOK_NAME}] Skipped: continuation paused at turn boundary`, {
@@ -238,12 +251,13 @@ export async function handleSessionIdle(args: {
   startCountdown({
     ctx,
     sessionID,
-    incompleteCount,
-    total: todos.length,
+    incompleteCount: eligibleCount,
+    total: eligibleTodos.length,
     resolvedInfo,
     backgroundManager,
     skipAgents,
     sessionStateStore,
     isContinuationStopped,
+    continuationPermit,
   })
 }

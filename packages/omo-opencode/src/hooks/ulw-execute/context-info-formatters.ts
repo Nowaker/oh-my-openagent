@@ -8,6 +8,7 @@ import {
 import type { BoulderState, BoulderWorkResumeOption } from "../../features/boulder-state"
 import { createWorktreeActiveBlock } from "./worktree-block"
 import { ensureNotepadScaffold } from "./notepad-scaffold"
+import { authorizeBoulderPlan } from "../../features/run-continuation-state/host-authority"
 
 export function buildAutoSelectedPlanContextInfoOnly(params: {
   readonly planPath: string
@@ -122,6 +123,7 @@ Looking for new plans...`
   }
 
   ensureNotepadScaffold({ directory, planName: existingState.plan_name })
+  authorizeBoulderPlan(directory, sessionId)
 
   const worktreeDisplay = effectiveWorktree
     ? worktreeBlock || createWorktreeActiveBlock(effectiveWorktree)
