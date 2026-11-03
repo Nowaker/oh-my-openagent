@@ -38,6 +38,7 @@ export function setContinuationMarkerSource(
   source: ContinuationMarkerSource,
   state: ContinuationMarkerState,
   reason?: string,
+  generation?: string,
 ): ContinuationMarker {
   const now = new Date().toISOString()
   const existing = readContinuationMarker(directory, sessionID)
@@ -49,6 +50,7 @@ export function setContinuationMarkerSource(
       [source]: {
         state,
         ...(reason ? { reason } : {}),
+        ...(generation ? { generation } : {}),
         updatedAt: now,
       },
     },

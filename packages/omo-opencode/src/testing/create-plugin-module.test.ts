@@ -5,6 +5,7 @@ import { join } from "node:path"
 import { getLocale, initI18n, t } from "../shared/i18n"
 import { PLUGIN_NAME } from "../shared"
 import { createPluginModule } from "./create-plugin-module"
+import { unsafeTestValue } from "../../../../test-support/unsafe-test-value"
 
 const sourcePlugin = new URL("../index.ts", import.meta.url).href
 
@@ -118,6 +119,34 @@ function createTestPluginModule(overrides: Parameters<typeof createPluginModule>
 }
 
 describe("createPluginModule()", () => {
+  it("publishes a client-bound continuation consumer only while constructed hooks are live", async () => {
+    // given
+    const pluginModule = createTestPluginModule()
+    const client = {}
+    const input = unsafeTestValue<Parameters<typeof pluginModule.server>[0]>({ directory: "/tmp/project", client })
+    // when
+    const hooks = await pluginModule.server(input)
+    const consumers: unknown = Reflect.get(globalThis, "__vibetermContinuationConsumersV1")
+    // then
+    if (!(consumers instanceof WeakMap)) throw new Error("continuation consumers were not registered")
+    expect(consumers.get(client)).toEqual({ version: 1, todos: "scoped-v1", boulder: "scoped-v1" })
+    expect(consumers.get({})).toBeUndefined()
+    await hooks.dispose?.()
+    expect(consumers.get(client)).toBeUndefined()
+  })
+
+  it("does not publish continuation admission when interface construction fails", async () => {
+    // given
+    const client = {}
+    const pluginModule = createTestPluginModule({ createPluginInterface: () => { throw new Error("interface failed") } })
+    // when
+    await expect(pluginModule.server(unsafeTestValue<Parameters<typeof pluginModule.server>[0]>({ directory: "/tmp/project", client })))
+      .rejects.toThrow("interface failed")
+    // then
+    const consumers: unknown = Reflect.get(globalThis, "__vibetermContinuationConsumersV1")
+    expect(consumers instanceof WeakMap ? consumers.get(client) : undefined).toBeUndefined()
+  })
+
   beforeEach(() => {
     mockDetectDuplicateOmoPlugin.mockClear()
     mockGetDuplicateOmoPluginWarning.mockClear()

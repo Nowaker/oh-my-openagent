@@ -3,10 +3,12 @@ import type { BackgroundManager } from "../../features/background-agent"
 
 import {
   clearContinuationMarker,
+  readContinuationMarker,
   setContinuationMarkerSource,
 } from "../../features/run-continuation-state"
 import { resolveSessionEventID } from "../../shared/event-session-id"
 import { log } from "../../shared/logger"
+import { continuationBridge } from "../../features/run-continuation-state/host-authority"
 
 const HOOK_NAME = "stop-continuation-guard"
 
@@ -33,7 +35,10 @@ export function createStopContinuationGuardHook(
 
   const stop = (sessionID: string): void => {
     stoppedSessions.add(sessionID)
-    setContinuationMarkerSource(ctx.directory, sessionID, "stop", "stopped", "continuation stopped")
+    const bridge = continuationBridge()
+    const generation = bridge?.binding(sessionID)?.generation
+    bridge?.stop(sessionID)
+    setContinuationMarkerSource(ctx.directory, sessionID, "stop", "stopped", "continuation stopped", generation)
     log(`[${HOOK_NAME}] Continuation stopped for session`, { sessionID })
 
     const backgroundManager = options?.backgroundManager
@@ -70,6 +75,12 @@ export function createStopContinuationGuardHook(
   }
 
   const isStopped = (sessionID: string): boolean => {
+    const marker = readContinuationMarker(ctx.directory, sessionID)?.sources.stop
+    if (marker?.state === "stopped") {
+      const current = continuationBridge()?.binding(sessionID)
+      if (marker.generation && current && current.generation !== marker.generation) return false
+      return true
+    }
     return stoppedSessions.has(sessionID)
   }
 
@@ -89,7 +100,7 @@ export function createStopContinuationGuardHook(
     if (event.type === "session.deleted") {
       const sessionID = resolveSessionEventID(props)
       if (sessionID) {
-        clear(sessionID)
+        stoppedSessions.delete(sessionID)
         clearContinuationMarker(ctx.directory, sessionID)
         log(`[${HOOK_NAME}] Session deleted: cleaned up`, { sessionID })
       }

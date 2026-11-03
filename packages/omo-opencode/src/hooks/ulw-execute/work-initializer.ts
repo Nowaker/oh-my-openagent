@@ -6,6 +6,7 @@ import {
 } from "../../features/boulder-state"
 import { buildAutoSelectedPlanContextInfoOnly } from "./context-info-formatters"
 import { ensureNotepadScaffold } from "./notepad-scaffold"
+import { authorizeBoulderPlan } from "../../features/run-continuation-state/host-authority"
 
 export function createNewWorkOrInitialize(params: {
   readonly directory: string
@@ -28,6 +29,7 @@ export function createNewWorkOrInitialize(params: {
   }
 
   ensureNotepadScaffold({ directory, planName: getPlanName(planPath) })
+  authorizeBoulderPlan(directory, sessionId)
 }
 
 export function buildAutoSelectedPlanContextWithStateInit(params: {
@@ -45,6 +47,7 @@ export function buildAutoSelectedPlanContextWithStateInit(params: {
 
   const newState = createBoulderState(planPath, sessionId, activeAgent, worktreePath)
   writeBoulderState(directory, newState)
+  authorizeBoulderPlan(directory, sessionId)
 
   ensureNotepadScaffold({ directory, planName: getPlanName(planPath), timestamp })
 
