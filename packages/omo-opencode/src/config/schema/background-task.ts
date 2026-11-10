@@ -33,6 +33,8 @@ export const BackgroundTaskConfigSchema = z.object({
   syncMaxAssistantTurns: z.number().int().min(0).optional(),
   /** Hand a foreground (run_in_background=false) task or call_omo_agent child that is still running after this long to the background, in milliseconds: the child keeps running under the same task id and its completion notice wakes the parent (default: 0 = never; the parent waits for it). */
   foregroundHandoffMs: z.number().int().min(0).optional(),
+  /** How long a notice for a parent session whose turn is still running waits before OMO stores it in that session anyway, in milliseconds: the running turn reads it at its next tool step (default: 60000 = 1 minute, 0 = at once). Covers background task, background bash and monitor notices; until then a notice waits for the turn to end. */
+  busyParentWakeDelayMs: z.number().int().min(0).optional(),
   /** Minimum age of a background-owners recovery file before the hourly sweep examines it, in milliseconds (default: 86400000 = 24 hours, minimum: 3600000 = 1 hour). The sweep removes a record only when its owner is dead and its child session is gone, plus abandoned lock and temp files. */
   recoverySweepMinAgeMs: z.number().min(3600000).optional(),
   /** Maximum tool calls per subagent task before circuit breaker triggers (default: 200, minimum: 10). Prevents runaway loops from burning unlimited tokens. */

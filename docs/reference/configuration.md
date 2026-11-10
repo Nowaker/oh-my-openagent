@@ -484,6 +484,7 @@ Control parallel agent execution and concurrency limits. `background_task` (came
 | `syncPollTimeoutMs`         | `1800000` | Abort a foreground (`run_in_background=false`) `task` child after this long without observable activity; a foreground `call_omo_agent` waits at most this long in total, 5 minutes when unset (min: 60000, `0`: never) |
 | `syncMaxAssistantTurns`     | `300`     | Abort a foreground `task` child after this many assistant turns, as a runaway loop (`0`: no cap) |
 | `foregroundHandoffMs`       | `0`       | Hand a foreground `task` or `call_omo_agent` child still running after this long to the background: it keeps running under the same task id, the call returns at once, and its completion notice wakes the parent (`0`: never, the parent waits) |
+| `busyParentWakeDelayMs`     | `60000`   | How long a notice for a parent whose turn is still running waits before OMO stores it in that session anyway; opencode reads it at the turn's next tool step, so the running turn sees it without a new turn (`0`: at once). Covers background task, background bash and monitor notices |
 | `recoverySweepMinAgeMs`     | `86400000` | Age before the hourly sweep examines a background-owners recovery file; it removes only records whose owner is dead and child session is gone (min: 3600000) |
 | `maxToolCalls`              | `4000`    | Maximum tool calls per subagent task (min: 10)                        |
 | `circuitBreaker`            | -         | Circuit-breaker object: `enabled` (default `true`), `maxToolCalls`, `consecutiveThreshold` |

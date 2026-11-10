@@ -89,7 +89,9 @@ export class MonitorOutputInjector {
       pending.batches = [...forcedTerminalBatches, ...remainingBatches]
     }
 
-    if (await latestAssistantTurnBlocksMonitorOutput(this.deps.client, this.deps.directory, sessionID)) {
+    // A batch past the busy-parent delay goes into the running turn, which reads it at its next tool step, so the turn
+    // being mid-tool does not hold it back.
+    if (!hasForcedTerminalBatch && await latestAssistantTurnBlocksMonitorOutput(this.deps.client, this.deps.directory, sessionID)) {
       this.scheduleFlush(monitorId)
       log("[monitor] Deferred output injection because latest assistant turn blocks internal prompts:", { sessionID, monitorId })
       return
@@ -161,7 +163,7 @@ export class MonitorOutputInjector {
         queueBehavior: "defer",
         postDispatchHoldMs: this.deps.postDispatchHoldMs,
         checkStatus: !forceActiveDispatch,
-        checkToolState: true,
+        checkToolState: !forceActiveDispatch,
         input: {
           path: { id: sessionID },
           body: {
@@ -260,7 +262,7 @@ export class MonitorOutputInjector {
 
   private shouldForceActiveDispatch(record: MonitorRecord, batch: OutputBatch): boolean {
     const maxActiveDeferMs = this.deps.maxActiveDeferMs
-    if (maxActiveDeferMs === undefined || maxActiveDeferMs <= 0) {
+    if (maxActiveDeferMs === undefined) {
       return false
     }
     return this.getQueuedAgeMs(this.createSource(record, batch)) >= maxActiveDeferMs

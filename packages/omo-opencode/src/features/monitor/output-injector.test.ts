@@ -60,6 +60,7 @@ function createHarness(opts: {
   messages?: FakeMessage[]
   dispatchResults?: InternalPromptDispatchResult[]
   now?: number
+  maxActiveDeferMs?: number
 } = {}): {
   injector: MonitorOutputInjector
   calls: DispatchCall[]
@@ -92,6 +93,7 @@ function createHarness(opts: {
     acceptedMessageSkewMs: 50,
     userMessageInProgressWindowMs: 500,
     postDispatchHoldMs: 250,
+    ...(opts.maxActiveDeferMs !== undefined ? { maxActiveDeferMs: opts.maxActiveDeferMs } : {}),
     now: () => opts.now ?? 1_000,
     settleAfterSessionIdle: async () => {},
     dispatchInternalPrompt: async (args) => {
@@ -256,6 +258,48 @@ describe("MonitorOutputInjector", () => {
   })
 
   describe("#given a running monitor's batch", () => {
+    test("#when the parent runs a tool and the busy-parent delay is 0 #then the batch goes into the running turn at once", async () => {
+      // given
+      const record = createRecord()
+      const { injector, calls } = createHarness({
+        active: true,
+        messages: [
+          { info: { role: "user", time: { created: 100 } }, parts: [{ type: "text", text: "go" }] },
+          { info: { role: "assistant", finish: "tool-calls", time: { created: 200 } }, parts: [{ type: "tool", state: { status: "running" } }] },
+        ],
+        now: 10_000,
+        maxActiveDeferMs: 0,
+      })
+      injector.queueBatch(record, createBatch(31))
+
+      // when
+      await injector.flushMonitor(record.id)
+
+      // then
+      expect(calls).toHaveLength(1)
+      expect(calls[0]).toMatchObject({ checkStatus: false, checkToolState: false })
+    })
+
+    test("#when the parent runs a tool and no busy-parent delay is set #then the batch waits", async () => {
+      // given
+      const record = createRecord()
+      const { injector, calls } = createHarness({
+        active: true,
+        messages: [
+          { info: { role: "user", time: { created: 100 } }, parts: [{ type: "text", text: "go" }] },
+          { info: { role: "assistant", finish: "tool-calls", time: { created: 200 } }, parts: [{ type: "tool", state: { status: "running" } }] },
+        ],
+        now: 10_000,
+      })
+      injector.queueBatch(record, createBatch(32))
+
+      // when
+      await injector.flushMonitor(record.id)
+
+      // then
+      expect(calls).toHaveLength(0)
+    })
+
     test("#when it dispatches #then it carries the parent's agent and model, so the parent's turn keeps them", async () => {
       // given
       const record = createRecord()

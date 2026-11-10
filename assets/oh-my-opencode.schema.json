@@ -9408,6 +9408,11 @@
           "minimum": 0,
           "maximum": 9007199254740991
         },
+        "busyParentWakeDelayMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
         "recoverySweepMinAgeMs": {
           "type": "number",
           "minimum": 3600000

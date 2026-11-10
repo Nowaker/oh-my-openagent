@@ -90,6 +90,7 @@ export class MonitorManager implements MonitorManagerContract {
       this.options.pluginContext,
       record,
       (monitorId, delayMs, operation) => this.scheduleFlush(monitorId, delayMs, operation),
+      this.options.busyParentWakeDelayMs,
     )
     const state = createMonitorState({
       record,

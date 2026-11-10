@@ -105,6 +105,9 @@ export function createManagers(args: {
     ? deps.createMonitorManagerFn({
       pluginContext: { client: ctx.client, directory: ctx.directory },
       config: pluginConfig.monitor,
+      ...(pluginConfig.background_task?.busyParentWakeDelayMs !== undefined
+        ? { busyParentWakeDelayMs: pluginConfig.background_task.busyParentWakeDelayMs }
+        : {}),
     })
     : undefined
 
