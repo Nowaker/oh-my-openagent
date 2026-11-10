@@ -33,6 +33,7 @@ export async function executeSyncTask(
     | Awaited<ReturnType<ExecutorContext["manager"]["reserveSubagentSpawn"]>>
     | undefined
   let concurrencyAcquired = false
+  let handedOff = false
   const concurrencyModel = categoryModel && typeof categoryModel.providerID === "string" && typeof categoryModel.modelID === "string"
     ? `${categoryModel.providerID}/${categoryModel.modelID}`
     : typeof agentToUse === "string" ? agentToUse : "default"
@@ -147,6 +148,9 @@ export async function executeSyncTask(
         publishSyncMetadata,
         cleanupRetrySession,
         setSyncSessionID,
+        onHandedOff: () => {
+          handedOff = true
+        },
       })
     } finally {
       if (toastManager && taskId !== undefined) {
@@ -164,7 +168,8 @@ export async function executeSyncTask(
       category: args.category,
     })
   } finally {
-    if (syncSessionID) {
+    // A child handed to the background keeps running; the background manager owns its cleanup now.
+    if (syncSessionID && !handedOff) {
       cleanupSyncSessionSideEffects(syncSessionID, executorCtx)
       handedBackSyncSessions.add(syncSessionID)
 

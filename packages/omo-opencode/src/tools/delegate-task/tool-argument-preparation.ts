@@ -33,7 +33,9 @@ export async function prepareDelegateTaskArgs(args: Record<string, unknown>, ctx
 
   // Background is the default: a foreground child blocks the parent's turn for as long as it runs.
   const runInBackground = args.run_in_background !== false && args.run_in_background !== "false"
-  const wake = args.wake === "none" ? "none" : "each"
+  const wake = args.wake === "none" || args.wake === "each" ? args.wake : undefined
+  const items = parseItems(args.items)
+  const split = typeof args.split === "number" && Number.isFinite(args.split) && args.split >= 1 ? Math.floor(args.split) : undefined
 
   let loadSkills = args.load_skills
   if (typeof loadSkills === "string") {
@@ -84,9 +86,27 @@ export async function prepareDelegateTaskArgs(args: Record<string, unknown>, ctx
     descriptionSource,
     prompt,
     run_in_background: runInBackground,
-    wake,
+    ...(wake ? { wake } : {}),
+    ...(items ? { items } : {}),
+    ...(split ? { split } : {}),
     task_id: taskID,
     command,
     load_skills: normalizedLoadSkills,
   }
+}
+
+/** A fan-out list: an array of strings, or the same as a JSON string (some providers stringify array arguments). */
+function parseItems(value: unknown): string[] | undefined {
+  let parsed = value
+  if (typeof value === "string") {
+    try {
+      parsed = JSON.parse(value)
+    } catch (error) {
+      if (!(error instanceof Error)) throw error
+      return undefined
+    }
+  }
+  if (!Array.isArray(parsed)) return undefined
+  const items = parsed.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+  return items.length > 0 ? items : undefined
 }

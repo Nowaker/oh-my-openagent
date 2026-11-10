@@ -150,10 +150,25 @@ describe("waitForCompletion", () => {
       const { run, restore } = runHourLongChild(0)
       try {
         // then
-        await expect(run).resolves.toBeUndefined()
+        await expect(run).resolves.toBe("completed")
       } finally {
         restore()
       }
     })
+  })
+
+  test("#given the handoff signal has fired #when waiting #then it returns handed-off and leaves the child alone", async () => {
+    // given
+    const status = mock(async () => ({ data: { "ses-busy": { type: "busy" } } }))
+    const messages = mock(async () => ({ data: [] }))
+    const controller = new AbortController()
+    controller.abort()
+
+    // when
+    const result = await waitForCompletion("ses-busy", createToolContext(), createContext({ status, messages }), 60_000, controller.signal)
+
+    // then
+    expect(result).toBe("handed-off")
+    expect(status).not.toHaveBeenCalled()
   })
 })

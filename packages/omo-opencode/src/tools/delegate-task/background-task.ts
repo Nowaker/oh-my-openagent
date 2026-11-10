@@ -135,6 +135,7 @@ export async function executeBackgroundTask(
         ? migrateToolsToPermission(categoryModel.tools)
         : undefined,
       wake: args.wake,
+      groupId: args.groupId,
     })
 
     // OpenCode TUI's `Task` tool UI calculates toolcalls by looking up

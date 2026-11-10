@@ -20,11 +20,16 @@ import { processMessages } from "./message-processor"
 import { waitForCompletion } from "./completion-poller"
 import { getFirstFallbackModel } from "../../agents/builtin-agents/model-resolution"
 
-function createSyncExecutorDeps(modelFallbackControllerAccessor?: ModelFallbackControllerAccessor, waitTimeoutMs?: number) {
+function createSyncExecutorDeps(
+  modelFallbackControllerAccessor?: ModelFallbackControllerAccessor,
+  waitTimeoutMs?: number,
+  handoff?: { readonly manager: BackgroundManager; readonly ms: number | undefined },
+) {
   return {
     createOrGetSession,
     waitForCompletion: (...args: Parameters<typeof waitForCompletion>) =>
-      waitForCompletion(args[0], args[1], args[2], args[3] ?? waitTimeoutMs),
+      waitForCompletion(args[0], args[1], args[2], args[3] ?? waitTimeoutMs, args[4]),
+    ...(handoff ? { handoff } : {}),
     processMessages,
     setSessionFallbackChain: (sessionID: string, fallbackChain: FallbackEntry[] | undefined) => {
       modelFallbackControllerAccessor?.setSessionFallbackChain(sessionID, fallbackChain)
@@ -118,6 +123,7 @@ export function createCallOmoAgent(
   userCategories?: CategoriesConfig,
   modelFallbackControllerAccessor?: ModelFallbackControllerAccessor,
   syncPollTimeoutMs?: number,
+  foregroundHandoffMs?: number,
 ): ToolDefinition {
   const agentDescriptions = ALLOWED_AGENTS.map(
     (name) => `- ${name}: Specialized agent for ${name} tasks`,
@@ -202,7 +208,7 @@ export function createCallOmoAgent(
             args,
             toolCtx,
             ctx,
-            createSyncExecutorDeps(modelFallbackControllerAccessor, syncPollTimeoutMs),
+            createSyncExecutorDeps(modelFallbackControllerAccessor, syncPollTimeoutMs, { manager: backgroundManager, ms: foregroundHandoffMs }),
             fallbackChain,
             spawnReservation,
             resolvedModel,
@@ -217,7 +223,7 @@ export function createCallOmoAgent(
         args,
         toolCtx,
         ctx,
-        createSyncExecutorDeps(modelFallbackControllerAccessor, syncPollTimeoutMs),
+        createSyncExecutorDeps(modelFallbackControllerAccessor, syncPollTimeoutMs, { manager: backgroundManager, ms: foregroundHandoffMs }),
         fallbackChain,
         undefined,
         resolvedModel,

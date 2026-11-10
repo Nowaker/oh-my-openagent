@@ -18,6 +18,7 @@ export interface ExecutorContext {
   onSyncSessionCreated?: (event: { sessionID: string; parentID: string; title: string }) => Promise<void>
   syncPollTimeoutMs?: number
   syncMaxAssistantTurns?: number
+  foregroundHandoffMs?: number
   taskCleanupDelayMs?: number
 }
 

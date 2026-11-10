@@ -31,6 +31,8 @@ export const BackgroundTaskConfigSchema = z.object({
   syncPollTimeoutMs: killLimitMs(60000).optional(),
   /** Abort a foreground task child after this many assistant turns, as a runaway loop (default: 300, 0 = no cap). */
   syncMaxAssistantTurns: z.number().int().min(0).optional(),
+  /** Hand a foreground (run_in_background=false) task or call_omo_agent child that is still running after this long to the background, in milliseconds: the child keeps running under the same task id and its completion notice wakes the parent (default: 0 = never; the parent waits for it). */
+  foregroundHandoffMs: z.number().int().min(0).optional(),
   /** Minimum age of a background-owners recovery file before the hourly sweep examines it, in milliseconds (default: 86400000 = 24 hours, minimum: 3600000 = 1 hour). The sweep removes a record only when its owner is dead and its child session is gone, plus abandoned lock and temp files. */
   recoverySweepMinAgeMs: z.number().min(3600000).optional(),
   /** Maximum tool calls per subagent task before circuit breaker triggers (default: 200, minimum: 10). Prevents runaway loops from burning unlimited tokens. */

@@ -483,6 +483,7 @@ Control parallel agent execution and concurrency limits. `background_task` (came
 | `taskCleanupDelayMs`        | `600000`  | Delay before terminal task and sync-child runtime state leaves memory; session history is retained (min: 60000) |
 | `syncPollTimeoutMs`         | `1800000` | Abort a foreground (`run_in_background=false`) `task` child after this long without observable activity; a foreground `call_omo_agent` waits at most this long in total, 5 minutes when unset (min: 60000, `0`: never) |
 | `syncMaxAssistantTurns`     | `300`     | Abort a foreground `task` child after this many assistant turns, as a runaway loop (`0`: no cap) |
+| `foregroundHandoffMs`       | `0`       | Hand a foreground `task` or `call_omo_agent` child still running after this long to the background: it keeps running under the same task id, the call returns at once, and its completion notice wakes the parent (`0`: never, the parent waits) |
 | `recoverySweepMinAgeMs`     | `86400000` | Age before the hourly sweep examines a background-owners recovery file; it removes only records whose owner is dead and child session is gone (min: 3600000) |
 | `maxToolCalls`              | `4000`    | Maximum tool calls per subagent task (min: 10)                        |
 | `circuitBreaker`            | -         | Circuit-breaker object: `enabled` (default `true`), `maxToolCalls`, `consecutiveThreshold` |
@@ -492,6 +493,8 @@ Priority: `modelConcurrency` > `providerConcurrency` > `defaultConcurrency`
 Every limit above that kills or drops a running task takes `0` to turn it off, for subtasks that legitimately run for hours. `maxToolCalls` and `circuitBreaker` stop runaway loops by tool count, not by time.
 
 A `task` call runs in the background unless it passes `run_in_background=false`. Each finished background task sends its parent one notice with its final answer inline (cut at 6000 characters, with a pointer to `background_output` for the rest). `wake` on the `task` call decides when the parent hears it: `"each"` (default) starts a parent turn for every finished task, and tasks finishing close together share one turn; `"none"` starts no turn, and the notice waits for the parent's next turn.
+
+`items` (plus optional `split`) on a `task` call fans one prompt out over several background children: each gets the prompt plus its contiguous slice of `items` (`split: 2` over ten items gives 1-5 and 6-10; default one child per item), and all share the call's category or subagent type and skills. Unless the call passes `wake`, the children report once, together, in one notice carrying every child's result, when the last of them finishes.
 
 The OpenCode edition's orchestration key (`sisyphus_agent`) and its file-based task storage options are documented on the legacy page linked from [Agents](#agents).
 

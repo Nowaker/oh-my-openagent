@@ -82,8 +82,10 @@ export function buildBackgroundTaskNotificationText(input: {
   remainingCount: number
   result?: BackgroundTaskNotificationResult
   usage?: BackgroundTaskNotificationUsage
+  /** A fan-out member: its notice is delivered with the rest of its group, not on its own. */
+  grouped?: boolean
 }): string {
-  const { task, duration, statusText, allComplete, remainingCount, result, usage } = input
+  const { task, duration, statusText, allComplete, remainingCount, result, usage, grouped } = input
   const status = statusText.toLowerCase()
   const description = task.description || task.id
 
@@ -103,9 +105,11 @@ export function buildBackgroundTaskNotificationText(input: {
   ]
 
   const timeline = formatAttemptTimeline(task)
-  const remaining = allComplete
-    ? "No other background task of yours is still running."
-    : `${remainingCount} other background task${remainingCount === 1 ? " is" : "s are"} still running; each one reports on its own. Do not poll.`
+  const remaining = grouped
+    ? "Reported together with the rest of its fan-out group."
+    : allComplete
+      ? "No other background task of yours is still running."
+      : `${remainingCount} other background task${remainingCount === 1 ? " is" : "s are"} still running; each one reports on its own. Do not poll.`
   const readMore = result?.truncated
     ? `The result above is cut short; read all of it with \`background_output(task_id="${task.id}")\`.`
     : `Full transcript: \`background_output(task_id="${task.id}", full_session=true)\`.`
@@ -123,4 +127,15 @@ ${envelope.join("\n")}
 ${timeline ? `${timeline}\n` : ""}${remaining}
 ${readMore}${continueHint}${failureHint}
 </system-reminder>`
+}
+
+/** One notice for a whole fan-out group: a header, then every member's own notice in finishing order. */
+export function buildTaskGroupNotificationText(groupId: string, notices: readonly string[]): string {
+  return `<system-reminder>
+[BACKGROUND TASK GROUP COMPLETE]
+${TASK_NOTIFICATION_PREAMBLE}
+All ${notices.length} tasks of fan-out group \`${groupId}\` have finished; each one's notice follows.
+</system-reminder>
+
+${notices.join("\n\n")}`
 }

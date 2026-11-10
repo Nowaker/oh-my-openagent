@@ -11,6 +11,8 @@ import type { FallbackEntry } from "../../shared/model-requirements"
 import type { DelegatedModelConfig } from "../../shared/model-resolution-types"
 import { applySessionPromptParams } from "../../shared/session-prompt-params-helpers"
 import { deleteSessionTools, setSessionTools } from "../../shared/session-tools-store"
+import type { BackgroundManager } from "../../features/background-agent"
+import { handOffSyncTask, startForegroundHandoffTimer } from "../delegate-task/sync-foreground-handoff"
 import { waitForCompletion } from "./completion-poller"
 import { processMessages } from "./message-processor"
 import { createOrGetSession } from "./session-creator"
@@ -30,6 +32,8 @@ type ExecuteSyncDeps = {
   processMessages: typeof processMessages
   setSessionFallbackChain: (sessionID: string, fallbackChain: FallbackEntry[] | undefined) => void
   clearSessionFallbackChain: (sessionID: string) => void
+  /** Hands a child still running after `ms` to this manager instead of waiting on (`background_task.foregroundHandoffMs`). */
+  handoff?: { readonly manager: BackgroundManager; readonly ms: number | undefined }
 }
 
 type SpawnReservation = {
@@ -89,6 +93,7 @@ export async function executeSync(
   let sessionID: string | undefined
   let createdSessionForExecution = false
   let appliedFallbackChain = false
+  let handedOff = false
 
   try {
     const session = await deps.createOrGetSession(args, toolContext, ctx, model)
@@ -178,7 +183,23 @@ export async function executeSync(
       return `Error: Failed to send prompt: ${errorMessage}\n\n<task_metadata>\nsession_id: ${sessionID}\n</task_metadata>`
     }
 
-    await deps.waitForCompletion(sessionID, toolContext, ctx)
+    const startTime = new Date()
+    const handoffTimer = startForegroundHandoffTimer(deps.handoff?.ms)
+    const waited = await deps.waitForCompletion(sessionID, toolContext, ctx, undefined, handoffTimer.signal)
+      .finally(handoffTimer.cancel)
+    if (waited === "handed-off" && deps.handoff) {
+      handedOff = true
+      return await handOffSyncTask({
+        manager: deps.handoff.manager,
+        taskId: `call_${sessionID.slice(0, 8)}`,
+        sessionID,
+        parentSessionID: toolContext.sessionID,
+        parentAgent: toolContext.agent,
+        args: { description: args.description },
+        agentToUse: normalizedSubagentType,
+        startTime,
+      })
+    }
 
     const responseText = await deps.processMessages(sessionID, ctx)
 
@@ -187,15 +208,16 @@ export async function executeSync(
     spawnReservation?.rollback()
     throw error
   } finally {
-    if (sessionID && appliedFallbackChain) {
+    // A child handed to the background keeps running; the background manager cleans up after it.
+    if (!handedOff && sessionID && appliedFallbackChain) {
       deps.clearSessionFallbackChain(sessionID)
     }
 
-    if (sessionID) {
+    if (!handedOff && sessionID) {
       clearDelegatedChildSessionBootstrap(sessionID)
     }
 
-    if (sessionID && createdSessionForExecution) {
+    if (!handedOff && sessionID && createdSessionForExecution) {
       subagentSessions.delete(sessionID)
       syncSubagentSessions.delete(sessionID)
       deleteSessionTools(sessionID)

@@ -16,7 +16,9 @@ export async function waitForCompletion(
   },
   ctx: PluginInput,
   timeoutMs: number = DEFAULT_CALL_OMO_AGENT_WAIT_MS,
-): Promise<void> {
+  /** Aborts when the child is to be handed to the background: the wait returns "handed-off" and leaves it running. */
+  handoffSignal?: AbortSignal,
+): Promise<"completed" | "handed-off"> {
   log(`[call_omo_agent] Polling for completion...`)
 
   const POLL_INTERVAL_MS = 500
@@ -32,6 +34,10 @@ export async function waitForCompletion(
     if (toolContext.abort?.aborted) {
       log(`[call_omo_agent] Aborted by user`)
       throw new Error("Task aborted.")
+    }
+    if (handoffSignal?.aborted) {
+      log(`[call_omo_agent] Handing the child to the background`)
+      return "handed-off"
     }
 
     await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS))
@@ -78,4 +84,5 @@ export async function waitForCompletion(
     log(`[call_omo_agent] Timeout reached`)
     throw new Error(`Agent task timed out after ${Math.round(MAX_POLL_TIME_MS / 60000)} minutes (background_task.syncPollTimeoutMs).`)
   }
+  return "completed"
 }
