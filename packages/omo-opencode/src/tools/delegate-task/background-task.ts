@@ -1,3 +1,4 @@
+import { isForkSubagent } from "./fork-subagent"
 import type { DelegateTaskArgs, ToolContextWithMetadata, DelegatedModelConfig } from "./types"
 import type { ExecutorContext, ParentContext } from "./executor-types"
 import type { FallbackEntry } from "../../shared/model-requirements"
@@ -136,6 +137,7 @@ export async function executeBackgroundTask(
         : undefined,
       wake: args.wake,
       groupId: args.groupId,
+      ...(isForkSubagent(args.subagent_type) ? { forkFromParent: true } : {}),
     })
 
     // OpenCode TUI's `Task` tool UI calculates toolcalls by looking up

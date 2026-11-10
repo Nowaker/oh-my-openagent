@@ -693,6 +693,13 @@ with the exit code, the end of the output and the output file. A command
 stopped through `background_cancel` sends no exit notice. The runtime limit is
 opencode's `bash_background.timeout`, not an OMO setting.
 
+`task(subagent_type: "fork")` starts the child from a copy of the calling
+session instead of an empty one, on the caller's own agent and model, so the
+prompt need not repeat the context. The copy leaves out the caller's
+still-running turn, is a child of the caller titled
+`<description> (@<agent> fork)`, and reports back like any other task. It needs
+an opencode whose `session.fork` takes `parentID`, `title` and `permission`.
+
 `task` is the broader delegation path for category routing, direct
 `subagent_type` calls, skills, and sync/background execution.
 `call_omo_agent` is the narrow compatibility path for the small

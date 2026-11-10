@@ -1,3 +1,4 @@
+import { isForkSubagent } from "./fork-subagent"
 import { handedBackSyncSessions, subagentSessions } from "../../features/claude-code-session-state"
 import { getTaskToastManager } from "../../features/task-toast-manager"
 import type { ModelFallbackInfo } from "../../features/task-toast-manager/types"
@@ -55,6 +56,7 @@ export async function executeSyncTask(
       defaultDirectory: directory,
       category: args.category,
       categoryModel,
+      forkFromParent: isForkSubagent(args.subagent_type),
     })
 
     if (!createSessionResult.ok) {

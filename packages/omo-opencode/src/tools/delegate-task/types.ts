@@ -44,6 +44,11 @@ export interface OmoAgentClient {
       readonly query?: { readonly directory?: string }
     }) => Promise<SessionCreateResult>
     readonly get: (input: SessionPathInput) => Promise<SessionGetResult>
+    readonly fork?: (input: {
+      readonly path: { readonly id: string }
+      readonly body: Record<string, unknown>
+      readonly query?: { readonly directory?: string }
+    }) => Promise<SessionCreateResult>
     readonly messages: (input: SessionPathInput | (SessionPathInput & { readonly query?: SessionMessagesQuery })) => Promise<unknown>
     readonly prompt?: (input: SessionPromptInput) => Promise<unknown>
     readonly promptAsync?: (input: SessionPromptInput) => Promise<unknown>

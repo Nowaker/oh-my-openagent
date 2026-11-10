@@ -1,3 +1,4 @@
+import { isForkSubagent } from "./fork-subagent"
 import type { TaskToastManager } from "../../features/task-toast-manager/manager"
 import type { ModelFallbackInfo } from "../../features/task-toast-manager/types"
 import type { ModelFallbackState } from "../../hooks/model-fallback/hook"
@@ -207,6 +208,7 @@ export async function runSyncTaskLoop(input: SyncTaskRunnerInput): Promise<strin
         defaultDirectory: directory,
         category: args.category,
         categoryModel: nextFallbackModel,
+        forkFromParent: isForkSubagent(args.subagent_type),
       })
       if (!retrySessionResult.ok) {
         return retrySessionResult.error

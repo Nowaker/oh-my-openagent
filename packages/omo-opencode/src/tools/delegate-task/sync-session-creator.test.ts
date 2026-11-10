@@ -63,4 +63,59 @@ describe("createSyncSession", () => {
     const body = createCalls[0]?.body as Record<string, unknown> | undefined
     expect(body?.title).toBe("[quick] test task (@explore subagent)")
   })
+
+  test("#given forkFromParent #when the child is created #then it is a fork of the parent with the question tool denied", async () => {
+    // given
+    const forkCalls: Array<Record<string, unknown>> = []
+    const createCalls: Array<Record<string, unknown>> = []
+    const client = {
+      session: {
+        get: async () => ({ data: { directory: "/parent" } }),
+        create: async (input: Record<string, unknown>) => {
+          createCalls.push(input)
+          return { data: { id: "ses_created" } }
+        },
+        fork: async (input: Record<string, unknown>) => {
+          forkCalls.push(input)
+          return { data: { id: "ses_fork" } }
+        },
+      },
+    }
+
+    // when
+    const result = await createSyncSession(client as never, {
+      parentSessionID: "ses_parent",
+      agentToUse: "sisyphus",
+      description: "test task",
+      defaultDirectory: "/fallback",
+      forkFromParent: true,
+    })
+
+    // then
+    expect(result).toEqual({ ok: true, sessionID: "ses_fork", parentDirectory: "/parent" })
+    expect(createCalls).toHaveLength(0)
+    expect(forkCalls[0]?.body).toEqual({
+      unsettled: "exclude",
+      parentID: "ses_parent",
+      title: "test task (@sisyphus fork)",
+      permission: [{ permission: "question", action: "deny", pattern: "*" }],
+    })
+  })
+
+  test("#given forkFromParent on an opencode without session.fork #when the child is created #then it reports why", async () => {
+    // given
+    const client = { session: { get: async () => ({ data: { directory: "/parent" } }), create: async () => ({ data: { id: "x" } }) } }
+
+    // when
+    const result = await createSyncSession(client as never, {
+      parentSessionID: "ses_parent",
+      agentToUse: "sisyphus",
+      description: "test task",
+      defaultDirectory: "/fallback",
+      forkFromParent: true,
+    })
+
+    // then
+    expect(result).toEqual({ ok: false, error: "this opencode cannot fork a session" })
+  })
 })

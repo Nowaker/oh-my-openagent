@@ -147,6 +147,8 @@ export interface LaunchInput {
   userPermission?: Record<string, "ask" | "allow" | "deny">
   wake?: BackgroundTaskWake
   groupId?: string
+  /** Create the child as a copy of the parent session (`task(subagent_type: "fork")`) instead of an empty one. */
+  forkFromParent?: boolean
 }
 
 export interface ResumeInput {

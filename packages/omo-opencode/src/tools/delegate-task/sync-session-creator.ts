@@ -1,6 +1,7 @@
 import type { OpencodeClient } from "./types"
 import type { DelegatedModelConfig } from "../../shared/model-resolution-types"
 import { QUESTION_DENIED_SESSION_PERMISSION } from "../../shared/question-denied-session-permission"
+import { forkParentAsChildSession } from "../../features/background-agent/fork-child-session"
 
 export async function createSyncSession(
   client: OpencodeClient,
@@ -11,10 +12,25 @@ export async function createSyncSession(
     defaultDirectory: string
     category?: string
     categoryModel?: DelegatedModelConfig
+    forkFromParent?: boolean
   }
 ): Promise<{ ok: true; sessionID: string; parentDirectory: string } | { ok: false; error: string }> {
   const parentSession = await client.session.get({ path: { id: input.parentSessionID } }).catch(() => null)
   const parentDirectory = parentSession?.data?.directory ?? input.defaultDirectory
+
+  if (input.forkFromParent) {
+    try {
+      const sessionID = await forkParentAsChildSession(client, {
+        parentSessionID: input.parentSessionID,
+        title: `${input.description} (@${input.agentToUse} fork)`,
+        directory: parentDirectory,
+        permission: QUESTION_DENIED_SESSION_PERMISSION,
+      })
+      return { ok: true, sessionID, parentDirectory }
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    }
+  }
 
   const createResult = await client.session.create({
     body: {

@@ -1,3 +1,4 @@
+import { buildForkTaskPrompt, isForkSubagent, readParentModel, resolveForkExecution } from "./fork-subagent"
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
 import type { DelegatedModelConfig, ToolContextWithMetadata, DelegateTaskToolOptions } from "./types"
 import { log } from "../../shared/logger"
@@ -85,7 +86,7 @@ const delegateTaskArgsSchema = {
     .optional()
     .describe("Fan-out: how many children share items (default: one per item). split=2 over 10 items gives 1-5 and 6-10."),
   category: tool.schema.string().optional().describe("REQUIRED if subagent_type not provided. Do NOT provide both category and subagent_type."),
-  subagent_type: tool.schema.string().optional().describe("REQUIRED if category not provided. Do NOT provide both category and subagent_type."),
+  subagent_type: tool.schema.string().optional().describe("REQUIRED if category not provided. Do NOT provide both category and subagent_type. \"fork\": the child starts from a copy of this conversation, on your own agent and model, so the prompt need not repeat context."),
   task_id: tool.schema
     .string()
     .optional()
@@ -212,6 +213,16 @@ export function createDelegateTask(options: DelegateTaskToolOptions): ToolDefini
           })
           return executeUnstableAgentTask(delegateTaskArgs, ctx, options, parentContext, agentToUse, categoryModel, systemContent, actualModel)
         }
+      } else if (isForkSubagent(delegateTaskArgs.subagent_type)) {
+        const resolution = resolveForkExecution(
+          parentContext.model ? parentContext : { ...parentContext, model: await readParentModel(options.client, parentContext.sessionID) },
+        )
+        if (resolution.error !== undefined) {
+          return resolution.error
+        }
+        agentToUse = resolution.agentToUse
+        categoryModel = resolution.categoryModel
+        delegateTaskArgs.prompt = buildForkTaskPrompt(delegateTaskArgs.prompt)
       } else {
         const resolution = await resolveSubagentExecution(delegateTaskArgs, modelOptions, parentContext.agent, categoryExamples)
         if (resolution.error) {

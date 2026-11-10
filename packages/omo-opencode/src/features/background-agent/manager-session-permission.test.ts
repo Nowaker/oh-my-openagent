@@ -310,4 +310,57 @@ describe("BackgroundManager child session directory", () => {
     expect(promptCalls).toHaveLength(1)
     expect(promptCalls[0]?.query).toEqual({ directory: "/parent-fix-1" })
   })
+
+  test("#given forkFromParent #when the task starts #then the child is a fork of the parent, with the permission rules, and is prompted on its id", async () => {
+    // given
+    const forkCalls: Array<Record<string, unknown>> = []
+    const createCalls: Array<Record<string, unknown>> = []
+    const promptCalls: Array<Record<string, unknown>> = []
+    const promptStarted = Promise.withResolvers<void>()
+    const client = {
+      session: {
+        get: async () => ({ data: { directory: "/parent" } }),
+        create: async (input: Record<string, unknown>) => {
+          createCalls.push(input)
+          return { data: { id: "ses_created" } }
+        },
+        fork: async (input: Record<string, unknown>) => {
+          forkCalls.push(input)
+          return { data: { id: "ses_fork" } }
+        },
+        promptAsync: async (input: Record<string, unknown>) => {
+          promptCalls.push(input)
+          promptStarted.resolve()
+          return {}
+        },
+        abort: async () => ({}),
+      },
+    }
+    const manager = new BackgroundManager({ pluginContext: unsafeTestValue<PluginInput>({ client, directory: tmpdir() }) })
+    const sessionPermission = [{ permission: "question", action: "deny" as const, pattern: "*" }]
+
+    // when
+    const task = await manager.launch({
+      description: "Review diff",
+      prompt: "Do something",
+      agent: "sisyphus",
+      parentSessionId: "ses_parent",
+      parentMessageId: "msg_parent",
+      sessionPermission,
+      forkFromParent: true,
+    })
+    await promptStarted.promise
+    const childSessionID = manager.getTask(task.id)?.sessionId
+    await manager.shutdown()
+
+    // then
+    expect(createCalls).toHaveLength(0)
+    expect(forkCalls).toEqual([{
+      path: { id: "ses_parent" },
+      body: { unsettled: "exclude", parentID: "ses_parent", title: "Review diff (@sisyphus fork)", permission: sessionPermission },
+      query: { directory: "/parent" },
+    }])
+    expect(promptCalls[0]?.path).toEqual({ id: "ses_fork" })
+    expect(childSessionID).toBe("ses_fork")
+  })
 })

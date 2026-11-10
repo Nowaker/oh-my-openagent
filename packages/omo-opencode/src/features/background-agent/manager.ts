@@ -102,6 +102,7 @@ import {
 } from "./session-stream-activity"
 import { isActiveSessionStatus, isTerminalSessionStatus } from "./session-status-classifier"
 import { buildFallbackBody, FALLBACK_AGENT, isAgentNotFoundError } from "./spawner"
+import { forkParentAsChildSession } from "./fork-child-session"
 import { invokeTmuxSessionCreatedCallback } from "./spawner/tmux-callback-invoker"
 import {
   createSubagentDepthLimitError,
@@ -838,7 +839,20 @@ export class BackgroundManager {
     const childDirectory = input.cwd ?? parentDirectory
     log(`[background-agent] Parent dir: ${parentSession?.data?.directory}, using: ${childDirectory}`)
 
-    const createResult = await this.client.session.create({
+    const forkChildSession = async () => ({
+      data: {
+        id: await forkParentAsChildSession(this.client, {
+          parentSessionID: input.parentSessionId,
+          title: `${input.description} (@${input.agent} fork)`,
+          directory: childDirectory,
+          ...(input.sessionPermission ? { permission: input.sessionPermission } : {}),
+        }),
+      },
+      error: undefined,
+    })
+    const createResult = input.forkFromParent
+      ? await forkChildSession()
+      : await this.client.session.create({
       body: {
         parentID: input.parentSessionId,
         title: `${input.category ? `[${input.category}] ` : ""}${input.description} (@${input.agent} subagent)`,
