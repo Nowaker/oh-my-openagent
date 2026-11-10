@@ -148,14 +148,24 @@ oqa_start_server() {
 }
 
 # Teardown everything the helpers created. Safe to call multiple times.
+oqa_process_tree() {
+  local child
+  printf '%s\n' "$1"
+  for child in $(pgrep -P "$1" 2>/dev/null); do
+    oqa_process_tree "$child"
+  done
+}
+
 oqa_cleanup() {
+  local s p d
   if [ -n "${OQA_SERVER_PID:-}" ]; then
-    kill "$OQA_SERVER_PID" 2>/dev/null || true
+    local tree
+    tree="$(oqa_process_tree "$OQA_SERVER_PID")"
+    for p in $tree; do kill "$p" 2>/dev/null || true; done
     sleep 0.3
-    kill -0 "$OQA_SERVER_PID" 2>/dev/null && kill -9 "$OQA_SERVER_PID" 2>/dev/null || true
+    for p in $tree; do kill -0 "$p" 2>/dev/null && kill -9 "$p" 2>/dev/null || true; done
     OQA_SERVER_PID=""
   fi
-  local s p d
   for s in "${OQA_TMUX_SESSIONS[@]:-}"; do
     [ -n "$s" ] && tmux kill-session -t "$s" 2>/dev/null || true
   done
@@ -250,6 +260,26 @@ oqa__self_check() {
     oqa_pass "isolated HOME preserves HOME-based opencode shim"
   else
     oqa_log "FAIL: HOME-based opencode shim returned '$shim_result'"; fails=$((fails+1))
+  fi
+
+  # A script that wraps the server in a subshell, `(cd "$OQA_PROJ" && opencode
+  # serve ...) &`, records the subshell as OQA_SERVER_PID. Cleanup must take
+  # the server under it too, or the server outlives the script.
+  local tree_marker server_pid
+  tree_marker="$(mktemp -t oqa-tree.XXXXXX)"
+  bash -c '
+    . "'"${BASH_SOURCE[0]}"'"
+    (cd /tmp && sh -c "echo \$\$ > \"\$1\"; exec sleep 3171" _ "'"$tree_marker"'" > /dev/null 2>&1; true) &
+    OQA_SERVER_PID=$!
+    for _ in $(seq 1 50); do [ -s "'"$tree_marker"'" ] && break; sleep 0.1; done
+  '
+  server_pid="$(cat "$tree_marker" 2>/dev/null)"
+  rm -f "$tree_marker"
+  if [ -n "$server_pid" ] && ! kill -0 "$server_pid" 2>/dev/null; then
+    oqa_pass "cleanup kills a server started under a wrapper subshell"
+  else
+    oqa_log "FAIL: server '$server_pid' under a wrapper subshell survived cleanup"; fails=$((fails+1))
+    [ -n "$server_pid" ] && kill -9 "$server_pid" 2>/dev/null
   fi
 
   if [ "$fails" -eq 0 ]; then
