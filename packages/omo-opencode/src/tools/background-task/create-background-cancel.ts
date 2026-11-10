@@ -1,15 +1,35 @@
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
 import type { BackgroundManager } from "../../features/background-agent"
+import type { MonitorManager } from "../../features/monitor/types"
 import type { BackgroundCancelArgs } from "./types"
 import type { BackgroundCancelClient } from "./clients"
 import { BACKGROUND_CANCEL_DESCRIPTION } from "./constants"
 
-export function createBackgroundCancel(manager: BackgroundManager, _client: BackgroundCancelClient): ToolDefinition {
+/** Stops one monitor, or explains why it is not running; undefined when no monitor has that id. */
+async function cancelMonitor(monitorManager: MonitorManager | undefined, id: string): Promise<string | undefined> {
+  const record = monitorManager?.get(id)
+  if (!monitorManager || !record) return undefined
+  if (record.status !== "running" && record.status !== "starting") {
+    return `[ERROR] Cannot stop monitor: current status is "${record.status}".`
+  }
+  await monitorManager.stop(id)
+  return `Monitor stopped
+
+Monitor ID: ${record.id}
+Description: ${record.label}
+Events delivered: ${record.eventsDelivered}${record.outputFile ? `\nOutput file: ${record.outputFile}` : ""}`
+}
+
+export function createBackgroundCancel(
+  manager: BackgroundManager,
+  _client: BackgroundCancelClient,
+  monitorManager?: MonitorManager,
+): ToolDefinition {
   return tool({
     description: BACKGROUND_CANCEL_DESCRIPTION,
     args: {
-      taskId: tool.schema.string().optional().describe("Task ID to cancel (required if all=false)"),
-      all: tool.schema.boolean().optional().describe("Cancel all running background tasks (default: false)"),
+      taskId: tool.schema.string().optional().describe("Task or monitor ID to stop (required if all=false)"),
+      all: tool.schema.boolean().optional().describe("Stop all running background tasks and monitors of this session (default: false)"),
     },
     async execute(args: BackgroundCancelArgs, toolContext) {
       try {
@@ -18,9 +38,17 @@ export function createBackgroundCancel(manager: BackgroundManager, _client: Back
         if (cancelAll) {
           const tasks = manager.getAllDescendantTasks(toolContext.sessionID)
           const cancellableTasks = tasks.filter((t: { status: string }) => t.status === "running" || t.status === "pending")
+          const runningMonitors = (monitorManager?.list(toolContext.sessionID) ?? [])
+            .filter((record) => record.status === "running" || record.status === "starting")
+          for (const record of runningMonitors) {
+            await monitorManager?.stop(record.id)
+          }
+          const monitorsLine = runningMonitors.length > 0
+            ? `Stopped ${runningMonitors.length} monitor(s): ${runningMonitors.map((record) => `\`${record.id}\``).join(", ")}\n\n`
+            : ""
 
           if (cancellableTasks.length === 0) {
-            return `No running or pending background tasks to cancel.`
+            return monitorsLine ? monitorsLine.trimEnd() : `No running or pending background tasks to cancel.`
           }
 
           const cancelledInfo: Array<{ id: string; description: string; status: string; sessionID?: string }> = []
@@ -62,7 +90,7 @@ Continuable sessions:
 ${resumableTasks.map((t) => `- \`${t.sessionID}\` (${t.description})`).join("\n")}`
               : ""
 
-          return `Cancelled ${cancelledInfo.length} background task(s):
+          return `${monitorsLine}Cancelled ${cancelledInfo.length} background task(s):
 
 | Task ID | Description | Status | Session ID |
 |---------|-------------|--------|------------|
@@ -77,7 +105,8 @@ ${resumeSection}`
 
         const task = manager.getTask(taskId)
         if (!task) {
-          return `[ERROR] Task not found: ${taskId}`
+          const monitorResult = await cancelMonitor(monitorManager, taskId)
+          return monitorResult ?? `[ERROR] Task not found: ${taskId}`
         }
 
         if (task.status !== "running" && task.status !== "pending") {

@@ -17,6 +17,7 @@ import {
 } from "./background-task"
 
 import type { PluginInput, ToolDefinition } from "@opencode-ai/plugin"
+import type { MonitorManager } from "../features/monitor/types"
 import type { BackgroundManager } from "../features/background-agent"
 
 type OpencodeClient = PluginInput["client"]
@@ -34,11 +35,15 @@ export {
 export { createHashlineEditTool } from "./hashline-edit"
 export { createTeamSendMessageTool } from "../features/team-mode/tools/messaging"
 
-export function createBackgroundTools(manager: BackgroundManager, client: OpencodeClient): Record<string, ToolDefinition> {
+export function createBackgroundTools(
+  manager: BackgroundManager,
+  client: OpencodeClient,
+  monitorManager?: MonitorManager,
+): Record<string, ToolDefinition> {
   const outputManager: BackgroundOutputManager = manager
   const cancelClient: BackgroundCancelClient = client
   return {
     background_output: createBackgroundOutput(outputManager, client),
-    background_cancel: createBackgroundCancel(manager, cancelClient),
+    background_cancel: createBackgroundCancel(manager, cancelClient, monitorManager),
   }
 }

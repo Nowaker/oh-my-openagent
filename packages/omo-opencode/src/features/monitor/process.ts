@@ -36,6 +36,9 @@ type SpawnFunction = (argv: readonly string[], options: {
 
 const KILL_GRACE_MS = 5_000
 
+/** The exit signal a monitor reports when its runtime limit, not its source, ended it. */
+export const MONITOR_EXPIRED_SIGNAL = "SIGALRM"
+
 function killProcessGroup(pid: number, signal: NodeJS.Signals | 0): void {
   try {
     process.kill(-pid, signal)
@@ -116,11 +119,14 @@ export function spawnMonitoredProcess(
     }
   }
 
-  watchdogTimer = deps.setTimer(() => {
-    clearWatchdog()
-    kill("SIGTERM")
-    settlePublicExit({ code: null, signal: "SIGALRM" })
-  }, opts.maxRuntimeMs)
+  // An infinite or non-positive runtime means the process runs until its source ends or it is stopped.
+  if (Number.isFinite(opts.maxRuntimeMs) && opts.maxRuntimeMs > 0) {
+    watchdogTimer = deps.setTimer(() => {
+      clearWatchdog()
+      kill("SIGTERM")
+      settlePublicExit({ code: null, signal: MONITOR_EXPIRED_SIGNAL })
+    }, opts.maxRuntimeMs)
+  }
 
   subprocess.exited.then((code) => {
     actualExited = true
