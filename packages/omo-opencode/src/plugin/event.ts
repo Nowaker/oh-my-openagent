@@ -169,11 +169,17 @@ export function createEventHandler(args: {
         firstMessageVariantGate,
         clearModelFallbackSession: modelFallbackHandler.clearSession,
       });
+      const deletedSessionID = resolveSessionEventID(props);
+      if (deletedSessionID) managers.bashBackgroundManager?.forgetSession(deletedSessionID);
       await runEventHookSafely("teamLeadOrphanHandler", teamHandlers.teamLeadOrphanHandler, input);
       await runEventHookSafely("teamMemberStatusHandler", teamHandlers.teamMemberStatusHandler, input);
     }
 
     if (event.type === "message.removed") handleMessageRemovedEvent(props);
+
+    if (event.type.startsWith("shell.background.")) {
+      await managers.bashBackgroundManager?.handleEvent(event);
+    }
 
     if (event.type === "session.idle") {
       const sessionID = resolveSessionEventID(props);

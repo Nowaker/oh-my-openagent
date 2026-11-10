@@ -683,7 +683,15 @@ AST-aware search and rewrite now lives in the `ast-grep` skill. Load it with the
 | **call_omo_agent**    | Spawn explore/librarian agents. Supports `run_in_background`.                                                                                                                                                                           |
 | **task**              | Category-based task delegation. Supports built-in categories like `visual-engineering`, `ultrabrain`, `deep-low`, `deep-high`, `artistry`, `quick`, `unspecified-low`, `unspecified-high`, and `writing`, or direct agent targeting via `subagent_type`. |
 | **background_output** | Retrieve background task results                                                                                                                                                                                                        |
-| **background_cancel** | Cancel running background tasks                                                                                                                                                                                                         |
+| **background_cancel** | Stop a background task, a monitor (`mon_...`) or a background bash command (`bash_...`); `all=true` stops all of the session's                                                                                                       |
+
+On an opencode build whose `bash` tool runs commands in the background
+(`run_in_background`, or a foreground command moved there at its timeout),
+OMO reports each such command's exit to the session that started it as a
+`<task-notification>` headed `[BASH COMMAND COMPLETED|FAILED|TIMED OUT|CANCELLED]`,
+with the exit code, the end of the output and the output file. A command
+stopped through `background_cancel` sends no exit notice. The runtime limit is
+opencode's `bash_background.timeout`, not an OMO setting.
 
 `task` is the broader delegation path for category routing, direct
 `subagent_type` calls, skills, and sync/background execution.

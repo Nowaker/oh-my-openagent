@@ -20,13 +20,18 @@ import { createRuntimeSkillsResolver, readRuntimeHostSkills } from "./runtime-sk
 export function createCoreTools(args: {
   readonly ctx: PluginContext
   readonly pluginConfig: OhMyOpenCodeConfig
-  readonly managers: Pick<Managers, "backgroundManager" | "tmuxSessionManager" | "skillMcpManager" | "modelFallbackControllerAccessor" | "monitorManager">
+  readonly managers: Pick<Managers, "backgroundManager" | "tmuxSessionManager" | "skillMcpManager" | "modelFallbackControllerAccessor" | "monitorManager" | "bashBackgroundManager">
   readonly skillContext: SkillContext
   readonly availableCategories: AvailableCategory[]
   readonly factories: ToolRegistryFactories
 }): Record<string, ToolDefinition> {
   const { ctx, pluginConfig, managers, skillContext, availableCategories, factories } = args
-  const backgroundTools = factories.createBackgroundTools(managers.backgroundManager, ctx.client, managers.monitorManager)
+  const backgroundTools = factories.createBackgroundTools(
+    managers.backgroundManager,
+    ctx.client,
+    managers.monitorManager,
+    managers.bashBackgroundManager,
+  )
   const callOmoAgent = factories.createCallOmoAgent(
     ctx,
     managers.backgroundManager,

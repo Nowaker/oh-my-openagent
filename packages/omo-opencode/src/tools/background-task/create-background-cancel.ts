@@ -1,6 +1,7 @@
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
 import type { BackgroundManager } from "../../features/background-agent"
 import type { MonitorManager } from "../../features/monitor/types"
+import type { BashBackgroundManager } from "../../features/bash-background"
 import type { BackgroundCancelArgs } from "./types"
 import type { BackgroundCancelClient } from "./clients"
 import { BACKGROUND_CANCEL_DESCRIPTION } from "./constants"
@@ -20,16 +21,32 @@ Description: ${record.label}
 Events delivered: ${record.eventsDelivered}${record.outputFile ? `\nOutput file: ${record.outputFile}` : ""}`
 }
 
+/** Stops one background bash command; undefined when the id is not a bash command of this session. */
+async function cancelBashCommand(
+  bashManager: BashBackgroundManager | undefined,
+  id: string,
+  sessionID: string,
+): Promise<string | undefined> {
+  if (!bashManager || !id.startsWith("bash_")) return undefined
+  const record = bashManager.get(id)
+  if (record && record.sessionID !== sessionID) return undefined
+  if (!(await bashManager.stop(id))) return `[ERROR] Cannot stop ${id}: it is not running.`
+  return `Background command stopped
+
+Command ID: ${id}${record ? `\nCommand: ${record.command}\nOutput file: ${record.outputPath}` : ""}`
+}
+
 export function createBackgroundCancel(
   manager: BackgroundManager,
   _client: BackgroundCancelClient,
   monitorManager?: MonitorManager,
+  bashManager?: BashBackgroundManager,
 ): ToolDefinition {
   return tool({
     description: BACKGROUND_CANCEL_DESCRIPTION,
     args: {
-      taskId: tool.schema.string().optional().describe("Task or monitor ID to stop (required if all=false)"),
-      all: tool.schema.boolean().optional().describe("Stop all running background tasks and monitors of this session (default: false)"),
+      taskId: tool.schema.string().optional().describe("Task, monitor or background bash command ID to stop (required if all=false)"),
+      all: tool.schema.boolean().optional().describe("Stop all running background tasks, monitors and background bash commands of this session (default: false)"),
     },
     async execute(args: BackgroundCancelArgs, toolContext) {
       try {
@@ -43,9 +60,18 @@ export function createBackgroundCancel(
           for (const record of runningMonitors) {
             await monitorManager?.stop(record.id)
           }
-          const monitorsLine = runningMonitors.length > 0
-            ? `Stopped ${runningMonitors.length} monitor(s): ${runningMonitors.map((record) => `\`${record.id}\``).join(", ")}\n\n`
-            : ""
+          const stoppedCommands: string[] = []
+          for (const record of bashManager?.list(toolContext.sessionID) ?? []) {
+            if (await bashManager?.stop(record.id)) stoppedCommands.push(record.id)
+          }
+          const monitorsLine = [
+            runningMonitors.length > 0
+              ? `Stopped ${runningMonitors.length} monitor(s): ${runningMonitors.map((record) => `\`${record.id}\``).join(", ")}\n\n`
+              : "",
+            stoppedCommands.length > 0
+              ? `Stopped ${stoppedCommands.length} background command(s): ${stoppedCommands.map((id) => `\`${id}\``).join(", ")}\n\n`
+              : "",
+          ].join("")
 
           if (cancellableTasks.length === 0) {
             return monitorsLine ? monitorsLine.trimEnd() : `No running or pending background tasks to cancel.`
@@ -106,7 +132,9 @@ ${resumeSection}`
         const task = manager.getTask(taskId)
         if (!task) {
           const monitorResult = await cancelMonitor(monitorManager, taskId)
-          return monitorResult ?? `[ERROR] Task not found: ${taskId}`
+          if (monitorResult) return monitorResult
+          const bashResult = await cancelBashCommand(bashManager, taskId, toolContext.sessionID)
+          return bashResult ?? `[ERROR] Task not found: ${taskId}`
         }
 
         if (task.status !== "running" && task.status !== "pending") {

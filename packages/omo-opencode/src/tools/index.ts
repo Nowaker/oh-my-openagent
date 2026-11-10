@@ -18,6 +18,7 @@ import {
 
 import type { PluginInput, ToolDefinition } from "@opencode-ai/plugin"
 import type { MonitorManager } from "../features/monitor/types"
+import type { BashBackgroundManager } from "../features/bash-background"
 import type { BackgroundManager } from "../features/background-agent"
 
 type OpencodeClient = PluginInput["client"]
@@ -39,11 +40,12 @@ export function createBackgroundTools(
   manager: BackgroundManager,
   client: OpencodeClient,
   monitorManager?: MonitorManager,
+  bashBackgroundManager?: BashBackgroundManager,
 ): Record<string, ToolDefinition> {
   const outputManager: BackgroundOutputManager = manager
   const cancelClient: BackgroundCancelClient = client
   return {
     background_output: createBackgroundOutput(outputManager, client),
-    background_cancel: createBackgroundCancel(manager, cancelClient, monitorManager),
+    background_cancel: createBackgroundCancel(manager, cancelClient, monitorManager, bashBackgroundManager),
   }
 }

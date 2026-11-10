@@ -2514,6 +2514,16 @@ The task was re-queued on a fallback model after a retryable failure.
     this.notifications.delete(sessionID)
   }
 
+  /**
+   * Wakes a session with a notice that is not about one of this manager's tasks (a background bash command's exit),
+   * through the same queue, dedupe and prompt gate as task notices, on the session's current agent and model.
+   */
+  async queueSessionNotice(sessionID: string, notification: string): Promise<void> {
+    if (!this.enableParentSessionNotifications) return
+    const promptContext = await this.resolveParentWakePromptContext({ id: sessionID, parentSessionId: sessionID })
+    this.queuePendingParentWake(sessionID, notification, promptContext, true, PENDING_PARENT_WAKE_DEBOUNCE_MS)
+  }
+
   queuePendingNotification(sessionID: string | undefined, notification: string): void {
     if (!sessionID) return
     const existingNotifications = this.pendingNotifications.get(sessionID) ?? []
@@ -3070,7 +3080,9 @@ The task was re-queued on a fallback model after a retryable failure.
       }
   }
 
-  private async resolveParentWakePromptContext(task: BackgroundTask): Promise<ParentWakePromptContext> {
+  private async resolveParentWakePromptContext(
+    task: Pick<BackgroundTask, "id" | "parentSessionId" | "parentAgent" | "parentTools">,
+  ): Promise<ParentWakePromptContext> {
     let agent: string | undefined = task.parentAgent
     let model: { providerID: string; modelID: string } | undefined
     let tools: Record<string, boolean> | undefined = task.parentTools

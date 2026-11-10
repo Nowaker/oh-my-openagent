@@ -6,6 +6,7 @@ import type { SubagentSessionCreatedEvent } from "./features/background-agent"
 import { BackgroundManager } from "./features/background-agent"
 import type { MonitorManager } from "./features/monitor"
 import { createMonitorManager } from "./features/monitor"
+import { BashBackgroundManager, cancelBackgroundJob } from "./features/bash-background"
 import { SkillMcpManager } from "./features/skill-mcp-manager"
 import { cleanupSessionTeamRuns } from "./features/team-mode/team-runtime/session-cleanup"
 import { lookupTeamSession } from "./features/team-mode/team-session-registry"
@@ -59,6 +60,7 @@ export type Managers = {
   modelFallbackControllerAccessor: ModelFallbackControllerAccessor
   tuiStateMirror?: TuiStateMirror
   monitorManager?: MonitorManager
+  bashBackgroundManager?: BashBackgroundManager
 }
 
 export function createManagers(args: {
@@ -207,6 +209,12 @@ export function createManagers(args: {
     modelFallbackControllerAccessor,
   })
 
+  const parentWakeManager = backgroundManager
+  const bashBackgroundManager = new BashBackgroundManager({
+    notify: (sessionID, notice) => parentWakeManager.queueSessionNotice(sessionID, notice),
+    cancelJob: (id) => cancelBackgroundJob(ctx.client, ctx.directory, id),
+  })
+
   if (pluginConfig.tui?.sidebar?.enabled !== false) {
     tuiStateMirror = new deps.TuiStateMirrorClass({
       client: ctx.client,
@@ -236,5 +244,6 @@ export function createManagers(args: {
     modelFallbackControllerAccessor,
     tuiStateMirror,
     monitorManager,
+    bashBackgroundManager,
   }
 }
