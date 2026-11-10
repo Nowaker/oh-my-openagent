@@ -34,6 +34,7 @@ export async function executeBackgroundContinuation(
       parentModel: parentContext.model,
       parentAgent: parentContext.agent,
       parentTools: getSessionTools(parentContext.sessionID),
+      wake: args.wake,
     })
     const sessionId = task.sessionId
     const backgroundTaskId = task.id

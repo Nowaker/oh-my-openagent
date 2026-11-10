@@ -223,4 +223,48 @@ describe("ParentWakeNotifier dispatched wake recovery", () => {
       releaseAllPromptAsyncReservationsForTesting()
     }
   })
+
+  test("#given a noReply notice was recorded in the parent #when the recovery window elapses without output #then it is not dispatched again", async () => {
+    // given
+    const { notifier, promptAsyncCalls } = createNotifier({ recordDispatchedPrompts: true })
+    const sessionID = "parent-window-noreply-recorded"
+    notifier.queuePendingParentWake(sessionID, FINAL_WAKE, { agent: "sisyphus" }, false)
+
+    try {
+      await notifier.flushPendingParentWake(sessionID)
+      expect(promptAsyncCalls).toHaveLength(1)
+      expect(promptAsyncCalls[0]?.body.noReply).toBe(true)
+
+      // when
+      await waitForTimer()
+
+      // then
+      expect(notifier.getDispatchedParentWakes().has(sessionID)).toBe(false)
+      expect(notifier.getPendingParentWakes().has(sessionID)).toBe(false)
+    } finally {
+      notifier.shutdown()
+      releaseAllPromptAsyncReservationsForTesting()
+    }
+  })
+
+  test("#given a noReply notice never reached the parent history #when the recovery window elapses #then it is requeued as a lost dispatch", async () => {
+    // given
+    const { notifier, promptAsyncCalls } = createNotifier()
+    const sessionID = "parent-window-noreply-lost"
+    notifier.queuePendingParentWake(sessionID, FINAL_WAKE, { agent: "sisyphus" }, false)
+
+    try {
+      await notifier.flushPendingParentWake(sessionID)
+      expect(promptAsyncCalls).toHaveLength(1)
+
+      // when
+      await waitForTimer()
+
+      // then
+      expect(notifier.getPendingParentWakes().get(sessionID)?.lostDispatchRetry).toBe(true)
+    } finally {
+      notifier.shutdown()
+      releaseAllPromptAsyncReservationsForTesting()
+    }
+  })
 })

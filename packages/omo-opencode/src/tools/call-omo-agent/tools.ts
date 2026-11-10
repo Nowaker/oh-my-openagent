@@ -20,10 +20,11 @@ import { processMessages } from "./message-processor"
 import { waitForCompletion } from "./completion-poller"
 import { getFirstFallbackModel } from "../../agents/builtin-agents/model-resolution"
 
-function createSyncExecutorDeps(modelFallbackControllerAccessor?: ModelFallbackControllerAccessor) {
+function createSyncExecutorDeps(modelFallbackControllerAccessor?: ModelFallbackControllerAccessor, waitTimeoutMs?: number) {
   return {
     createOrGetSession,
-    waitForCompletion,
+    waitForCompletion: (...args: Parameters<typeof waitForCompletion>) =>
+      waitForCompletion(args[0], args[1], args[2], args[3] ?? waitTimeoutMs),
     processMessages,
     setSessionFallbackChain: (sessionID: string, fallbackChain: FallbackEntry[] | undefined) => {
       modelFallbackControllerAccessor?.setSessionFallbackChain(sessionID, fallbackChain)
@@ -116,6 +117,7 @@ export function createCallOmoAgent(
   agentOverrides?: AgentOverrides,
   userCategories?: CategoriesConfig,
   modelFallbackControllerAccessor?: ModelFallbackControllerAccessor,
+  syncPollTimeoutMs?: number,
 ): ToolDefinition {
   const agentDescriptions = ALLOWED_AGENTS.map(
     (name) => `- ${name}: Specialized agent for ${name} tasks`,
@@ -200,7 +202,7 @@ export function createCallOmoAgent(
             args,
             toolCtx,
             ctx,
-            createSyncExecutorDeps(modelFallbackControllerAccessor),
+            createSyncExecutorDeps(modelFallbackControllerAccessor, syncPollTimeoutMs),
             fallbackChain,
             spawnReservation,
             resolvedModel,
@@ -215,7 +217,7 @@ export function createCallOmoAgent(
         args,
         toolCtx,
         ctx,
-        createSyncExecutorDeps(modelFallbackControllerAccessor),
+        createSyncExecutorDeps(modelFallbackControllerAccessor, syncPollTimeoutMs),
         fallbackChain,
         undefined,
         resolvedModel,

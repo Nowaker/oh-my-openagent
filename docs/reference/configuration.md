@@ -476,17 +476,22 @@ Control parallel agent execution and concurrency limits. `background_task` (came
 | `providerConcurrency`       | -         | Per-provider limits (key = provider name)                             |
 | `modelConcurrency`          | -         | Per-model limits (key = `provider/model`). Overrides provider limits. |
 | `maxDepth`                  | -         | Maximum nested subagent depth (min: 1)                                |
-| `staleTimeoutMs`            | `2700000` | Interrupt tasks with no activity (min: 60000)                         |
-| `messageStalenessTimeoutMs` | `3600000` | Timeout when no progress update was ever received (min: 60000)        |
-| `taskTtlMs`                 | `1800000` | Absolute non-terminal task TTL (min: 300000)                          |
+| `staleTimeoutMs`            | `2700000` | Cancel a running background task with no activity for this long (min: 60000, `0`: never) |
+| `messageStalenessTimeoutMs` | `3600000` | Cancel a running background task that never reported progress this long after start (min: 60000, `0`: never) |
+| `taskTtlMs`                 | `1800000` | Drop a queued or running task whose last activity is this old, with its pending notices (min: 300000, `0`: never) |
 | `sessionGoneTimeoutMs`      | `60000`   | Timeout when a task session disappears (min: 10000)                   |
 | `taskCleanupDelayMs`        | `600000`  | Delay before terminal task and sync-child runtime state leaves memory; session history is retained (min: 60000) |
-| `syncPollTimeoutMs`         | -         | Synchronous polling timeout in milliseconds (min: 60000)             |
+| `syncPollTimeoutMs`         | `1800000` | Abort a foreground (`run_in_background=false`) `task` child after this long without observable activity; a foreground `call_omo_agent` waits at most this long in total, 5 minutes when unset (min: 60000, `0`: never) |
+| `syncMaxAssistantTurns`     | `300`     | Abort a foreground `task` child after this many assistant turns, as a runaway loop (`0`: no cap) |
 | `recoverySweepMinAgeMs`     | `86400000` | Age before the hourly sweep examines a background-owners recovery file; it removes only records whose owner is dead and child session is gone (min: 3600000) |
 | `maxToolCalls`              | `4000`    | Maximum tool calls per subagent task (min: 10)                        |
 | `circuitBreaker`            | -         | Circuit-breaker object: `enabled` (default `true`), `maxToolCalls`, `consecutiveThreshold` |
 
 Priority: `modelConcurrency` > `providerConcurrency` > `defaultConcurrency`
+
+Every limit above that kills or drops a running task takes `0` to turn it off, for subtasks that legitimately run for hours. `maxToolCalls` and `circuitBreaker` stop runaway loops by tool count, not by time.
+
+A `task` call runs in the background unless it passes `run_in_background=false`. Each finished background task sends its parent one notice with its final answer inline (cut at 6000 characters, with a pointer to `background_output` for the rest). `wake` on the `task` call decides when the parent hears it: `"each"` (default) starts a parent turn for every finished task, and tasks finishing close together share one turn; `"none"` starts no turn, and the notice waits for the parent's next turn.
 
 The OpenCode edition's orchestration key (`sisyphus_agent`) and its file-based task storage options are documented on the legacy page linked from [Agents](#agents).
 

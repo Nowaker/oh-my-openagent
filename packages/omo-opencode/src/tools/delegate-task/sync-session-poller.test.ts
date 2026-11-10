@@ -533,7 +533,7 @@ describe("pollSyncSession", () => {
         agentToUse: "test-agent",
         toastManager: null,
         taskId: undefined,
-      }, 0)
+      }, 1)
 
       // then: returns timeout error
       expect(result).toBe("Poll inactivity timeout reached after 50ms without active OpenCode status for session ses_timeout")

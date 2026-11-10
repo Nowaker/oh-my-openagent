@@ -72,7 +72,7 @@ export function pruneStaleTasksAndNotifications(args: {
       continue
     }
 
-    if (task.teamRunId) {
+    if (task.teamRunId || effectiveTtl === 0) {
       continue
     }
 
@@ -106,6 +106,8 @@ export function pruneStaleTasksAndNotifications(args: {
       notifications.delete(sessionID)
       continue
     }
+
+    if (effectiveTtl === 0) continue
 
     const validNotifications = queued.filter((task) => {
       if (!task.startedAt) return false
@@ -247,6 +249,7 @@ export async function checkAndInterruptStaleTasks(args: {
     if (!task.progress?.lastUpdate) {
       if (shouldSkipInactivityTimeout) continue
       if (sessionMissing && !sessionGone) continue
+      if (!sessionGone && messageStalenessMs === 0) continue
       const effectiveTimeout = sessionGone ? sessionGoneTimeoutMs : messageStalenessMs
       if (runtime <= effectiveTimeout) continue
 
@@ -289,6 +292,7 @@ export async function checkAndInterruptStaleTasks(args: {
     if (shouldSkipInactivityTimeout) continue
 
     if (runtime < MIN_RUNTIME_BEFORE_STALE_MS) continue
+    if (!sessionGone && staleTimeoutMs === 0) continue
 
     let timeSinceLastUpdate = now - task.progress.lastUpdate.getTime()
     const effectiveStaleTimeout = sessionGone ? sessionGoneTimeoutMs : staleTimeoutMs

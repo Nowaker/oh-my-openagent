@@ -1549,66 +1549,48 @@ describe("sisyphus-task", () => {
       expect(promptBody).toBeDefined()
     }, { timeout: 20000 })
 
-    test("#given task_id without run_in_background #when executing #then defaults to sync continuation (fixes #4119)", async () => {
-      // given - mock manager.resume to return a running task, and capture
-      // which session-prompt method gets called. The previous PR removed the
-      // 'task_id without run_in_background throws' assertion; the maintainer's
-      // Oracle review on PR #4121 asked us to rewrite it (not delete it) so
-      // the new contract "default false routes to sync continuation" is
-      // pinned by a regression test rather than implicit behavior.
+    test("#given task_id without run_in_background #when executing #then defaults to background continuation", async () => {
+      // given - background is the default, so an omitted flag must resume the
+      // child through the background manager instead of blocking this turn.
       const { createDelegateTask } = require("./tools")
-      const managerCalls: string[] = []
+      const resumeInputs: Array<{ sessionId: string; wake?: string }> = []
       const mockManager = {
-        resume: async () => {
-          managerCalls.push("resume")
-          return { id: "task-1", sessionId: "ses_continue_test", status: "running" }
+        resume: async (input: { sessionId: string; wake?: string }) => {
+          resumeInputs.push(input)
+          return { id: "bg_continue", sessionId: "ses_continue_test", status: "running", agent: "explore" }
         },
         launch: async () => {
-          managerCalls.push("launch")
-          return { id: "task-1" }
+          throw new Error("launch must not run for a continuation")
         },
       }
-      const continuationMessagesCalls: string[] = []
       const mockClient = {
         app: { agents: async () => ({ data: [] }) },
         config: { get: async () => ({ data: { model: SYSTEM_DEFAULT_MODEL } }) },
         session: {
           get: async () => ({ data: { directory: "/project" } }),
-          create: async () => ({ data: { id: "ses_continue_test" } }),
-          prompt: async () => ({ data: {} }),
-          promptAsync: async () => ({ data: {} }),
-          messages: async (input: { path: { id: string } }) => {
-            continuationMessagesCalls.push(input.path.id)
-            return {
-              data: [{ info: { id: "msg_1", role: "assistant", time: { created: Date.now() }, finish: "end_turn" }, parts: [{ type: "text", text: "sync-continuation-result-sentinel" }] }],
-            }
-          },
-          status: async () => ({ data: { "ses_continue_test": { type: "idle" } } }),
-          abort: async () => ({ data: {} }),
+          messages: async () => ({ data: [] }),
+          status: async () => ({ data: {} }),
         },
       }
       const tool = createDelegateTask({ manager: mockManager, client: mockClient })
 
-      // when - omit run_in_background; task_id + default false must route to
-      // executeSyncContinuation (tools.ts:75). Previously this threw the
-      // 'run_in_background REQUIRED' error, which #4119 reported as the cause
-      // of Sisyphus's retry storms.
+      // when
       const result = await tool.execute(
         {
           description: "Continue without run flag",
           prompt: "Continue",
           task_id: "ses_continue_test",
           load_skills: [],
+          wake: "none",
         },
         { sessionID: "parent-session", messageID: "parent-message", agent: "sisyphus", abort: new AbortController().signal },
       )
 
-      // then - no throw, returned content is a string, and routing stayed on
-      // the sync-continuation branch: the continuation session was read and
-      // neither background path (launch/resume) was entered.
+      // then
       expect(typeof result).toBe("string")
-      expect(continuationMessagesCalls).toContain("ses_continue_test")
-      expect(managerCalls).toHaveLength(0)
+      expect(resumeInputs).toHaveLength(1)
+      expect(resumeInputs[0]?.sessionId).toBe("ses_continue_test")
+      expect(resumeInputs[0]?.wake).toBe("none")
     }, { timeout: 20000 })
 
     test("#given no category no subagent_type and no run_in_background #when executing #then still returns the (different) missing-target error (fixes #4119)", async () => {

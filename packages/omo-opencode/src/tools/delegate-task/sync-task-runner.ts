@@ -148,6 +148,7 @@ export async function runSyncTaskLoop(input: SyncTaskRunnerInput): Promise<strin
       agentToUse,
       toastManager,
       taskId,
+      maxAssistantTurns: executorCtx.syncMaxAssistantTurns,
       hasActiveChildBackgroundTasks,
       hasPendingParentWake,
     }, syncPollTimeoutMs)

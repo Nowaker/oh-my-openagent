@@ -68,14 +68,17 @@ const delegateTaskArgsSchema = {
   run_in_background: tool.schema
     .boolean()
     .optional()
-    .describe("true is the standard spawn: returns a background task ID `bg_...` at once; the completion notification delivers the result, which background_output reads. false blocks this response until the child finishes; use it only for a short child whose result gates your very next call. Omitted counts as false."),
+    .describe("Default true: returns a background task ID `bg_...` at once; a notification with the child's final answer arrives when it finishes (background_output reads it again). false blocks this response until the child finishes; use it only for a short child whose result gates your very next call."),
+  wake: tool.schema
+    .enum(["each", "none"])
+    .optional()
+    .describe("When a finished background child reports. each (default): every finished child starts your next turn with its result. none: no turn is started; the result waits for your next turn."),
   category: tool.schema.string().optional().describe("REQUIRED if subagent_type not provided. Do NOT provide both category and subagent_type."),
   subagent_type: tool.schema.string().optional().describe("REQUIRED if category not provided. Do NOT provide both category and subagent_type."),
   task_id: tool.schema
     .string()
     .optional()
     .describe("Continuation session id (`ses_...`) from task metadata; not a background task id (`bg_...`)."),
-  command: tool.schema.string().optional().describe("The command that triggered this task"),
 }
 
 export function createDelegateTask(options: DelegateTaskToolOptions): ToolDefinition {
