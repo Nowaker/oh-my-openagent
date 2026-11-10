@@ -62,7 +62,7 @@ If OpenCode's Bash permission gate is available to the plugin, Monitor asks that
 | Argument | Required | Type | Meaning |
 |----------|----------|------|---------|
 | `description` | yes | string | What the events are, shown in every notification: `errors in deploy.log`, not `watching logs`. |
-| `command` | yes | string | Shell command whose stdout lines are the events. Tokenized and spawned without stdin or a PTY. |
+| `command` | yes | string | Shell command whose stdout lines are the events, run through the same shell OpenCode's `bash` tool uses (the configured `shell`, else `$SHELL`, else the platform default), so pipes, loops and `&&` work. It runs without stdin or a PTY. |
 | `timeout_ms` | no | integer, at least 0 | How long to watch before stopping the command. Default 300000 (5 minutes), capped by `max_runtime_ms`. `0` watches until the command exits (still capped). |
 
 The result names the monitor id, when it expires, and its output file.
