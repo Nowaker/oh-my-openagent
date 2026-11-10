@@ -47,6 +47,11 @@ export class BashBackgroundManager {
     return this.running.get(id)
   }
 
+  /** Every background command still running, across sessions. */
+  listAll(): BashBackgroundRecord[] {
+    return [...this.running.values()]
+  }
+
   /** The session's background commands that are still running, oldest first. */
   list(sessionID: string): BashBackgroundRecord[] {
     return [...this.running.values()].filter((record) => record.sessionID === sessionID)

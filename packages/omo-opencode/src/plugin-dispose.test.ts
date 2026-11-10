@@ -26,6 +26,23 @@ describe("createPluginDispose", () => {
     expect(shutdownSpy).toHaveBeenCalledTimes(1)
   })
 
+  test("#given a running-jobs ledger #when dispose() is called #then it is frozen before the managers stop the jobs", async () => {
+    // given
+    const order: string[] = []
+    const dispose = createPluginDispose({
+      backgroundManager: { shutdown: async (): Promise<void> => { order.push("background") } },
+      skillMcpManager: { disconnectAll: async (): Promise<void> => {} },
+      runningJobsLedger: { shutdown: (): void => { order.push("ledger") } },
+      disposeHooks: (): void => {},
+    })
+
+    // when
+    await dispose()
+
+    // then
+    expect(order).toEqual(["ledger", "background"])
+  })
+
   test("#given plugin with a TUI mirror #when dispose() is called #then the mirror is stopped", async () => {
     // given
     const tuiStateMirror = { stop: (): void => {} }

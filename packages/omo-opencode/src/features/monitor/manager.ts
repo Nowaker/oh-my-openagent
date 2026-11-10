@@ -142,6 +142,13 @@ export class MonitorManager implements MonitorManagerContract {
       .map((record) => ({ ...record }))
   }
 
+  listRunning(): MonitorRecord[] {
+    return [...this.monitors.values()]
+      .map((state) => state.record)
+      .filter((record) => record.status === "running" || record.status === "starting")
+      .map((record) => ({ ...record }))
+  }
+
   get(id: MonitorId): MonitorRecord | undefined {
     const record = this.monitors.get(id)?.record
     return record ? { ...record } : undefined

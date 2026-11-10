@@ -2855,6 +2855,11 @@ The task was re-queued on a fallback model after a retryable failure.
     return Array.from(this.tasks.values()).filter(t => t.status === "running")
   }
 
+  /** Tasks still running or waiting for a slot: what a restart of this process would cut off. */
+  listUnfinishedTasks(): BackgroundTask[] {
+    return Array.from(this.tasks.values()).filter(t => t.status === "running" || t.status === "pending")
+  }
+
   /**
    * Get all non-running tasks still in memory (for compaction hook)
    */

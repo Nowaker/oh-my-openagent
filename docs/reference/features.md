@@ -693,6 +693,20 @@ with the exit code, the end of the output and the output file. A command
 stopped through `background_cancel` sends no exit notice. The runtime limit is
 opencode's `bash_background.timeout`, not an OMO setting.
 
+Background tasks, monitors and background bash commands run inside the
+opencode process of the session that started them, so they end when that
+process does. OMO records each session's unfinished jobs in
+`$XDG_DATA_HOME/omo/running-jobs/<session id>.json` (written within a second
+of a change, removed when the session has none, left as it is when the process
+shuts down). The next process of the session (the session it opens with `-s`,
+or a session's first message in it) reads a file left by a process that is no
+longer running and wakes the session with one `<task-notification>` per job,
+headed `[BACKGROUND TASK LOST]`, `[MONITOR LOST]` or `[BASH COMMAND LOST]`,
+whose `<resume>` holds the exact call that resumes it: `task(task_id=...)` for a
+task, the original `monitor(...)` or `bash(..., run_in_background=true)` call
+otherwise. A tool that restarts tabs can read the same file to hold a restart
+while a session has jobs running.
+
 `task(subagent_type: "fork")` starts the child from a copy of the calling
 session instead of an empty one, on the caller's own agent and model, so the
 prompt need not repeat the context. The copy leaves out the caller's
