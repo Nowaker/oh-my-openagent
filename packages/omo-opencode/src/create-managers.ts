@@ -214,13 +214,11 @@ export function createManagers(args: {
     modelFallbackControllerAccessor,
   })
 
-  const parentWakeManager = backgroundManager
   const bashBackgroundManager = new BashBackgroundManager({
-    notify: (sessionID, notice) => parentWakeManager.queueSessionNotice(sessionID, notice),
     cancelJob: (id) => cancelBackgroundJob(ctx.client, ctx.directory, id),
   })
   const runningJobsLedger = createRunningJobsLedger({
-    backgroundManager: parentWakeManager,
+    backgroundManager,
     ...(monitorManager ? { monitorManager } : {}),
     bashBackgroundManager,
   })
