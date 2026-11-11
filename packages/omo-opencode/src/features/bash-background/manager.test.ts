@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test"
-import { BashBackgroundManager, BASH_BACKGROUND_EXITED_EVENT, BASH_BACKGROUND_STARTED_EVENT } from "./manager"
+import { BashBackgroundManager, BASH_BACKGROUND_EXITED_EVENT, BASH_BACKGROUND_EXPIRY_MARGIN_MS, BASH_BACKGROUND_STARTED_EVENT } from "./manager"
 import { cancelBackgroundJob } from "./cancel-route"
 import type { BashBackgroundExited, BashBackgroundStarted } from "./types"
 
@@ -76,6 +76,55 @@ describe("BashBackgroundManager", () => {
     manager.forgetSession("ses_a")
     expect(manager.list("ses_a")).toEqual([])
     expect(manager.list("ses_b").map((record) => record.id)).toEqual(["bash_b"])
+  })
+
+  test("#given an exit that arrived before its start #when the start arrives #then the command is not recorded as running", async () => {
+    // given
+    const notify = mock(async () => {})
+    const manager = new BashBackgroundManager({ notify, cancelJob: async () => true })
+    await manager.handleEvent(exited("bash_late", { status: "completed", exitCode: 0 }))
+
+    // when
+    await manager.handleEvent(started("bash_late"))
+
+    // then
+    expect(notify).toHaveBeenCalledTimes(1)
+    expect(manager.get("bash_late")).toBeUndefined()
+    expect(manager.list("ses_parent")).toEqual([])
+  })
+
+  test("#given a record older than its timeout plus the margin #when listed #then it is gone, while one without a timeout stays", async () => {
+    // given
+    let now = 1_000_000
+    const manager = new BashBackgroundManager({ notify: async () => {}, cancelJob: async () => true, now: () => now })
+    await manager.handleEvent(started("bash_capped"))
+    const unbounded = started("bash_unbounded")
+    await manager.handleEvent({ ...unbounded, properties: { ...unbounded.properties, timeoutMs: null } })
+
+    // when
+    now += 7_200_000 + BASH_BACKGROUND_EXPIRY_MARGIN_MS - 1
+    const beforeExpiry = manager.list("ses_parent").map((record) => record.id)
+    now += 2
+    const afterExpiry = manager.list("ses_parent").map((record) => record.id)
+
+    // then
+    expect(beforeExpiry).toEqual(["bash_capped", "bash_unbounded"])
+    expect(afterExpiry).toEqual(["bash_unbounded"])
+    expect(manager.get("bash_capped")).toBeUndefined()
+  })
+
+  test("#given a record past its timeout plus the margin #when every session's commands are listed #then it is gone", async () => {
+    // given
+    let now = 1_000_000
+    const manager = new BashBackgroundManager({ notify: async () => {}, cancelJob: async () => true, now: () => now })
+    await manager.handleEvent(started("bash_capped", "ses_a"))
+
+    // when
+    now += 7_200_000 + BASH_BACKGROUND_EXPIRY_MARGIN_MS + 1
+    await manager.handleEvent(started("bash_fresh", "ses_b"))
+
+    // then
+    expect(manager.listAll().map((record) => record.id)).toEqual(["bash_fresh"])
   })
 })
 
