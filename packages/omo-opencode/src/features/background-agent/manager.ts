@@ -1997,6 +1997,11 @@ The fallback retry session is now created and can be inspected directly.
       task.progress.lastUpdate = partInfo?.activityTime ?? new Date()
 
       if (partInfo?.type === "tool" || partInfo?.tool) {
+        const copiedFromParent = task.ownMessagesSince !== undefined
+          && partInfo.state?.startedAt !== undefined
+          && partInfo.state.startedAt < task.ownMessagesSince
+        if (copiedFromParent) return
+
         const countedToolPartIDs = task.progress.countedToolPartIDs ?? new Set<string>()
         const shouldCountToolCall =
           !partInfo.id ||
