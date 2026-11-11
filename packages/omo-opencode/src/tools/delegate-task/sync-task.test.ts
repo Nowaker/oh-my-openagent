@@ -661,6 +661,7 @@ describe("executeSyncTask - cleanup on error paths", () => {
     // then
     expect(adoptCalls).toHaveLength(1)
     expect(adoptCalls[0]).toMatchObject({ taskId: "sync_ses_test", sessionId: "ses_test_12345678", parentSessionId: "parent-session", wake: "each" })
+    expect(adoptCalls[0]?.startedAt).toBeInstanceOf(Date)
     expect(result).toContain("background_task_id: sync_ses_test")
     expect(abortCalls).toEqual([])
     expect(deleteCalls).toEqual([])

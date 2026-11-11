@@ -28,6 +28,8 @@ function createManager(): BackgroundManager {
   return new BackgroundManager({ pluginContext: ctx, config: undefined, enableParentSessionNotifications: false })
 }
 
+const ORIGINAL_START = new Date(Date.now() - 10 * 60_000)
+
 describe("BackgroundManager.adoptForegroundSession", () => {
   test("#given a session the manager does not know #when it is adopted #then it runs as a background task under the given id", async () => {
     // given
@@ -37,7 +39,7 @@ describe("BackgroundManager.adoptForegroundSession", () => {
       // when
       const task = await manager.adoptForegroundSession({
         taskId: "sync_ses_abcd", sessionId: "ses_abcd1234", parentSessionId: "ses_parent",
-        description: "long task", agent: "explore", wake: "none",
+        description: "long task", agent: "explore", wake: "none", startedAt: ORIGINAL_START,
       })
 
       // then
@@ -45,6 +47,7 @@ describe("BackgroundManager.adoptForegroundSession", () => {
       expect(task.status).toBe("running")
       expect(task.wake).toBe("none")
       expect(manager.getTask("sync_ses_abcd")?.sessionId).toBe("ses_abcd1234")
+      expect(task.startedAt).toEqual(ORIGINAL_START)
     } finally {
       manager.shutdown()
     }
@@ -64,13 +67,14 @@ describe("BackgroundManager.adoptForegroundSession", () => {
       // when
       const task = await manager.adoptForegroundSession({
         taskId: "resume_sync_ses_cont", sessionId: "ses_cont1234", parentSessionId: "ses_parent",
-        description: "continued", agent: "explore", wake: "each",
+        description: "continued", agent: "explore", wake: "each", startedAt: ORIGINAL_START,
       })
 
       // then
       expect(task.id).toBe("bg_old")
       expect(task.status).toBe("running")
       expect(task.completedAt).toBeUndefined()
+      expect(task.startedAt).toEqual(ORIGINAL_START)
       expect(task.parentSessionId).toBe("ses_parent")
       expect(manager.getTask("resume_sync_ses_cont")).toBeUndefined()
     } finally {

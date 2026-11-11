@@ -51,6 +51,7 @@ export async function handOffSyncTask(input: {
     agent: input.agentToUse,
     parentAgent: input.parentAgent,
     wake: input.args.wake ?? "each",
+    startedAt: input.startTime,
   })
   syncSubagentSessions.delete(input.sessionID)
   log("[task] Foreground task handed off to the background", { taskId: input.taskId, sessionID: input.sessionID })

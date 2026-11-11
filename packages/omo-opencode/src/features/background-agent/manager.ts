@@ -1392,7 +1392,8 @@ The fallback retry session is now created and can be inspected directly.
    * Takes over a still-running foreground child without touching it: the child keeps running, and its completion
    * notice wakes the parent like any background task's. A session that already has a finished task record (a
    * foreground continuation of a background child) revives that record rather than adding a second one, because
-   * session events are matched to the first task holding the session.
+   * session events are matched to the first task holding the session. `startedAt` is when the foreground call
+   * started, so the task's reported duration covers its whole run.
    */
   async adoptForegroundSession(input: {
     taskId: string
@@ -1402,11 +1403,13 @@ The fallback retry session is now created and can be inspected directly.
     agent: string
     parentAgent?: string
     wake: BackgroundTaskWake
+    startedAt: Date
   }): Promise<BackgroundTask> {
     const existing = this.findBySession(input.sessionId)
     if (!existing) {
       const task = await this.trackTask(input)
       task.wake = input.wake
+      task.startedAt = input.startedAt
       return task
     }
     existing.wake = input.wake
@@ -1422,7 +1425,7 @@ The fallback retry session is now created and can be inspected directly.
       this.updateTaskParent(existing, input.parentSessionId)
     }
     existing.status = "running"
-    existing.startedAt = new Date()
+    existing.startedAt = input.startedAt
     existing.completedAt = undefined
     existing.error = undefined
     existing.progress = { toolCalls: 0, lastUpdate: new Date() }
