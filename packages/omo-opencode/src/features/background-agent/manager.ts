@@ -2568,7 +2568,8 @@ The task was re-queued on a fallback model after a retryable failure.
    * its parent's copied output, so `ownMessagesSince` counts only messages created after the fork.
    */
   private async validateSessionHasOutput(sessionID: string, ownMessagesSince?: number): Promise<boolean> {
-    if (this.observedOutputSessions.has(sessionID)) {
+    // The replayed copy of a fork's parent fills this cache too, so a fork always reads its own messages.
+    if (ownMessagesSince === undefined && this.observedOutputSessions.has(sessionID)) {
       return true
     }
 
