@@ -107,4 +107,29 @@ describe("createToolExecuteBeforeHandler background wait guard", () => {
     //#then
     await expect(run).resolves.toBeUndefined()
   })
+
+  test("allows a sleep run in the background while background children are active, since it does not wait", async () => {
+    //#given
+    const backgroundManager = {
+      hasActiveChildTasks: (sessionID: string) => sessionID === "ses_parent",
+      hasPendingParentWake: () => true,
+    }
+    const handler = createToolExecuteBeforeHandler({
+      ctx: createTestContext(),
+      hooks: {},
+      backgroundManager,
+    })
+    const output = {
+      args: {
+        command: "sleep 300",
+        run_in_background: true,
+      } as Record<string, unknown>,
+    }
+
+    //#when
+    const run = handler({ tool: "bash", sessionID: "ses_parent", callID: "call_bg_sleep" }, output)
+
+    //#then
+    await expect(run).resolves.toBeUndefined()
+  })
 })
