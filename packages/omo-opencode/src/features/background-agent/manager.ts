@@ -2092,7 +2092,7 @@ The fallback retry session is now created and can be inspected directly.
           return resolved?.isCurrent ? resolved.task : undefined
         },
         idleDeferralTimers: this.idleDeferralTimers,
-        validateSessionHasOutput: (id) => this.validateSessionHasOutput(id),
+        validateSessionHasOutput: (id, ownMessagesSince) => this.validateSessionHasOutput(id, ownMessagesSince),
         checkSessionTodos: (id) => this.checkSessionTodos(id),
         tryCompleteTask: (task, source) => this.tryCompleteTask(task, source),
         emitIdleEvent: (sessionID) => this.handleEvent({ type: "session.idle", properties: { sessionID } }),
@@ -2566,9 +2566,10 @@ The task was re-queued on a fallback model after a retryable failure.
 
   /**
    * Validates that a session has actual assistant/tool output before marking complete.
-   * Prevents premature completion when session.idle fires before agent responds.
+   * Prevents premature completion when session.idle fires before agent responds. A fork child's session starts with
+   * its parent's copied output, so `ownMessagesSince` counts only messages created after the fork.
    */
-  private async validateSessionHasOutput(sessionID: string): Promise<boolean> {
+  private async validateSessionHasOutput(sessionID: string, ownMessagesSince?: number): Promise<boolean> {
     if (this.observedOutputSessions.has(sessionID)) {
       return true
     }
@@ -2578,7 +2579,10 @@ The task was re-queued on a fallback model after a retryable failure.
         path: { id: sessionID },
       }, this.directory)
 
-      const messages = normalizeSDKResponse(response, [] as Array<{ info?: { role?: string } }>, { preferResponseOnMissingData: true })
+      const all = normalizeSDKResponse(response, [] as Array<{ info?: { role?: string; time?: { created?: number } } }>, { preferResponseOnMissingData: true })
+      const messages = ownMessagesSince === undefined
+        ? all
+        : all.filter((message) => (message.info?.time?.created ?? 0) >= ownMessagesSince)
 
       // Check for at least one assistant or tool message
       const hasAssistantOrToolMessage = messages.some(
@@ -3469,7 +3473,7 @@ The task was re-queued on a fallback model after a retryable failure.
           const completionSource = sessionStatus?.type === "idle"
             ? "polling (idle status)"
             : "polling (session gone from status)"
-          const hasValidOutput = await this.validateSessionHasOutput(sessionID)
+          const hasValidOutput = await this.validateSessionHasOutput(sessionID, task.ownMessagesSince)
           if (!hasValidOutput) {
             if (sessionGoneThresholdReached) {
               const sessionExists = await this.verifySessionExists(sessionID)
