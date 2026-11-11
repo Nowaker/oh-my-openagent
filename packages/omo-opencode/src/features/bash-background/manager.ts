@@ -64,7 +64,7 @@ export class BashBackgroundManager {
 
   /** Every background command still running, across sessions. */
   listAll(): BashBackgroundRecord[] {
-    return [...this.running.values()]
+    return this.live()
   }
 
   /** The session's background commands that are still running, oldest first. */

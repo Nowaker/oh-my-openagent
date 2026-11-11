@@ -112,6 +112,20 @@ describe("BashBackgroundManager", () => {
     expect(afterExpiry).toEqual(["bash_unbounded"])
     expect(manager.get("bash_capped")).toBeUndefined()
   })
+
+  test("#given a record past its timeout plus the margin #when every session's commands are listed #then it is gone", async () => {
+    // given
+    let now = 1_000_000
+    const manager = new BashBackgroundManager({ notify: async () => {}, cancelJob: async () => true, now: () => now })
+    await manager.handleEvent(started("bash_capped", "ses_a"))
+
+    // when
+    now += 7_200_000 + BASH_BACKGROUND_EXPIRY_MARGIN_MS + 1
+    await manager.handleEvent(started("bash_fresh", "ses_b"))
+
+    // then
+    expect(manager.listAll().map((record) => record.id)).toEqual(["bash_fresh"])
+  })
 })
 
 describe("cancelBackgroundJob", () => {
