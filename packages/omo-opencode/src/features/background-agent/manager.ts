@@ -2578,7 +2578,7 @@ The task was re-queued on a fallback model after a retryable failure.
         path: { id: sessionID },
       }, this.directory)
 
-      const all = normalizeSDKResponse(response, [] as Array<{ info?: { role?: string; time?: { created?: number } } }>, { preferResponseOnMissingData: true })
+      const all = normalizeSDKResponse(response, [] as Array<{ info?: { role?: string; finish?: string; time?: { created?: number; completed?: number } } }>, { preferResponseOnMissingData: true })
       const messages = ownMessagesSince === undefined
         ? all
         : all.filter((message) => (message.info?.time?.created ?? 0) >= ownMessagesSince)
@@ -2592,6 +2592,12 @@ The task was re-queued on a fallback model after a retryable failure.
       if (!hasAssistantOrToolMessage) {
         log("[background-agent] No assistant/tool messages found in session:", sessionID)
         return false
+      }
+
+      // A fork's own turn that finished counts even without text: its notice then reports that it has no answer.
+      if (ownMessagesSince !== undefined
+        && messages.some((m) => m.info?.role === "assistant" && (m.info.finish !== undefined || m.info.time?.completed !== undefined))) {
+        return true
       }
 
       // OpenCode API uses different part types than Anthropic's API:

@@ -221,6 +221,29 @@ describe("BackgroundManager pollRunningTasks", () => {
       expect(task.status).toBe("running")
     })
 
+    test("#when a fork's own turn finished with no text #then the poll completes it, so its notice can report the failure", async () => {
+      //#given
+      const manager = createManagerWithClient({
+        messages: async () => ({
+          data: [
+            { info: { role: "assistant", finish: "tool-calls", id: "msg-1", time: { created: 1_000 } }, parts: [{ type: "text", text: "copied parent text" }] },
+            { info: { role: "user", id: "msg-2", time: { created: 5_000 } }, parts: [{ type: "text", text: "You are a fork" }] },
+            { info: { role: "assistant", finish: "stop", id: "msg-3", time: { created: 6_000, completed: 6_500 } }, parts: [{ type: "step-start" }, { type: "step-finish" }] },
+          ],
+        }),
+      })
+      const task = { ...createRunningTask("ses-fork-empty"), ownMessagesSince: 4_000 }
+      injectTask(manager, task)
+
+      //#when
+      const poll = manager["pollRunningTasks"]
+      await poll.call(manager)
+      manager.shutdown()
+
+      //#then
+      expect(task.status).toBe("completed")
+    })
+
     test("#when a fork has written its own answer #then the poll completes it", async () => {
       //#given
       const manager = createManagerWithClient({
