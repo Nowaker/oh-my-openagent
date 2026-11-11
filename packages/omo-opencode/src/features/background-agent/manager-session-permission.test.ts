@@ -357,7 +357,7 @@ describe("BackgroundManager child session directory", () => {
     expect(createCalls).toHaveLength(0)
     expect(forkCalls).toEqual([{
       path: { id: "ses_parent" },
-      body: { unsettled: "exclude", parentID: "ses_parent", title: "Review diff (@sisyphus fork)", permission: sessionPermission },
+      body: { unsettled: "exclude", history: "context", parentID: "ses_parent", title: "Review diff (@sisyphus fork)", permission: sessionPermission },
       query: { directory: "/parent" },
     }])
     expect(promptCalls[0]?.path).toEqual({ id: "ses_fork" })

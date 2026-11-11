@@ -500,6 +500,70 @@ describe("BackgroundManager.notifyParentSession cleanup scheduling", () => {
       expect(notificationPayload).not.toContain("ALL BACKGROUND TASKS COMPLETE")
     })
 
+    for (const forkCase of [
+      { name: "a fork that wrote nothing after its fork point", own: false },
+      { name: "a fork whose copied history ends with the parent's text", own: true },
+    ]) {
+      test(`#when ${forkCase.name} finishes #then its notice carries only what the fork wrote`, async () => {
+        // given
+        const sessionStatuses: Record<string, { type: string }> = { "parent-1": { type: "busy" } }
+        const { manager, promptAsyncCalls } = createManager(true, sessionStatuses, undefined, [
+          { info: { role: "assistant", finish: "stop", time: { created: 50 } }, parts: [{ type: "text", text: "copied parent text" }] },
+          { info: { role: "user", time: { created: 150 } }, parts: [{ type: "text", text: "You are a fork of the conversation above" }] },
+          ...(forkCase.own
+            ? [{ info: { role: "assistant", finish: "stop", time: { created: 200 } }, parts: [{ type: "text", text: "the fork's own answer" }] }]
+            : []),
+        ])
+        managerUnderTest = manager
+        const fork = createTask({ id: "task-f", sessionId: "ses-f", parentSessionId: "parent-1", description: "fork", status: "completed", completedAt: new Date("2026-03-11T00:01:00.000Z"), ownMessagesSince: 100 })
+        getTasks(manager).set(fork.id, fork)
+        getPendingByParent(manager).set(fork.parentSessionId, new Set([fork.id]))
+
+        // when
+        await notifyParentSessionForTest(manager, fork)
+        sessionStatuses["parent-1"] = { type: "idle" }
+        manager.handleEvent({ type: "session.idle", properties: { sessionID: "parent-1" } })
+        await waitForDeferredWake(manager, promptAsyncCalls)
+
+        // then
+        expect(promptAsyncCalls).toHaveLength(1)
+        const notificationPayload = JSON.stringify(promptAsyncCalls[0]?.body.parts)
+        expect(notificationPayload).not.toContain("copied parent text")
+        if (forkCase.own) {
+          expect(notificationPayload).toContain("BACKGROUND TASK COMPLETED")
+          expect(notificationPayload).toContain("the fork's own answer")
+        } else {
+          expect(notificationPayload).toContain("BACKGROUND TASK ERROR")
+          expect(notificationPayload).toContain('task(task_id=\\"ses-f\\"')
+        }
+      })
+    }
+
+    test("#when a finished task is marked interrupted afterwards #then the parent gets one notice", async () => {
+      // given
+      const sessionStatuses: Record<string, { type: string }> = { "parent-1": { type: "busy" } }
+      const { manager, promptAsyncCalls } = createManager(true, sessionStatuses)
+      managerUnderTest = manager
+      const taskA = createTask({ id: "task-a", sessionId: "ses-a", parentSessionId: "parent-1", description: "task A", status: "completed", completedAt: new Date("2026-03-11T00:01:00.000Z") })
+      getTasks(manager).set(taskA.id, taskA)
+      getPendingByParent(manager).set(taskA.parentSessionId, new Set([taskA.id]))
+
+      // when
+      await notifyParentSessionForTest(manager, taskA)
+      taskA.status = "interrupt"
+      taskA.error = "late prompt failure"
+      await notifyParentSessionForTest(manager, taskA)
+      sessionStatuses["parent-1"] = { type: "idle" }
+      manager.handleEvent({ type: "session.idle", properties: { sessionID: "parent-1" } })
+      await waitForDeferredWake(manager, promptAsyncCalls)
+
+      // then
+      expect(promptAsyncCalls).toHaveLength(1)
+      const notificationPayload = JSON.stringify(promptAsyncCalls[0]?.body.parts)
+      expect(notificationPayload).toContain("BACKGROUND TASK COMPLETED")
+      expect(notificationPayload).not.toContain("BACKGROUND TASK INTERRUPTED")
+    })
+
     test("#when partial and all-complete notifications queue while parent session is busy #then idle flushes one reply wake", async () => {
       // given
       const sessionStatuses: Record<string, { type: string }> = {

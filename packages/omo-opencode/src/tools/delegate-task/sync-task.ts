@@ -139,6 +139,7 @@ export async function executeSyncTask(
         fallbackChain,
         deps,
         sessionID,
+        anchorMessageCount: createSessionResult.anchorMessageCount,
         spawnDepth: spawnContext.childDepth,
         taskId,
         startTime,

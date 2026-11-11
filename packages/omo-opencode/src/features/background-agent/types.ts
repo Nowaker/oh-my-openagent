@@ -83,6 +83,8 @@ export interface BackgroundTask {
   wake?: BackgroundTaskWake
   /** A fan-out group whose members report together once all of them have finished. */
   groupId?: string
+  /** A fork child: when its copy of the parent finished. Only messages created from then on are the child's own. */
+  ownMessagesSince?: number
   /** Marks if the task was launched from an unstable agent/category */
   isUnstableAgent?: boolean
   /** Category used for this task (e.g., 'quick', 'visual-engineering') */
