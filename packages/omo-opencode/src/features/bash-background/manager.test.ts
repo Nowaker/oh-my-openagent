@@ -18,10 +18,9 @@ function exited(id: string, overrides: Partial<BashBackgroundExited> = {}): { ty
 }
 
 describe("BashBackgroundManager", () => {
-  test("#given a background command #when it exits #then its session gets one notice with the exit code and output tail", async () => {
+  test("#given a background command #when it exits #then it is no longer listed", async () => {
     // given
-    const notify = mock(async (_sessionID: string, _notice: string) => {})
-    const manager = new BashBackgroundManager({ notify, cancelJob: async () => true })
+    const manager = new BashBackgroundManager({ cancelJob: async () => true })
     await manager.handleEvent(started("bash_1"))
     expect(manager.list("ses_parent").map((record) => record.id)).toEqual(["bash_1"])
 
@@ -29,48 +28,28 @@ describe("BashBackgroundManager", () => {
     await manager.handleEvent(exited("bash_1"))
 
     // then
-    expect(notify).toHaveBeenCalledTimes(1)
-    const [sessionID, notice] = notify.mock.calls[0] ?? []
-    expect(sessionID).toBe("ses_parent")
-    expect(notice?.split("\n")[1]).toBe("[BASH COMMAND FAILED]")
-    expect(notice).toContain("<task-id>bash_1</task-id>")
-    expect(notice).toContain("<exit-code>2</exit-code>")
-    expect(notice).toContain("error TS2322")
-    expect(notice).toContain("Full output: /tmp/bash_1")
     expect(manager.list("ses_parent")).toEqual([])
+    expect(manager.get("bash_1")).toBeUndefined()
   })
 
-  test("#given a command stopped through stop() #when its exit arrives #then no notice is sent", async () => {
+  test("#given a running command #when stop() is called #then it is cancelled through the route and no longer listed", async () => {
     // given
-    const notify = mock(async () => {})
     const cancelJob = mock(async (_id: string) => true)
-    const manager = new BashBackgroundManager({ notify, cancelJob })
+    const manager = new BashBackgroundManager({ cancelJob })
     await manager.handleEvent(started("bash_2"))
 
     // when
-    expect(await manager.stop("bash_2")).toBe(true)
+    const stopped = await manager.stop("bash_2")
     await manager.handleEvent(exited("bash_2", { status: "cancelled", exitCode: undefined }))
 
     // then
+    expect(stopped).toBe(true)
     expect(cancelJob).toHaveBeenCalledWith("bash_2")
-    expect(notify).not.toHaveBeenCalled()
-  })
-
-  test("#given a stop that found nothing running #when an exit for that id arrives later #then it is still reported", async () => {
-    // given
-    const notify = mock(async () => {})
-    const manager = new BashBackgroundManager({ notify, cancelJob: async () => false })
-
-    // when
-    expect(await manager.stop("bash_3")).toBe(false)
-    await manager.handleEvent(exited("bash_3", { status: "completed", exitCode: 0 }))
-
-    // then
-    expect(notify).toHaveBeenCalledTimes(1)
+    expect(manager.list("ses_parent")).toEqual([])
   })
 
   test("#given commands of two sessions #when one session is forgotten #then only the other's remain", async () => {
-    const manager = new BashBackgroundManager({ notify: async () => {}, cancelJob: async () => true })
+    const manager = new BashBackgroundManager({ cancelJob: async () => true })
     await manager.handleEvent(started("bash_a", "ses_a"))
     await manager.handleEvent(started("bash_b", "ses_b"))
     manager.forgetSession("ses_a")
@@ -80,15 +59,13 @@ describe("BashBackgroundManager", () => {
 
   test("#given an exit that arrived before its start #when the start arrives #then the command is not recorded as running", async () => {
     // given
-    const notify = mock(async () => {})
-    const manager = new BashBackgroundManager({ notify, cancelJob: async () => true })
+    const manager = new BashBackgroundManager({ cancelJob: async () => true })
     await manager.handleEvent(exited("bash_late", { status: "completed", exitCode: 0 }))
 
     // when
     await manager.handleEvent(started("bash_late"))
 
     // then
-    expect(notify).toHaveBeenCalledTimes(1)
     expect(manager.get("bash_late")).toBeUndefined()
     expect(manager.list("ses_parent")).toEqual([])
   })
@@ -96,7 +73,7 @@ describe("BashBackgroundManager", () => {
   test("#given a record older than its timeout plus the margin #when listed #then it is gone, while one without a timeout stays", async () => {
     // given
     let now = 1_000_000
-    const manager = new BashBackgroundManager({ notify: async () => {}, cancelJob: async () => true, now: () => now })
+    const manager = new BashBackgroundManager({ cancelJob: async () => true, now: () => now })
     await manager.handleEvent(started("bash_capped"))
     const unbounded = started("bash_unbounded")
     await manager.handleEvent({ ...unbounded, properties: { ...unbounded.properties, timeoutMs: null } })

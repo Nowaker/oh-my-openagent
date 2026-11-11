@@ -9,7 +9,7 @@ const context = unsafeTestValue({ sessionID: "ses_parent" })
 
 async function withCommands(...commands: Array<{ id: string; sessionID: string }>) {
   const cancelJob = mock(async (_id: string) => true)
-  const bash = new BashBackgroundManager({ notify: async () => {}, cancelJob })
+  const bash = new BashBackgroundManager({ cancelJob })
   for (const { id, sessionID } of commands) {
     await bash.handleEvent({
       type: BASH_BACKGROUND_STARTED_EVENT,
