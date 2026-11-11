@@ -49,7 +49,11 @@ export class ParentWakeFlushRunner {
       return
     }
     const emptyAssistantTurnRetry = latestWake.allowEmptyAssistantTurnRetry === true
-    const forceDispatchAfterActiveDefer = sessionActive && this.shouldForceDispatchAfterActiveDefer(latestWake)
+    // A kept reply's notice already sits in the running turn, which reads it at its next step; the reply is owed only
+    // if that turn ends without reading it, so it waits for idle instead of being forced into the busy turn.
+    const forceDispatchAfterActiveDefer = sessionActive
+      && latestWake.noReplyAdmittedAt === undefined
+      && this.shouldForceDispatchAfterActiveDefer(latestWake)
     if (sessionActive && !forceDispatchAfterActiveDefer) {
       this.schedulePendingParentWakeFlush(sessionID)
       log("[background-agent] Deferred parent wake because parent session is active:", {
