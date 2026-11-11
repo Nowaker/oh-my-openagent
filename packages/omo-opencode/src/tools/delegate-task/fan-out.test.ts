@@ -67,6 +67,21 @@ describe("executeFanOut", () => {
     )
   }
 
+  test("#given three children #when the fan-out launches #then its continue line names every child's session", async () => {
+    // given
+    const { manager } = createManager()
+
+    // when
+    const result = await run({ items: ["a", "b", "c"] }, manager)
+
+    // then
+    const continueBlock = result.slice(result.indexOf("\nto continue:"))
+    expect(result).toContain("\nto continue:")
+    for (const session of ["ses_child_1", "ses_child_2", "ses_child_3"]) {
+      expect(continueBlock).toContain(`task(task_id="${session}"`)
+    }
+  })
+
   test("#given items and split #when the fan-out runs #then one grouped child per slice gets the shared prompt plus its slice", async () => {
     // given
     const { manager, launched, groups, settled } = createManager()

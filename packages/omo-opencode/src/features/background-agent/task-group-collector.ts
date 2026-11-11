@@ -1,10 +1,14 @@
-import { buildTaskGroupNotificationText } from "./background-task-notification-template"
+import {
+  buildBackgroundTaskNotificationText,
+  buildTaskGroupNotificationText,
+  type BackgroundTaskNotificationInput,
+} from "./background-task-notification-template"
 import type { BackgroundTask } from "./types"
 
 type TaskGroup = {
   size: number
   readonly parentSessionId: string
-  readonly notices: string[]
+  readonly members: BackgroundTaskNotificationInput[]
   lastTask?: BackgroundTask
 }
 
@@ -14,24 +18,24 @@ export type GroupedNotice =
   | { readonly kind: "hold" }
 
 /**
- * Holds the notices of a fan-out group's members until the last one has finished, then hands back one combined
- * notice, so a `task` call with `items` reports once with every child's result.
+ * Holds a fan-out group's finished members until the last one is done, then hands back one notice built from all of
+ * them, so a `task` call with `items` reports once with every child's result.
  */
 export class TaskGroupCollector {
   private readonly groups = new Map<string, TaskGroup>()
 
   register(groupId: string, input: { readonly size: number; readonly parentSessionId: string }): void {
-    this.groups.set(groupId, { size: input.size, parentSessionId: input.parentSessionId, notices: [] })
+    this.groups.set(groupId, { size: input.size, parentSessionId: input.parentSessionId, members: [] })
   }
 
   isGrouped(task: Pick<BackgroundTask, "groupId">): boolean {
     return task.groupId !== undefined && this.groups.has(task.groupId)
   }
 
-  collect(task: BackgroundTask, notification: string): GroupedNotice {
+  collect(task: BackgroundTask, notice: BackgroundTaskNotificationInput): GroupedNotice {
     const group = task.groupId ? this.groups.get(task.groupId) : undefined
-    if (!task.groupId || !group) return { kind: "deliver", notification }
-    group.notices.push(notification)
+    if (!task.groupId || !group) return { kind: "deliver", notification: buildBackgroundTaskNotificationText(notice) }
+    group.members.push(notice)
     group.lastTask = task
     return this.release(task.groupId, group) ?? { kind: "hold" }
   }
@@ -57,8 +61,8 @@ export class TaskGroupCollector {
   }
 
   private release(groupId: string, group: TaskGroup): GroupedNotice | undefined {
-    if (group.notices.length < group.size) return undefined
+    if (group.members.length < group.size) return undefined
     this.groups.delete(groupId)
-    return { kind: "deliver", notification: buildTaskGroupNotificationText(groupId, group.notices) }
+    return { kind: "deliver", notification: buildTaskGroupNotificationText(groupId, group.members) }
   }
 }

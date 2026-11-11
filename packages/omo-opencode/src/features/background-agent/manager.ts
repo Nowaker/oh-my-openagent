@@ -48,7 +48,6 @@ import {
   getCurrentAttempt,
   startAttempt,
 } from "./attempt-lifecycle"
-import { buildBackgroundTaskNotificationText } from "./background-task-notification-template"
 import { readTaskNotificationResult } from "./task-notification-result"
 import { TaskGroupCollector } from "./task-group-collector"
 import { writeBackgroundTaskMarker } from "./background-task-marker"
@@ -3007,7 +3006,7 @@ The task was re-queued on a fallback model after a retryable failure.
     const result = task.sessionId && this.enableParentSessionNotifications
       ? await readTaskNotificationResult(this.client, task.sessionId, this.directory)
       : undefined
-    const notification = buildBackgroundTaskNotificationText({
+    const grouped = this.taskGroups.collect(task, {
       task: {
         id: task.id,
         sessionId: task.sessionId,
@@ -3024,8 +3023,6 @@ The task was re-queued on a fallback model after a retryable failure.
       usage: { toolCalls: task.progress?.toolCalls },
       grouped: this.taskGroups.isGrouped(task),
     })
-
-    const grouped = this.taskGroups.collect(task, notification)
     // The removal timer is independent of the notice and outlasts its delivery by minutes.
     if (task.status !== "running" && task.status !== "pending") {
       this.scheduleTaskRemoval(task.id)
