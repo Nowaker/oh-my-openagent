@@ -79,6 +79,7 @@ describe("createSyncSession", () => {
           forkCalls.push(input)
           return { data: { id: "ses_fork" } }
         },
+        messages: async () => ({ data: [{ info: { role: "user" } }, { info: { role: "assistant" } }, { info: { role: "user" } }] }),
       },
     }
 
@@ -92,10 +93,11 @@ describe("createSyncSession", () => {
     })
 
     // then
-    expect(result).toEqual({ ok: true, sessionID: "ses_fork", parentDirectory: "/parent" })
+    expect(result).toEqual({ ok: true, sessionID: "ses_fork", parentDirectory: "/parent", anchorMessageCount: 3 })
     expect(createCalls).toHaveLength(0)
     expect(forkCalls[0]?.body).toEqual({
       unsettled: "exclude",
+      history: "context",
       parentID: "ses_parent",
       title: "test task (@sisyphus fork)",
       permission: [{ permission: "question", action: "deny", pattern: "*" }],

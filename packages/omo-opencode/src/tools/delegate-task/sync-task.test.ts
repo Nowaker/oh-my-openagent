@@ -609,6 +609,51 @@ describe("executeSyncTask - cleanup on error paths", () => {
     expect(deleteCalls[0]).toBe("ses_test_12345678")
   })
 
+  test("#given a foreground fork #when it is polled and its result read #then only messages after its copied history count", async () => {
+    // given
+    const mockClient = { session: { create: async () => ({ data: { id: "ses_fork_12345678" } }), abort: async () => ({}) } }
+    const { executeSyncTask } = require("./sync-task")
+    const pollAnchors: Array<number | undefined> = []
+    const fetchAnchors: Array<number | undefined> = []
+    const deps = {
+      createSyncSession: async () => ({ ok: true, sessionID: "ses_fork_12345678", parentDirectory: "/tmp", anchorMessageCount: 7 }),
+      sendSyncPrompt: async () => null,
+      pollSyncSession: async (_ctx: unknown, _client: unknown, input: { anchorMessageCount?: number }) => {
+        pollAnchors.push(input.anchorMessageCount)
+        return null
+      },
+      fetchSyncResult: async (_client: unknown, _sessionID: string, anchorMessageCount?: number) => {
+        fetchAnchors.push(anchorMessageCount)
+        return { ok: true as const, textContent: "FORK_RESULT" }
+      },
+    }
+    const mockExecutorCtx = {
+      manager: {
+        reserveSubagentSpawn: mock(async () => ({
+          spawnContext: { rootSessionID: "parent-session", parentDepth: 0, childDepth: 1 },
+          descendantCount: 1,
+          commit: mock(() => 1),
+          rollback: mock(() => {}),
+        })),
+      },
+      client: mockClient,
+      directory: "/tmp",
+      onSyncSessionCreated: null,
+    }
+    const args = { prompt: "work", description: "fork task", subagent_type: "fork", load_skills: [], run_in_background: false }
+
+    // when
+    const result = await executeSyncTask(args, { sessionID: "parent-session", callID: "call-1", metadata: () => {} }, mockExecutorCtx, {
+      sessionID: "parent-session",
+      agent: "sisyphus",
+    }, "sisyphus", undefined, undefined, undefined, undefined, deps)
+
+    // then
+    expect(result).toContain("FORK_RESULT")
+    expect(pollAnchors).toEqual([7])
+    expect(fetchAnchors).toEqual([7])
+  })
+
   test("#given a foreground handoff threshold #when the child is still running at it #then it is adopted as a background task and left running", async () => {
     // given
     const abortCalls: string[] = []
@@ -661,6 +706,7 @@ describe("executeSyncTask - cleanup on error paths", () => {
     // then
     expect(adoptCalls).toHaveLength(1)
     expect(adoptCalls[0]).toMatchObject({ taskId: "sync_ses_test", sessionId: "ses_test_12345678", parentSessionId: "parent-session", wake: "each" })
+    expect(adoptCalls[0]?.startedAt).toBeInstanceOf(Date)
     expect(result).toContain("background_task_id: sync_ses_test")
     expect(abortCalls).toEqual([])
     expect(deleteCalls).toEqual([])

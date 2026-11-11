@@ -15,8 +15,9 @@ export type ForkSessionClient = {
 /**
  * Creates a subagent session as a copy of its parent, for `task(subagent_type: "fork")`. The parent is mid-turn while
  * its task call runs, so the copy leaves out the assistant message still streaming (`unsettled: "exclude"`): the child
- * sees the conversation up to the parent's last finished step. `parentID`, `title` and `permission` need the opencode
- * fork's session.fork (`db917f0795`); the plugin SDK predates them, hence the untyped body.
+ * sees the conversation up to the parent's last finished step. It copies only the context the parent's next turn reads
+ * (`history: "context"`, from the latest compaction on), not a long session's whole transcript. `parentID`, `title`,
+ * `permission` and `history` need the opencode fork's session.fork; the plugin SDK predates them, hence the untyped body.
  */
 export async function forkParentAsChildSession(
   client: ForkSessionClient,
@@ -31,6 +32,7 @@ export async function forkParentAsChildSession(
   if (typeof fork !== "function") throw new Error("this opencode cannot fork a session")
   const body: Record<string, unknown> = {
     unsettled: "exclude",
+    history: "context",
     parentID: input.parentSessionID,
     title: input.title,
     ...(input.permission ? { permission: input.permission } : {}),

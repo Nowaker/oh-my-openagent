@@ -7,6 +7,7 @@ import { BackgroundManager } from "./features/background-agent"
 import type { MonitorManager } from "./features/monitor"
 import { createMonitorManager } from "./features/monitor"
 import { BashBackgroundManager, cancelBackgroundJob } from "./features/bash-background"
+import { createRunningJobsLedger, type RunningJobsLedger } from "./features/running-jobs"
 import { SkillMcpManager } from "./features/skill-mcp-manager"
 import { cleanupSessionTeamRuns } from "./features/team-mode/team-runtime/session-cleanup"
 import { lookupTeamSession } from "./features/team-mode/team-session-registry"
@@ -61,6 +62,7 @@ export type Managers = {
   tuiStateMirror?: TuiStateMirror
   monitorManager?: MonitorManager
   bashBackgroundManager?: BashBackgroundManager
+  runningJobsLedger?: RunningJobsLedger
 }
 
 export function createManagers(args: {
@@ -217,6 +219,14 @@ export function createManagers(args: {
     notify: (sessionID, notice) => parentWakeManager.queueSessionNotice(sessionID, notice),
     cancelJob: (id) => cancelBackgroundJob(ctx.client, ctx.directory, id),
   })
+  const runningJobsLedger = createRunningJobsLedger({
+    backgroundManager: parentWakeManager,
+    ...(monitorManager ? { monitorManager } : {}),
+    bashBackgroundManager,
+  })
+  runningJobsLedger.start()
+  // Freezes the ledger before the shutdown's own cancellations empty it, so they stay recorded as lost.
+  deps.registerManagerForCleanupFn({ shutdown: async () => runningJobsLedger.shutdown() })
 
   if (pluginConfig.tui?.sidebar?.enabled !== false) {
     tuiStateMirror = new deps.TuiStateMirrorClass({
@@ -248,5 +258,6 @@ export function createManagers(args: {
     tuiStateMirror,
     monitorManager,
     bashBackgroundManager,
+    runningJobsLedger,
   }
 }

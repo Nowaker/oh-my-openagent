@@ -48,7 +48,6 @@ import {
   getCurrentAttempt,
   startAttempt,
 } from "./attempt-lifecycle"
-import { buildBackgroundTaskNotificationText } from "./background-task-notification-template"
 import { readTaskNotificationResult } from "./task-notification-result"
 import { TaskGroupCollector } from "./task-group-collector"
 import { writeBackgroundTaskMarker } from "./background-task-marker"
@@ -284,6 +283,8 @@ export class BackgroundManager {
   private readonly resumesAwaitingAdmission = new Set<string>()
   private completedTaskArchive: Map<string, BackgroundTask> = new Map()
   private readonly taskGroups = new TaskGroupCollector()
+  /** The run each task last reported, so a run that ends twice (finished, then failed late) sends one notice. */
+  private readonly notifiedRuns = new Map<string, string>()
   private idleDeferralTimers: Map<string, ReturnType<typeof setTimeout>> = new Map()
   private notificationQueueByParent: Map<string, Promise<void>> = new Map()
   private readonly parentWakeNotifier: ParentWakeNotifier
@@ -881,6 +882,7 @@ export class BackgroundManager {
     }
 
     const sessionID = createResult.data.id
+    if (input.forkFromParent) task.ownMessagesSince = Date.now()
 
     if (task.status === "cancelled") {
       clearDelegatedChildSessionBootstrap(sessionID)
@@ -1409,7 +1411,8 @@ The fallback retry session is now created and can be inspected directly.
    * Takes over a still-running foreground child without touching it: the child keeps running, and its completion
    * notice wakes the parent like any background task's. A session that already has a finished task record (a
    * foreground continuation of a background child) revives that record rather than adding a second one, because
-   * session events are matched to the first task holding the session.
+   * session events are matched to the first task holding the session. `startedAt` is when the foreground call
+   * started, so the task's reported duration covers its whole run.
    */
   async adoptForegroundSession(input: {
     taskId: string
@@ -1419,11 +1422,13 @@ The fallback retry session is now created and can be inspected directly.
     agent: string
     parentAgent?: string
     wake: BackgroundTaskWake
+    startedAt: Date
   }): Promise<BackgroundTask> {
     const existing = this.findBySession(input.sessionId)
     if (!existing) {
       const task = await this.trackTask(input)
       task.wake = input.wake
+      task.startedAt = input.startedAt
       return task
     }
     existing.wake = input.wake
@@ -1439,7 +1444,7 @@ The fallback retry session is now created and can be inspected directly.
       this.updateTaskParent(existing, input.parentSessionId)
     }
     existing.status = "running"
-    existing.startedAt = new Date()
+    existing.startedAt = input.startedAt
     existing.completedAt = undefined
     existing.error = undefined
     existing.progress = { toolCalls: 0, lastUpdate: new Date() }
@@ -2087,7 +2092,7 @@ The fallback retry session is now created and can be inspected directly.
           return resolved?.isCurrent ? resolved.task : undefined
         },
         idleDeferralTimers: this.idleDeferralTimers,
-        validateSessionHasOutput: (id) => this.validateSessionHasOutput(id),
+        validateSessionHasOutput: (id, ownMessagesSince) => this.validateSessionHasOutput(id, ownMessagesSince),
         checkSessionTodos: (id) => this.checkSessionTodos(id),
         tryCompleteTask: (task, source) => this.tryCompleteTask(task, source),
         emitIdleEvent: (sessionID) => this.handleEvent({ type: "session.idle", properties: { sessionID } }),
@@ -2561,9 +2566,10 @@ The task was re-queued on a fallback model after a retryable failure.
 
   /**
    * Validates that a session has actual assistant/tool output before marking complete.
-   * Prevents premature completion when session.idle fires before agent responds.
+   * Prevents premature completion when session.idle fires before agent responds. A fork child's session starts with
+   * its parent's copied output, so `ownMessagesSince` counts only messages created after the fork.
    */
-  private async validateSessionHasOutput(sessionID: string): Promise<boolean> {
+  private async validateSessionHasOutput(sessionID: string, ownMessagesSince?: number): Promise<boolean> {
     if (this.observedOutputSessions.has(sessionID)) {
       return true
     }
@@ -2573,7 +2579,10 @@ The task was re-queued on a fallback model after a retryable failure.
         path: { id: sessionID },
       }, this.directory)
 
-      const messages = normalizeSDKResponse(response, [] as Array<{ info?: { role?: string } }>, { preferResponseOnMissingData: true })
+      const all = normalizeSDKResponse(response, [] as Array<{ info?: { role?: string; time?: { created?: number } } }>, { preferResponseOnMissingData: true })
+      const messages = ownMessagesSince === undefined
+        ? all
+        : all.filter((message) => (message.info?.time?.created ?? 0) >= ownMessagesSince)
 
       // Check for at least one assistant or tool message
       const hasAssistantOrToolMessage = messages.some(
@@ -2698,6 +2707,7 @@ The task was re-queued on a fallback model after a retryable failure.
 
       this.clearNotificationsForTask(taskId)
       this.removeTask(task)
+      this.notifiedRuns.delete(taskId)
       this.clearTaskHistoryWhenParentTasksGone(task.parentSessionId)
       if (task.sessionId) {
         subagentSessions.delete(task.sessionId)
@@ -2855,6 +2865,11 @@ The task was re-queued on a fallback model after a retryable failure.
     return Array.from(this.tasks.values()).filter(t => t.status === "running")
   }
 
+  /** Tasks still running or waiting for a slot: what a restart of this process would cut off. */
+  listUnfinishedTasks(): BackgroundTask[] {
+    return Array.from(this.tasks.values()).filter(t => t.status === "running" || t.status === "pending")
+  }
+
   /**
    * Get all non-running tasks still in memory (for compaction hook)
    */
@@ -2957,6 +2972,13 @@ The task was re-queued on a fallback model after a retryable failure.
 
   private async notifyParentSession(task: BackgroundTask): Promise<void> {
     if (this.shutdownTriggered || !this.taskRecovery.owns(task.sessionId)) return
+    // A resume, a revived handoff and a fallback retry each start a new run with a new start time or attempt.
+    const run = `${task.currentAttemptID ?? ""}:${task.startedAt?.getTime() ?? ""}`
+    if (this.notifiedRuns.get(task.id) === run) {
+      log("[background-agent] Skipped a second notice for a task run that already reported:", { taskId: task.id, status: task.status })
+      return
+    }
+    this.notifiedRuns.set(task.id, run)
     const duration = formatDuration(task.startedAt ?? new Date(), task.completedAt)
 
     log("[background-agent] notifyParentSession called for task:", task.id)
@@ -2989,17 +3011,23 @@ The task was re-queued on a fallback model after a retryable failure.
       allComplete = remainingCount === 0
     }
 
+    const result = task.sessionId && this.enableParentSessionNotifications
+      ? await readTaskNotificationResult(this.client, task.sessionId, this.directory, task.ownMessagesSince)
+      : undefined
+    const fork = task.ownMessagesSince !== undefined
+    if (fork && task.status === "completed" && this.enableParentSessionNotifications && result === undefined) {
+      task.status = "error"
+      task.error = "The fork ended without an answer of its own: nothing it wrote after the fork point could be read."
+    }
+    // A fork that did not finish with its own answer failed, whichever way it stopped.
     const statusText = task.status === "completed"
       ? "COMPLETED"
-      : task.status === "interrupt"
-        ? "INTERRUPTED"
-        : task.status === "error"
-          ? "ERROR"
+      : fork || task.status === "error"
+        ? "ERROR"
+        : task.status === "interrupt"
+          ? "INTERRUPTED"
           : "CANCELLED"
-    const result = task.sessionId && this.enableParentSessionNotifications
-      ? await readTaskNotificationResult(this.client, task.sessionId, this.directory)
-      : undefined
-    const notification = buildBackgroundTaskNotificationText({
+    const grouped = this.taskGroups.collect(task, {
       task: {
         id: task.id,
         sessionId: task.sessionId,
@@ -3016,8 +3044,6 @@ The task was re-queued on a fallback model after a retryable failure.
       usage: { toolCalls: task.progress?.toolCalls },
       grouped: this.taskGroups.isGrouped(task),
     })
-
-    const grouped = this.taskGroups.collect(task, notification)
     // The removal timer is independent of the notice and outlasts its delivery by minutes.
     if (task.status !== "running" && task.status !== "pending") {
       this.scheduleTaskRemoval(task.id)
@@ -3447,7 +3473,7 @@ The task was re-queued on a fallback model after a retryable failure.
           const completionSource = sessionStatus?.type === "idle"
             ? "polling (idle status)"
             : "polling (session gone from status)"
-          const hasValidOutput = await this.validateSessionHasOutput(sessionID)
+          const hasValidOutput = await this.validateSessionHasOutput(sessionID, task.ownMessagesSince)
           if (!hasValidOutput) {
             if (sessionGoneThresholdReached) {
               const sessionExists = await this.verifySessionExists(sessionID)

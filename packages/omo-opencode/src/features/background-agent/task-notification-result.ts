@@ -9,7 +9,7 @@ export const TASK_NOTIFICATION_RESULT_MAX_CHARS = 6000
 const RESULT_MESSAGE_WINDOW = 20
 
 type ResultPart = { type?: string; text?: string; synthetic?: boolean }
-type ResultMessage = { info?: { role?: string }; parts?: ResultPart[] }
+type ResultMessage = { info?: { role?: string; time?: { created?: number } }; parts?: ResultPart[] }
 
 /** The text of the newest assistant message that has any, without reasoning or synthetic parts. */
 export function finalAssistantText(messages: readonly ResultMessage[]): string | undefined {
@@ -31,11 +31,15 @@ export function capNotificationResult(text: string, maxChars = TASK_NOTIFICATION
   return { text: `${text.slice(0, maxChars).trimEnd()}\n[... ${text.length - maxChars} more characters]`, truncated: true }
 }
 
-/** The child's final answer for its completion notice, or undefined when it cannot be read. */
+/**
+ * The child's final answer for its completion notice, or undefined when it cannot be read. A fork child's session
+ * starts with a copy of its parent, so `ownMessagesSince` leaves out every message created before the fork.
+ */
 export async function readTaskNotificationResult(
   client: OpencodeClient,
   sessionID: string,
   directory: string,
+  ownMessagesSince?: number,
 ): Promise<BackgroundTaskNotificationResult | undefined> {
   try {
     const response = await messagesInDirectory(client, {
@@ -43,7 +47,9 @@ export async function readTaskNotificationResult(
       query: { limit: RESULT_MESSAGE_WINDOW },
     }, directory)
     const messages = normalizeSDKResponse(response, [] as ResultMessage[], { preferResponseOnMissingData: true })
-    const text = finalAssistantText(Array.isArray(messages) ? messages : [])
+    const all = Array.isArray(messages) ? messages : []
+    const own = ownMessagesSince === undefined ? all : all.filter((message) => (message.info?.time?.created ?? 0) >= ownMessagesSince)
+    const text = finalAssistantText(own)
     return text === undefined ? undefined : capNotificationResult(text)
   } catch (error) {
     log("[background-agent] Could not read the child's final answer for its notification:", { sessionID, error: String(error) })

@@ -5,6 +5,7 @@ import { applyAgentVariant } from "./shared/agent-variant"
 import { createChatParamsHandler } from "./plugin/chat-params"
 import { createChatHeadersHandler } from "./plugin/chat-headers"
 import { createChatMessageHandler } from "./plugin/chat-message"
+import { withRunningJobsClaim } from "./features/running-jobs"
 import { createCommandExecuteBeforeHandler } from "./plugin/command-execute-before"
 import { createMessagesTransformHandler } from "./plugin/messages-transform"
 import { createSystemTransformHandler } from "./plugin/system-transform"
@@ -91,12 +92,12 @@ export function createPluginInterface(args: {
       notify: (message) => showSkillSecurityNotice(ctx, message),
     }),
 
-    "chat.message": createChatMessageHandler({
+    "chat.message": withRunningJobsClaim(managers.runningJobsLedger, createChatMessageHandler({
       ctx,
       pluginConfig,
       firstMessageVariantGate,
       hooks,
-    }),
+    })),
 
     "experimental.chat.messages.transform": createMessagesTransformHandler({
       hooks,

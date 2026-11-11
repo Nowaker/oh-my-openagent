@@ -53,6 +53,8 @@ export interface MonitorManager {
   start(opts: MonitorStartOpts): Promise<MonitorRecord>
   stop(id: MonitorId): Promise<void>
   list(sessionId: string): MonitorRecord[]
+  /** Every monitor still starting or running, across sessions. */
+  listRunning(): MonitorRecord[]
   get(id: MonitorId): MonitorRecord | undefined
   getOutput(id: MonitorId, opts: MonitorOutputQuery): MonitorOutputResult
   stopSessionMonitors(sessionId: string): Promise<void>

@@ -74,5 +74,14 @@ export async function executeFanOut(
   return `Fan-out launched: ${children.length} background task${children.length === 1 ? "" : "s"} over ${items.length} item${items.length === 1 ? "" : "s"}.
 ${children.map((task) => `- \`${task.id}\`: ${task.description}`).join("\n")}${failed > 0 ? `\n${failed} child${failed === 1 ? "" : "ren"} failed to launch:\n${outputs.filter((output) => !children.some((task) => output.includes(task.id))).join("\n\n")}` : ""}
 
-${reporting} Do not poll. Stop one with \`background_cancel(taskId="<id>")\`.`
+${reporting} Do not poll. Stop one with \`background_cancel(taskId="<id>")\`.${continueBlock(children)}`
+}
+
+/* The task-resume-info hook would append one child's session only; listing each child here makes it skip the call. */
+function continueBlock(children: ReadonlyArray<{ id: string; sessionId?: string }>): string {
+  if (children.length === 0) return ""
+  const lines = children.map((task) => task.sessionId
+    ? `- \`${task.id}\`: task(task_id="${task.sessionId}", load_skills=[], run_in_background=true, prompt="...")`
+    : `- \`${task.id}\`: not started yet; its session id comes with its notice`)
+  return `\n\nto continue: each child keeps its own session\n${lines.join("\n")}`
 }

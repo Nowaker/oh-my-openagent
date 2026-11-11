@@ -176,6 +176,51 @@ describe("BackgroundManager pollRunningTasks", () => {
       expect(task.completedAt).toBeDefined()
     })
 
+    test("#when a fork's only output is the history copied from its parent #then the poll keeps it running", async () => {
+      //#given
+      const manager = createManagerWithClient({
+        messages: async () => ({
+          data: [
+            { info: { role: "assistant", finish: "tool-calls", id: "msg-1", time: { created: 1_000 } }, parts: [{ type: "text", text: "copied parent text" }] },
+            { info: { role: "user", id: "msg-2", time: { created: 5_000 } }, parts: [{ type: "text", text: "You are a fork" }] },
+          ],
+        }),
+      })
+      const task = { ...createRunningTask("ses-fork"), ownMessagesSince: 4_000 }
+      injectTask(manager, task)
+
+      //#when
+      const poll = manager["pollRunningTasks"]
+      await poll.call(manager)
+      manager.shutdown()
+
+      //#then
+      expect(task.status).toBe("running")
+    })
+
+    test("#when a fork has written its own answer #then the poll completes it", async () => {
+      //#given
+      const manager = createManagerWithClient({
+        messages: async () => ({
+          data: [
+            { info: { role: "assistant", finish: "tool-calls", id: "msg-1", time: { created: 1_000 } }, parts: [{ type: "text", text: "copied parent text" }] },
+            { info: { role: "user", id: "msg-2", time: { created: 5_000 } }, parts: [{ type: "text", text: "You are a fork" }] },
+            { info: { role: "assistant", finish: "stop", id: "msg-3", time: { created: 6_000 } }, parts: [{ type: "text", text: "own answer" }] },
+          ],
+        }),
+      })
+      const task = { ...createRunningTask("ses-fork-done"), ownMessagesSince: 4_000 }
+      injectTask(manager, task)
+
+      //#when
+      const poll = manager["pollRunningTasks"]
+      await poll.call(manager)
+      manager.shutdown()
+
+      //#then
+      expect(task.status).toBe("completed")
+    })
+
     test("#when the first missing-status poll has no output #then it does not fail the task yet", async () => {
       //#given
       const getSession = mock(async () => ({

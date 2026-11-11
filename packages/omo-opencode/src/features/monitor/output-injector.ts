@@ -122,9 +122,7 @@ export class MonitorOutputInjector {
       }
 
       pending.batches.shift()
-      if (pending.batches.length === 0) {
-        this.pendingOutputs.delete(monitorId)
-      }
+      this.deleteIfDrained(monitorId, pending)
 
       const delivered = await this.dispatchBatch(pending.record, batch, source, forceActiveDispatch)
       if (!delivered) {
@@ -133,7 +131,12 @@ export class MonitorOutputInjector {
       }
     }
 
-    if (pending.batches.length === 0) {
+    this.deleteIfDrained(monitorId, pending)
+  }
+
+  // A batch queued while a dispatch is awaited lands in a new pending entry, which this flush must not delete.
+  private deleteIfDrained(monitorId: string, pending: PendingMonitorOutput): void {
+    if (pending.batches.length === 0 && this.pendingOutputs.get(monitorId) === pending) {
       this.pendingOutputs.delete(monitorId)
     }
   }

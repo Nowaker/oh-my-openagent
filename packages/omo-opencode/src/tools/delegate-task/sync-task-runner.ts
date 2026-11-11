@@ -23,6 +23,8 @@ type SyncTaskRunnerInput = {
   readonly fallbackChain: FallbackEntry[] | undefined
   readonly deps: SyncTaskDeps
   readonly sessionID: string
+  /** A fork child's copied message count; only messages after it are the child's. */
+  readonly anchorMessageCount?: number
   readonly spawnDepth: number
   readonly taskId: string
   readonly startTime: Date
@@ -94,6 +96,7 @@ export async function runSyncTaskLoop(input: SyncTaskRunnerInput): Promise<strin
   const hasPendingParentWake = executorCtx.manager?.hasPendingParentWake?.bind(executorCtx.manager)
   const deliverableTag = getDeliverableTag(agentToUse)
   let effectiveCategoryModel = input.categoryModel
+  let anchorMessageCount = input.anchorMessageCount
   let fallbackState: ModelFallbackState | undefined = effectiveCategoryModel && fallbackChain?.length
     ? {
         providerID: effectiveCategoryModel.providerID,
@@ -158,6 +161,7 @@ export async function runSyncTaskLoop(input: SyncTaskRunnerInput): Promise<strin
       maxAssistantTurns: executorCtx.syncMaxAssistantTurns,
       hasActiveChildBackgroundTasks,
       hasPendingParentWake,
+      ...(anchorMessageCount !== undefined ? { anchorMessageCount } : {}),
       ...(handoffTimer.signal ? { handoffSignal: handoffTimer.signal } : {}),
     }, syncPollTimeoutMs).finally(handoffTimer.cancel)
     if (pollError === SYNC_POLL_HANDED_OFF) {
@@ -175,7 +179,7 @@ export async function runSyncTaskLoop(input: SyncTaskRunnerInput): Promise<strin
     }
     if (pollError) {
       if (shouldAttemptPollErrorRecovery(pollError)) {
-        const recoveredResult = await deps.fetchSyncResult(client, activeSessionID, undefined, {
+        const recoveredResult = await deps.fetchSyncResult(client, activeSessionID, anchorMessageCount, {
           strictAbortRecovery: true,
           deliverableTag,
         })
@@ -215,6 +219,7 @@ export async function runSyncTaskLoop(input: SyncTaskRunnerInput): Promise<strin
       }
 
       activeSessionID = retrySessionResult.sessionID
+      anchorMessageCount = retrySessionResult.anchorMessageCount
       setSyncSessionID(activeSessionID)
       effectiveCategoryModel = nextFallbackModel
       await registerSyncSession(activeSessionID)
@@ -230,7 +235,7 @@ export async function runSyncTaskLoop(input: SyncTaskRunnerInput): Promise<strin
       continue
     }
 
-    const result = await deps.fetchSyncResult(client, activeSessionID, undefined, { deliverableTag })
+    const result = await deps.fetchSyncResult(client, activeSessionID, anchorMessageCount, { deliverableTag })
     if (!result.ok) {
       return result.error
     }

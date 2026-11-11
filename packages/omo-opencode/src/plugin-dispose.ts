@@ -12,9 +12,12 @@ export function createPluginDispose(args: {
   tuiStateMirror?: {
     stop: () => void
   }
+  runningJobsLedger?: {
+    shutdown: () => void
+  }
   disposeHooks: () => void
 }): PluginDispose {
-  const { backgroundManager, skillMcpManager, tuiStateMirror, disposeHooks } = args
+  const { backgroundManager, skillMcpManager, tuiStateMirror, runningJobsLedger, disposeHooks } = args
   let disposePromise: Promise<void> | null = null
 
   return async (): Promise<void> => {
@@ -24,6 +27,12 @@ export function createPluginDispose(args: {
     }
 
     disposePromise = (async (): Promise<void> => {
+      // Frozen first: the managers below stop the jobs, which must stay recorded for the next process to report lost.
+      try {
+        runningJobsLedger?.shutdown()
+      } catch (error) {
+        log("[plugin-dispose] runningJobsLedger.shutdown() error:", error)
+      }
       try {
         tuiStateMirror?.stop()
       } catch (error) {
