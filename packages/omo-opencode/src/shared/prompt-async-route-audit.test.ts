@@ -37,6 +37,10 @@ const PROMPT_GATE_FILES = new Set([
 ])
 const RAW_PROMPT_ALLOWLIST = new Map<string, string>([
   [
+    path.join(SOURCE_ROOT, "plugin-v2", "v1-session.ts"),
+    "implements the SDK transport beneath the existing shared prompt gate; serializes native agent/model selection before v2 admission and exposes no independent continuation route",
+  ],
+  [
     path.join(SOURCE_ROOT, "plugin", "event.ts"),
     "team idle wake hint wires a client facade for downstream gate-routed dispatch",
   ],

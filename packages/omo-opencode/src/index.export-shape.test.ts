@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test"
 import pluginModule, { omoPlugin } from "./index"
+import { setupV2Bridge } from "./plugin-v2"
 
 describe("oh-my-openagent plugin export shape", () => {
   it("keeps default module and named server exports aligned", () => {
@@ -25,7 +26,6 @@ describe("oh-my-openagent plugin export shape", () => {
     expect(definition["id"]).toBe("oh-my-openagent")
     expect(typeof definition["server"]).toBe("function")
     expect(typeof setup).toBe("function")
-    if (typeof setup !== "function") return
-    expect(await setup({})).toBeUndefined()
+    expect(setup).toBe(setupV2Bridge)
   })
 })

@@ -55,6 +55,7 @@ oauth-success.html
 .debugging
 local-ignore/
 .local-ignore/
+tmp/
 # QA evidence stays local and is summarized in the PR body, never committed (#8703).
 # .omo/evidence/ is covered by `.omo/*` above; these catch hand-typed capture roots.
 .qa-evidence/
