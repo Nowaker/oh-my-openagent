@@ -15,6 +15,7 @@ export interface MessagePartInfo {
   readonly state: {
     readonly status: string | undefined
     readonly input: Record<string, unknown> | undefined
+    readonly startedAt: number | undefined
   } | undefined
   readonly field: string | undefined
   readonly activityTime: Date | undefined
@@ -51,6 +52,7 @@ function resolveState(record: Record<string, unknown> | undefined): MessagePartI
   return {
     status: getStringField(state, "status"),
     input: getRecordField(state, "input"),
+    startedAt: getDateField(getRecordField(state, "time"), "start")?.getTime(),
   }
 }
 
@@ -129,6 +131,7 @@ export function resolveSessionNextPartInfo(eventType: string, properties: unknow
       state: {
         status: "running",
         input,
+        startedAt: getDateField(props, "timestamp")?.getTime(),
       },
       field: undefined,
       activityTime: getDateField(props, "timestamp"),

@@ -321,3 +321,42 @@ describe("BackgroundManager persisted session activity stale checks", () => {
     await manager.shutdown()
   })
 })
+
+describe("BackgroundManager fork tool call count", () => {
+  test("counts only the tool calls a fork made itself, not the ones in its copied history", async () => {
+    //#given - a fork child whose copy finished at forkStart
+    const forkStart = new Date("2026-05-21T03:00:00.000Z").getTime()
+    const client = {
+      session: {
+        status: async () => ({ data: {} }),
+        prompt: async () => ({}),
+        promptAsync: async () => ({}),
+        abort: async () => ({}),
+        todo: async () => ({ data: [] }),
+        messages: async () => ({ data: [] }),
+      },
+    }
+    const manager = new BackgroundManager({
+      pluginContext: createPluginContext(client),
+      enableParentSessionNotifications: false,
+    })
+    const task = createRunningTask({ ownMessagesSince: forkStart })
+    unsafeTestValue<PollingManager>(manager).tasks.set(task.id, task)
+    const toolPart = (id: string, start: number) => ({
+      type: "message.part.updated",
+      properties: {
+        part: { id, sessionID: "ses-active", type: "tool", tool: "bash", state: { status: "completed", time: { start, end: start + 10 } } },
+      },
+    })
+
+    //#when - the copy's tool parts arrive, then one tool call of the fork's own
+    manager.handleEvent(toolPart("prt-copied-1", forkStart - 600_000))
+    manager.handleEvent(toolPart("prt-copied-2", forkStart - 1))
+    manager.handleEvent(toolPart("prt-own", forkStart + 5_000))
+
+    //#then
+    expect(task.progress?.toolCalls).toBe(1)
+
+    await manager.shutdown()
+  })
+})
