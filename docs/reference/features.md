@@ -687,10 +687,12 @@ AST-aware search and rewrite now lives in the `ast-grep` skill. Load it with the
 
 On an opencode build whose `bash` tool runs commands in the background
 (`run_in_background`, or a foreground command moved there at its timeout),
-OMO reports each such command's exit to the session that started it as a
-`<task-notification>` headed `[BASH COMMAND COMPLETED|FAILED|TIMED OUT|CANCELLED]`,
-with the exit code, the end of the output and the output file. A command
-stopped through `background_cancel` sends no exit notice. The runtime limit is
+OMO tracks each such command, so `background_cancel` can stop it by its
+`bash_...` id and the running-jobs ledger lists it. The exit notice, a
+`<task-notification>` headed `[BASH COMMAND COMPLETED|FAILED|TIMED OUT|CANCELLED]`
+with the exit code, the end of the output and the output file, comes from the
+host's plugin (Vibeterm's `opencode-vibeterm-spawn-plugin`), not from OMO; a
+command stopped through `background_cancel` sends none. The runtime limit is
 opencode's `bash_background.timeout`, not an OMO setting.
 
 `task` is the broader delegation path for category routing, direct
