@@ -283,6 +283,8 @@ export class BackgroundManager {
   private readonly resumesAwaitingAdmission = new Set<string>()
   private completedTaskArchive: Map<string, BackgroundTask> = new Map()
   private readonly taskGroups = new TaskGroupCollector()
+  /** The run each task last reported, so a run that ends twice (finished, then failed late) sends one notice. */
+  private readonly notifiedRuns = new Map<string, string>()
   private idleDeferralTimers: Map<string, ReturnType<typeof setTimeout>> = new Map()
   private notificationQueueByParent: Map<string, Promise<void>> = new Map()
   private readonly parentWakeNotifier: ParentWakeNotifier
@@ -880,6 +882,7 @@ export class BackgroundManager {
     }
 
     const sessionID = createResult.data.id
+    if (input.forkFromParent) task.ownMessagesSince = Date.now()
 
     if (task.status === "cancelled") {
       clearDelegatedChildSessionBootstrap(sessionID)
@@ -2700,6 +2703,7 @@ The task was re-queued on a fallback model after a retryable failure.
 
       this.clearNotificationsForTask(taskId)
       this.removeTask(task)
+      this.notifiedRuns.delete(taskId)
       this.clearTaskHistoryWhenParentTasksGone(task.parentSessionId)
       if (task.sessionId) {
         subagentSessions.delete(task.sessionId)
@@ -2964,6 +2968,13 @@ The task was re-queued on a fallback model after a retryable failure.
 
   private async notifyParentSession(task: BackgroundTask): Promise<void> {
     if (this.shutdownTriggered || !this.taskRecovery.owns(task.sessionId)) return
+    // A resume, a revived handoff and a fallback retry each start a new run with a new start time or attempt.
+    const run = `${task.currentAttemptID ?? ""}:${task.startedAt?.getTime() ?? ""}`
+    if (this.notifiedRuns.get(task.id) === run) {
+      log("[background-agent] Skipped a second notice for a task run that already reported:", { taskId: task.id, status: task.status })
+      return
+    }
+    this.notifiedRuns.set(task.id, run)
     const duration = formatDuration(task.startedAt ?? new Date(), task.completedAt)
 
     log("[background-agent] notifyParentSession called for task:", task.id)
@@ -2996,16 +3007,22 @@ The task was re-queued on a fallback model after a retryable failure.
       allComplete = remainingCount === 0
     }
 
+    const result = task.sessionId && this.enableParentSessionNotifications
+      ? await readTaskNotificationResult(this.client, task.sessionId, this.directory, task.ownMessagesSince)
+      : undefined
+    const fork = task.ownMessagesSince !== undefined
+    if (fork && task.status === "completed" && this.enableParentSessionNotifications && result === undefined) {
+      task.status = "error"
+      task.error = "The fork ended without an answer of its own: nothing it wrote after the fork point could be read."
+    }
+    // A fork that did not finish with its own answer failed, whichever way it stopped.
     const statusText = task.status === "completed"
       ? "COMPLETED"
-      : task.status === "interrupt"
-        ? "INTERRUPTED"
-        : task.status === "error"
-          ? "ERROR"
+      : fork || task.status === "error"
+        ? "ERROR"
+        : task.status === "interrupt"
+          ? "INTERRUPTED"
           : "CANCELLED"
-    const result = task.sessionId && this.enableParentSessionNotifications
-      ? await readTaskNotificationResult(this.client, task.sessionId, this.directory)
-      : undefined
     const grouped = this.taskGroups.collect(task, {
       task: {
         id: task.id,
