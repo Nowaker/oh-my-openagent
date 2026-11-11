@@ -83,8 +83,10 @@ export function createToolExecuteBeforeHandler(args: {
         })
       }
 
+      // A sleep run in the background returns at once, so it is not a wait for a background child.
       if (
-        isPureSleepCommand(output.args.command)
+        output.args.run_in_background !== true
+        && isPureSleepCommand(output.args.command)
         && (
           backgroundManager?.hasActiveChildTasks(input.sessionID) === true
           || backgroundManager?.hasPendingParentWake(input.sessionID) === true
