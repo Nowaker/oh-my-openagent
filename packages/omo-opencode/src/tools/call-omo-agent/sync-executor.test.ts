@@ -133,6 +133,52 @@ describe("executeSync", () => {
     expect(deps.processMessages).not.toHaveBeenCalled()
   })
 
+  test("#given a foreground handoff #when the child's prompt is still running at the threshold #then the child is adopted without waiting for the prompt", async () => {
+    //#given
+    const executeSync = await importExecuteSync()
+    const adoptCalls: Array<Record<string, unknown>> = []
+    const manager = {
+      adoptForegroundSession: async (input: Record<string, unknown>) => {
+        adoptCalls.push(input)
+        return { id: input.taskId, wake: input.wake }
+      },
+    }
+    const deps = {
+      ...createDependencies(),
+      handoff: { manager: manager as never, ms: 50 },
+    }
+    let finishTurn: (() => void) | undefined
+    const turnFinished = new Promise<void>((resolve) => {
+      finishTurn = resolve
+    })
+    const recorder = createPromptAsyncRecorder(async () => {
+      await turnFinished
+      return { data: {} }
+    })
+    const abort = mock(async () => ({}))
+    const context = createContext(recorder.promptAsync) as { client: { session: Record<string, unknown> } }
+    context.client.session.abort = abort
+
+    try {
+      //#when
+      const result = await executeSync(
+        { subagent_type: "explore", description: "long look", prompt: "dig", run_in_background: false },
+        createToolContext(),
+        context as never,
+        deps,
+      )
+
+      //#then
+      expect(adoptCalls).toHaveLength(1)
+      expect(adoptCalls[0]).toMatchObject({ sessionId: "ses-test-123", parentSessionId: "parent-session" })
+      expect(result).toContain("moved to the background")
+      expect(deps.waitForCompletion).not.toHaveBeenCalled()
+      expect(abort).not.toHaveBeenCalled()
+    } finally {
+      finishTurn?.()
+    }
+  })
+
   test("sends sync prompt with question and task tools disabled", async () => {
     //#given
     const executeSync = await importExecuteSync()
