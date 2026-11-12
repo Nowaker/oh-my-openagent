@@ -61,6 +61,17 @@ function createDelegateTask(...args: Parameters<typeof import("./tools").createD
 		expect(runInBackgroundSchema.description).toContain("background_output")
 		expect(runInBackgroundSchema.description).not.toContain("returns task_id")
 	})
+
+	test("#given task schema #when listing args #then wake is offered", () => {
+		//#given
+		const toolDefinition = createDelegateTask({ manager: {} as never, client: {} as never, directory: "/tmp/test" })
+
+		//#when
+		const argNames = Object.keys(toolDefinition.args)
+
+		//#then
+		expect(argNames).toContain("wake")
+	})
 })
 
 export {}
