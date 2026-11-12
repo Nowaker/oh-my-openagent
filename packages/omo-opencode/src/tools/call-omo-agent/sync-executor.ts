@@ -49,6 +49,28 @@ const defaultDeps: ExecuteSyncDeps = {
   clearSessionFallbackChain: () => {},
 }
 
+const HANDED_OFF = Symbol("handed-off")
+
+/** Settles with the promise's value, or with HANDED_OFF once the handoff signal fires first. */
+function raceHandoff<T>(promise: Promise<T>, signal: AbortSignal | undefined): Promise<T | typeof HANDED_OFF> {
+  if (!signal) return promise
+  if (signal.aborted) return Promise.resolve(HANDED_OFF)
+  return new Promise((resolve, reject) => {
+    const onAbort = () => resolve(HANDED_OFF)
+    signal.addEventListener("abort", onAbort, { once: true })
+    promise.then(
+      (value) => {
+        signal.removeEventListener("abort", onAbort)
+        resolve(value)
+      },
+      (error: unknown) => {
+        signal.removeEventListener("abort", onAbort)
+        reject(error)
+      },
+    )
+  })
+}
+
 function buildPromptGenerationParams(model: DelegatedModelConfig | undefined): Record<string, unknown> {
   if (!model) {
     return {}
@@ -94,6 +116,7 @@ export async function executeSync(
   let createdSessionForExecution = false
   let appliedFallbackChain = false
   let handedOff = false
+  let handoffTimer: ReturnType<typeof startForegroundHandoffTimer> | undefined
 
   try {
     const session = await deps.createOrGetSession(args, toolContext, ctx, model)
@@ -135,12 +158,29 @@ export async function executeSync(
       tools: promptTools,
     })
 
+    // The sync prompt blocks until the child's turn ends, so the handoff clock has to run while it is in flight.
+    const startTime = new Date()
+    handoffTimer = startForegroundHandoffTimer(deps.handoff?.ms)
+    const handOff = async (manager: BackgroundManager, activeSessionID: string): Promise<string> => {
+      handedOff = true
+      return await handOffSyncTask({
+        manager,
+        taskId: `call_${activeSessionID.slice(0, 8)}`,
+        sessionID: activeSessionID,
+        parentSessionID: toolContext.sessionID,
+        parentAgent: toolContext.agent,
+        args: { description: args.description },
+        agentToUse: normalizedSubagentType,
+        startTime,
+      })
+    }
+
     try {
       if (!hasPrompt(ctx.client.session)) {
         return `Error: Failed to send prompt: prompt is not available on this OpenCode client.\n\n<task_metadata>\nsession_id: ${sessionID}\n</task_metadata>`
       }
 
-      const promptResult = await dispatchInternalPrompt({
+      const promptDispatch = dispatchInternalPrompt({
         mode: "sync",
         client: ctx.client,
         sessionID,
@@ -159,6 +199,14 @@ export async function executeSync(
           },
         },
       })
+      const dispatched = await raceHandoff(promptDispatch, handoffTimer.signal)
+      if (dispatched === HANDED_OFF && deps.handoff) {
+        promptDispatch.catch((error: unknown) => {
+          log("[call_omo_agent] Prompt of a handed-off child failed:", { sessionID, error: String(error) })
+        })
+        return await handOff(deps.handoff.manager, sessionID)
+      }
+      const promptResult = dispatched === HANDED_OFF ? await promptDispatch : dispatched
       const promptMayHaveBeenAccepted = promptResult.status === "failed"
         && isAmbiguousPostDispatchPromptFailure(promptResult)
       if (promptResult.status === "failed") {
@@ -183,23 +231,8 @@ export async function executeSync(
       return `Error: Failed to send prompt: ${errorMessage}\n\n<task_metadata>\nsession_id: ${sessionID}\n</task_metadata>`
     }
 
-    const startTime = new Date()
-    const handoffTimer = startForegroundHandoffTimer(deps.handoff?.ms)
     const waited = await deps.waitForCompletion(sessionID, toolContext, ctx, undefined, handoffTimer.signal)
-      .finally(handoffTimer.cancel)
-    if (waited === "handed-off" && deps.handoff) {
-      handedOff = true
-      return await handOffSyncTask({
-        manager: deps.handoff.manager,
-        taskId: `call_${sessionID.slice(0, 8)}`,
-        sessionID,
-        parentSessionID: toolContext.sessionID,
-        parentAgent: toolContext.agent,
-        args: { description: args.description },
-        agentToUse: normalizedSubagentType,
-        startTime,
-      })
-    }
+    if (waited === "handed-off" && deps.handoff) return await handOff(deps.handoff.manager, sessionID)
 
     const responseText = await deps.processMessages(sessionID, ctx)
 
@@ -208,6 +241,7 @@ export async function executeSync(
     spawnReservation?.rollback()
     throw error
   } finally {
+    handoffTimer?.cancel()
     // A child handed to the background keeps running; the background manager cleans up after it.
     if (!handedOff && sessionID && appliedFallbackChain) {
       deps.clearSessionFallbackChain(sessionID)
