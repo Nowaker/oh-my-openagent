@@ -11,6 +11,31 @@ class ToolSchemaBridgeError extends Error {
   }
 }
 
+class ToolMetadataBridgeError extends Error {
+  constructor(readonly toolName: string, cause: unknown) {
+    super(`Cannot encode ${toolName} metadata as JSON`, { cause })
+    this.name = "ToolMetadataBridgeError"
+  }
+}
+
+function encodeMetadata(toolName: string, metadata: Readonly<Record<string, unknown>>) {
+  try {
+    const encoded = JSON.stringify(metadata, (_key, value: unknown) => {
+      if (typeof value === "function" || typeof value === "symbol" || (typeof value === "number" && !Number.isFinite(value))) {
+        throw new TypeError("Tool metadata contains a non-JSON value")
+      }
+      if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+        const prototype: unknown = Object.getPrototypeOf(value)
+        if (prototype !== Object.prototype && prototype !== null) throw new TypeError("Tool metadata contains a non-JSON object")
+      }
+      return value
+    })
+    return z.record(z.string(), z.json()).parse(JSON.parse(encoded))
+  } catch (error) {
+    throw new ToolMetadataBridgeError(toolName, error)
+  }
+}
+
 function encodeField(field: object): Record<string, unknown> {
   // Re-converting the v1 registry's encoder leaves described-schema parents unseen in Zod's outer traversal.
   const internals: unknown = Reflect.get(field, "_zod")
@@ -26,7 +51,7 @@ function encodeField(field: object): Record<string, unknown> {
   return schema
 }
 
-function resultContent(result: V1ToolResult) {
+function resultContent(toolName: string, result: V1ToolResult) {
   if (typeof result === "string") return { content: result }
   const attachments = (result.attachments ?? []).map((attachment) => ({
     type: "file" as const,
@@ -36,11 +61,11 @@ function resultContent(result: V1ToolResult) {
   }))
   return {
     content: [{ type: "text" as const, text: result.output }, ...attachments],
-    metadata: { ...result.metadata, ...(result.title === undefined ? {} : { title: result.title }) },
+    metadata: encodeMetadata(toolName, { ...result.metadata, ...(result.title === undefined ? {} : { title: result.title }) }),
   }
 }
 
-export async function registerV1Tools(ctx: Plugin.Context, tools: NonNullable<Hooks["tool"]>): Promise<void> {
+export async function registerV1Tools(ctx: Pick<Plugin.Context, "tool" | "location" | "permission">, tools: NonNullable<Hooks["tool"]>): Promise<void> {
   await ctx.tool.transform((editor) => {
     for (const [name, definition] of Object.entries(tools)) {
       const args = v1ToolFactory.schema.object(definition.args)
@@ -63,7 +88,7 @@ export async function registerV1Tools(ctx: Plugin.Context, tools: NonNullable<Ho
             worktree: ctx.location.project?.canonical ?? ctx.location.directory,
             abort: context.signal,
             metadata: (update) => {
-              void context.progress(update).catch((error: unknown) => {
+              void context.progress(encodeMetadata(name, update)).catch((error: unknown) => {
                 log("[plugin-v2] tool progress failed", { tool: name, error: error instanceof Error ? error.message : String(error) })
               })
             },
@@ -79,7 +104,7 @@ export async function registerV1Tools(ctx: Plugin.Context, tools: NonNullable<Ho
               })
             },
           }
-          return resultContent(await definition.execute(args.parse(input), v1context))
+          return resultContent(name, await definition.execute(args.parse(input), v1context))
         },
       })
     }
