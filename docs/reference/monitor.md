@@ -113,7 +113,10 @@ Before `monitor` spawns anything, it checks the command through one of two gates
 1. Bash-equivalent permission, when the plugin has access to OpenCode's Bash permission ask API.
 2. `monitor.allowed_commands`, when Bash-equivalent permission is not available.
 
-The allowlist checks the command's program name, such as `bun` from `bun test`. It is a fallback gate and fails closed. If `allowed_commands` is empty or unset and Bash-equivalent permission is unavailable, Monitor denies the start request.
+Both gates split the command line the way the shell does, at `;`, `|`, `&`, `&&`, `||` and newlines outside quotes, with tabs read as spaces and a `#` that starts a word commenting out the rest of its line.
+
+- Bash-equivalent permission is asked once with every simple command as its own pattern, starting at the program: leading reserved words (`do`, `then`, `if`, `while`, ...), prefix assignments (`FOO=bar`) and wrappers (`exec`, `nohup`, `time`, `command`, `builtin`) are dropped, and redirects stay part of their command. `for i in 1 2; do echo tick $i; done | grep tick` asks for `echo tick $i` and `grep tick`, so a `rm *` deny rule also catches `tail -f x; rm -rf /`. A command with a command substitution (`$(...)`, backticks), a subshell, `case` or `function` is denied without asking; run it from a script instead.
+- The allowlist checks every program in a pipeline or command list, such as both `tail` and `grep` in `tail -f log | grep ERROR`. Prefix assignments and wrappers are skipped. Compound commands (`for`, `if`, `{ }`), subshells, redirects, and command substitutions are denied on this fallback. If `allowed_commands` is empty or unset and Bash-equivalent permission is unavailable, Monitor denies the start request.
 
 ## Limitations
 
