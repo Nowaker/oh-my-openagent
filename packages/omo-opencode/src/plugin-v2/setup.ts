@@ -9,6 +9,7 @@ import { registerV1Agents } from "./translate-agent"
 import { createV1ClientAdapter } from "./v1-client"
 import { buildV1Input } from "./v1-input"
 import { createNativeFills } from "./native-fills"
+import { updateConnectedProvidersCache } from "../shared/connected-providers-cache"
 
 type ProjectedConfig = Config & { default_agent?: string }
 
@@ -33,6 +34,11 @@ export async function setupV2Bridge(ctx: Plugin.Context): Promise<Plugin.Cleanup
   const input = buildV1Input(ctx, createV1ClientAdapter(ctx))
   const fills = createNativeFills(ctx)
   const hooks: Hooks & { dispose?: () => Promise<void> } = await createPluginModule(fills.overrides).server(input, {})
+  const handleMessage = hooks["chat.message"]
+  hooks["chat.message"] = async (message, output) => {
+    await updateConnectedProvidersCache(input.client)
+    await handleMessage?.(message, output)
+  }
   let disposeHooks: (() => Promise<void>) | undefined
   let disposeNative: Plugin.Cleanup | undefined
   const dispose = async () => {
