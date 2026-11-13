@@ -1,7 +1,8 @@
-import type { SessionPromptData } from "@opencode-ai/sdk"
+import type { SessionPromptData, Todo } from "@opencode-ai/sdk"
 import type { Plugin } from "@opencode/plugin"
 import { guardV1Surface, unsupportedV1Call } from "./v1-client-errors"
 import { projectV1Message, type V1MessageView } from "./v1-session-messages"
+import { nativeTodos } from "./native-todos"
 
 type SessionPath = { readonly path: { readonly id: string } }
 type PromptBody = NonNullable<SessionPromptData["body"]> & { readonly variant?: string }
@@ -34,7 +35,7 @@ export type V1SessionAdapter = {
   readonly abort: (input: SessionPath) => Promise<V1Envelope<Awaited<ReturnType<Plugin.Context["session"]["interrupt"]>>>>
   readonly delete: (input: SessionPath) => Promise<V1Envelope<boolean>>
   readonly status: () => Promise<never>
-  readonly todo: () => Promise<never>
+  readonly todo: (input: SessionPath) => Promise<V1Envelope<Todo[]>>
   readonly children: () => Promise<never>
 }
 
@@ -137,7 +138,7 @@ export function createV1SessionAdapter(ctx: V1SessionContext): V1SessionAdapter 
     abort: async (input: SessionPath) => ({ data: await ctx.session.interrupt({ sessionID: input.path.id }) }),
     delete: async (input: SessionPath) => { await ctx.session.remove({ sessionID: input.path.id }); return { data: true } },
     status: async () => unsupportedV1Call("session.status"),
-    todo: async () => unsupportedV1Call("session.todo"),
+    todo: async (input: SessionPath) => ({ data: await nativeTodos(ctx.session, input.path.id) }),
     children: async () => unsupportedV1Call("session.children"),
   }, "session")
 }

@@ -8,6 +8,7 @@ import { registerV1Tools } from "./tool-bridge-register"
 import { registerV1Agents } from "./translate-agent"
 import { createV1ClientAdapter } from "./v1-client"
 import { buildV1Input } from "./v1-input"
+import { createNativeFills } from "./native-fills"
 
 type ProjectedConfig = Config & { default_agent?: string }
 
@@ -30,10 +31,12 @@ async function projectConfig(ctx: Plugin.Context): Promise<ProjectedConfig> {
 
 export async function setupV2Bridge(ctx: Plugin.Context): Promise<Plugin.Cleanup> {
   const input = buildV1Input(ctx, createV1ClientAdapter(ctx))
-  const hooks: Hooks & { dispose?: () => Promise<void> } = await createPluginModule().server(input, {})
+  const fills = createNativeFills(ctx)
+  const hooks: Hooks & { dispose?: () => Promise<void> } = await createPluginModule(fills.overrides).server(input, {})
   let disposeHooks: (() => Promise<void>) | undefined
+  let disposeNative: Plugin.Cleanup | undefined
   const dispose = async () => {
-    const results = await Promise.allSettled([disposeHooks?.(), hooks.dispose?.()])
+    const results = await Promise.allSettled([disposeNative?.(), disposeHooks?.(), hooks.dispose?.()])
     const errors = results.flatMap((result) => result.status === "rejected" ? [result.reason] : [])
     if (errors.length > 0) throw new AggregateError(errors, "V2 bridge cleanup failed")
   }
@@ -44,7 +47,8 @@ export async function setupV2Bridge(ctx: Plugin.Context): Promise<Plugin.Cleanup
     const tools = Object.fromEntries(Object.entries(hooks.tool ?? {}).filter(([name]) => projected.tools?.[name] !== false))
     await registerV1Tools(ctx, tools)
     await registerV1Mcps(ctx, projected.mcp)
-    disposeHooks = await bridgeHooks(ctx, hooks)
+    disposeHooks = await bridgeHooks(ctx, hooks, fills.instructions)
+    disposeNative = await fills.register()
     log("[plugin-v2] bridge ready", { directory: ctx.location.directory, hooks: Object.keys(hooks) })
     return dispose
   } catch (error) {

@@ -84,13 +84,27 @@ describe("v1 session bridge", () => {
     expect(result.data).toEqual({ ...sessionInfo, directory: "/scratch/project/worktree" })
   })
 
-  test.each(["status", "todo", "children"] as const)("rejects unsupported session.%s", async (method) => {
+  test.each(["status", "children"] as const)("rejects unsupported session.%s", async (method) => {
     const { ctx } = createClientFixture()
     const client = createV1ClientAdapter(ctx)
 
     const result = client.session[method]()
 
     await expect(result).rejects.toMatchObject({ name: "UnsupportedV1ClientCallError", message: `session.${method}`, method: `session.${method}` })
+  })
+
+  test("exposes the latest successful native todos through the v1 envelope", async () => {
+    const { ctx } = createClientFixture()
+    ctx.session.context = async () => [{ ...assistantMessage, content: [{
+      type: "tool", id: "todos", name: "todowrite", time: { created: 1 }, state: {
+        status: "completed", input: {}, metadata: { todos: [{ content: "current task", status: "in_progress" }] },
+        content: [{ type: "text", text: "Updated todos" }],
+      },
+    }] }]
+    const client = createV1ClientAdapter(ctx)
+    expect(await client.session.todo({ path: { id: "session-1" } })).toEqual({
+      data: [{ id: "0", content: "current task", status: "in_progress", priority: "medium" }],
+    })
   })
 
   test("rejects prompt options that the native API cannot represent before side effects", async () => {
