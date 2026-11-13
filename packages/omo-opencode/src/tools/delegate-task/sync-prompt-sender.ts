@@ -14,6 +14,7 @@ import { formatDetailedError } from "./error-formatting"
 import { buildTaskPrompt } from "./prompt-builder"
 import type { DelegatedModelConfig, DelegateTaskArgs, OpencodeClient } from "./types"
 import { SyncResumeStore } from "./sync-resume-store"
+import { delegationAgentForClient } from "../../shared/native-delegation-client"
 
 type SendSyncPromptDeps = {
   promptWithModelSuggestionRetry: typeof promptWithModelSuggestionRetry
@@ -104,7 +105,7 @@ export async function sendSyncPrompt(
   const promptArgs = {
     path: { id: input.sessionID },
     body: {
-      agent: stripInvisibleAgentCharacters(input.agentToUse),
+      agent: delegationAgentForClient(client, stripInvisibleAgentCharacters(input.agentToUse)),
       system: input.systemContent,
       tools,
       parts: [createInternalAgentTextPart(effectivePrompt)],
@@ -125,7 +126,7 @@ export async function sendSyncPrompt(
     new SyncResumeStore().write({
       version: 1,
       sessionId: input.sessionID,
-      agent: stripInvisibleAgentCharacters(input.agentToUse),
+      agent: delegationAgentForClient(client, stripInvisibleAgentCharacters(input.agentToUse)),
       model: input.categoryModel,
       tools,
     })
