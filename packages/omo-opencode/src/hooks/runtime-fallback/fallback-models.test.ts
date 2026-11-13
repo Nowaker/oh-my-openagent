@@ -1,11 +1,32 @@
 import { afterEach, describe, expect, test } from "bun:test"
 
-import { getFallbackModelsForSession } from "./fallback-models"
+import { getFallbackModelsForSession, getRawFallbackModels } from "./fallback-models"
 import { detectAgentFromSession, resolveAgentForSession } from "./agent-resolver"
 import { SessionCategoryRegistry } from "../../shared/session-category-registry"
 import { unsafeTestValue } from "../../../../../test-support/unsafe-test-value"
 
 describe("runtime-fallback fallback-models", () => {
+  test.each(["session-category", "agent", "agent-category"] as const)("retains canonical fallback settings from %s", (source) => {
+    // given
+    const models = ["fixture/primary", { model: "fixture/secondary", variant: "high", temperature: 0.4 }]
+    const config = source === "agent"
+      ? { agents: { oracle: { models } } }
+      : { agents: { oracle: { category: "quick" } }, categories: { quick: { models } } }
+    if (source === "session-category") SessionCategoryRegistry.register("canonical-session", "quick")
+    // when
+    const result = getRawFallbackModels("canonical-session", "oracle", config)
+    // then
+    expect(result).toEqual([{ model: "fixture/secondary", variant: "high", temperature: 0.4 }])
+  })
+
+  test("an explicit empty fallback list overrides the canonical models tail", () => {
+    // given
+    const config = { agents: { oracle: { models: ["fixture/primary", "fixture/secondary"], fallback_models: [] } } }
+    // when
+    const result = getRawFallbackModels("canonical-session", "oracle", config)
+    // then
+    expect(result).toEqual([])
+  })
   afterEach(() => {
     SessionCategoryRegistry.clear()
   })
