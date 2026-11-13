@@ -50,9 +50,11 @@ describe("v1 client throwing facade", () => {
 
   test("projects provider availability, model limits and the real default from native registries", async () => {
     const { ctx } = createClientFixture()
+    const requestAuthorization = `fixture-${crypto.randomUUID()}`
     const model: Awaited<ReturnType<Plugin.Context["model"]["list"]>>["data"][number] = {
       id: "chat", modelID: "upstream-chat", providerID: "ready", name: "Chat",
-      capabilities: { tools: true, input: ["text"], output: ["text"] }, variants: [], time: { released: 0 }, cost: [], status: "active", enabled: true, limit: { context: 128000, output: 4096 },
+      settings: { apiKey: requestAuthorization }, headers: { authorization: "fixture-model-auth" },
+      capabilities: { tools: true, input: ["text"], output: ["text"] }, variants: [{ id: "high", body: { reasoning_effort: "high" }, headers: { authorization: "fixture-variant-auth" } }], time: { released: 0 }, cost: [], status: "active", enabled: true, limit: { context: 128000, output: 4096 },
     }
     ctx.model.list = async () => ({ location: ctx.location, data: [model, { ...model, id: "hidden", providerID: "offline", enabled: false }] })
     ctx.model.default = async () => ({ location: ctx.location, data: model })
@@ -68,5 +70,11 @@ describe("v1 client throwing facade", () => {
     expect(result.data.default).toEqual({ ready: "chat" })
     expect(result.data.all[0]?.models.chat?.limit).toEqual({ context: 128000, output: 4096 })
     expect(result.data.all[1]?.models.hidden?.enabled).toBe(false)
+    const listed = await client.model.list()
+    expect(JSON.stringify([result, listed])).not.toContain(requestAuthorization)
+    expect(JSON.stringify([result, listed])).not.toContain("fixture-model-auth")
+    expect(JSON.stringify([result, listed])).not.toContain("fixture-variant-auth")
+    expect(result.data.all[0]?.models.chat?.variants).toEqual({ high: { id: "high" } })
+    expect(listed.data[0]?.variants).toEqual({ high: { id: "high" } })
   })
 })

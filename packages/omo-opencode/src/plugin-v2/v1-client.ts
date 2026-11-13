@@ -1,4 +1,5 @@
 import type { Plugin } from "@opencode/plugin"
+import { markNativeDelegationClient } from "../shared/native-delegation-client"
 import { guardV1Surface, unsupportedV1Call } from "./v1-client-errors"
 import { createV1SessionAdapter, type V1SessionContext, type V1SessionAdapter, type V1Envelope } from "./v1-session"
 
@@ -11,10 +12,13 @@ export type V1ClientContext = V1SessionContext & Pick<Plugin.Context, "app"> & {
 }
 
 type NativeModel = Awaited<ReturnType<Plugin.Context["model"]["list"]>>["data"][number]
+type ProjectedModel = Pick<NativeModel, "id" | "modelID" | "providerID" | "name" | "family" | "type" | "package" | "compatibility" | "capabilities" | "limit" | "time" | "cost" | "status" | "enabled"> & {
+  readonly variants: Readonly<Record<string, { readonly id: NativeModel["variants"][number]["id"] }>>
+}
 type NativeProvider = Awaited<ReturnType<Plugin.Context["provider"]["list"]>>["data"][number]
 type NativeAgent = Awaited<ReturnType<Plugin.Context["agent"]["list"]>>["data"][number]
 type ProviderInventory = {
-  readonly all: readonly (NativeProvider & { readonly models: Record<string, NativeModel> })[]
+  readonly all: readonly (NativeProvider & { readonly models: Record<string, ProjectedModel> })[]
   readonly connected: readonly string[]
   readonly default: Readonly<Record<string, string>>
 }
@@ -22,10 +26,17 @@ type ProjectedAgent = Omit<NativeAgent, "model"> & { readonly prompt?: string; r
 export type V1ClientAdapter = {
   readonly session: V1SessionAdapter
   readonly app: { readonly get: () => Promise<V1Envelope<Plugin.Context["app"]>>; readonly agents: () => Promise<V1Envelope<ProjectedAgent[]>> }
-  readonly model: { readonly list: () => Promise<V1Envelope<(NativeModel & { readonly provider: string })[]>> }
+  readonly model: { readonly list: () => Promise<V1Envelope<(ProjectedModel & { readonly provider: string })[]>> }
   readonly provider: { readonly list: () => Promise<V1Envelope<ProviderInventory>> }
   readonly config: { readonly get: () => Promise<never>; readonly providers: () => Promise<V1Envelope<{ readonly providers: ProviderInventory["all"]; readonly default: ProviderInventory["default"] }>> }
   readonly tui: { readonly showToast: () => Promise<never> }
+}
+
+function projectModel(model: NativeModel): ProjectedModel {
+  const { id, modelID, providerID, name, family, type, package: modelPackage, compatibility, capabilities, limit, time, cost, status, enabled } = model
+  return { id, modelID, providerID, name, family, type, package: modelPackage, compatibility, capabilities, limit, time, cost, status, enabled,
+    variants: Object.fromEntries(model.variants.map(({ id }) => [id, { id }])),
+  }
 }
 
 export function createV1ClientAdapter(ctx: V1ClientContext): V1ClientAdapter {
@@ -33,7 +44,7 @@ export function createV1ClientAdapter(ctx: V1ClientContext): V1ClientAdapter {
     const [providers, models, defaultModel] = await Promise.all([ctx.provider.list(), ctx.model.list(), ctx.model.default()])
     const all = providers.data.map((provider) => ({
       ...provider,
-      models: Object.fromEntries(models.data.filter((model) => model.providerID === provider.id).map((model) => [model.id, model])),
+      models: Object.fromEntries(models.data.filter((model) => model.providerID === provider.id).map((model) => [model.id, projectModel(model)])),
     }))
     return { data: {
       all,
@@ -41,7 +52,7 @@ export function createV1ClientAdapter(ctx: V1ClientContext): V1ClientAdapter {
       default: defaultModel.data ? { [defaultModel.data.providerID]: defaultModel.data.id } : {},
     } }
   }
-  return guardV1Surface({
+  return markNativeDelegationClient(guardV1Surface({
     session: createV1SessionAdapter(ctx),
     app: guardV1Surface({
       get: async () => ({ data: ctx.app }),
@@ -58,7 +69,7 @@ export function createV1ClientAdapter(ctx: V1ClientContext): V1ClientAdapter {
     model: guardV1Surface({
       list: async () => {
         const models = await ctx.model.list()
-        return { data: models.data.map((model) => ({ ...model, provider: model.providerID })) }
+        return { data: models.data.map((model) => ({ ...projectModel(model), provider: model.providerID })) }
       },
     }, "model"),
     provider: guardV1Surface({ list: providerList }, "provider"),
@@ -70,5 +81,5 @@ export function createV1ClientAdapter(ctx: V1ClientContext): V1ClientAdapter {
       },
     }, "config"),
     tui: guardV1Surface({ showToast: async () => unsupportedV1Call("tui.showToast") }, "tui"),
-  }, "")
+  }, ""))
 }
