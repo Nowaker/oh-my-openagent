@@ -62,13 +62,13 @@ describe("native todo projection", () => {
         }
         expect(input.cursor).toBe("older")
         expect(input.order).toBeUndefined()
-        return { data: [assistant("success", [completed(todos)])], cursor: { next: "must-not-read-stale-todos" } }
+        return { data: [assistant("success", [completed([...todos])])], cursor: { next: "must-not-read-stale-todos" } }
       },
     }
     // when
     const result = await nativeTodos(native, "session")
     // then
-    expect(result.map(({ content, status }) => ({ content, status }))).toEqual(todos)
+    expect(result.map(({ content, status }) => ({ content, status }))).toEqual([...todos])
   })
 
   test("selects the last completed call in transcript and tool order, using successful metadata rather than input", async () => {
