@@ -2,6 +2,7 @@ import { Agent, Model, Provider, type Plugin } from "@opencode/plugin"
 import { z } from "zod"
 import { getAgentConfigKey } from "../shared/agent-display-names"
 import { log } from "../shared/logger"
+import { expandPermissionRules } from "./permission-actions"
 
 const effect = z.enum(["allow", "ask", "deny"])
 const agentConfig = z.object({
@@ -22,8 +23,6 @@ const agentConfig = z.object({
   top_p: z.number().optional(),
 })
 
-const toolActions: Readonly<Record<string, string>> = { bash: "shell", write: "edit", apply_patch: "edit", call_omo_agent: "subagent" }
-
 type AgentDraft = Omit<z.infer<typeof agentConfig>, "model"> & {
   readonly id: string
   readonly model: Agent.Info["model"]
@@ -35,19 +34,19 @@ export function translateAgentConfigToV2Draft(name: string, raw: unknown): Agent
   if (config.disable) return undefined
   const permissions: { action: string; resource: string; effect: z.infer<typeof effect> }[] = []
   for (const [tool, enabled] of Object.entries(config.tools ?? {})) {
-    if (!enabled) permissions.push({ action: toolActions[tool] ?? tool, resource: "*", effect: "deny" })
+    if (!enabled) permissions.push({ action: tool, resource: "*", effect: "deny" })
   }
   for (const [action, rule] of Object.entries(config.permission ?? {})) {
     const resources = typeof rule === "string" ? { "*": rule } : rule
     for (const [resource, decision] of Object.entries(resources)) {
-      permissions.push({ action: toolActions[action] ?? action, resource, effect: decision })
+      permissions.push({ action, resource, effect: decision })
     }
   }
   const slash = config.model?.indexOf("/") ?? -1
   const model = config.model !== undefined && slash > 0
     ? { providerID: Provider.ID.make(config.model.slice(0, slash)), id: Model.ID.make(config.model.slice(slash + 1)), ...(config.variant === undefined ? {} : { variant: Model.VariantID.make(config.variant) }) }
     : undefined
-  return { ...config, id: getAgentConfigKey(name), model, permissions }
+  return { ...config, id: getAgentConfigKey(name), model, permissions: expandPermissionRules(permissions) }
 }
 
 export async function registerV1Agents(ctx: Plugin.Context, value: unknown, defaultAgent: unknown): Promise<void> {
