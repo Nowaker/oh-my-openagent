@@ -1,0 +1,10 @@
+{
+  "pullRequest": "https://github.com/code-yeongyu/oh-my-openagent/pull/9391",
+  "repository": "https://github.com/fazulfi/omo-v2-contrib",
+  "revision": "641b29ab7124a28e22aa249acdbd3c6fdf8d41dd",
+  "path": "packages/omo-opencode/test/v2-contract/parity-matrix.test.ts",
+  "asset": "upstream-parity-matrix.test.ts.txt",
+  "sha256": "07a4fb9394425ae7840ba06e526a0912d54b7bd16d6ccd350bdff276f3031dd0",
+  "sourceLicense": "SUL-1.0",
+  "scope": "Historical 25-row scaffold: three module or fake-host checks and 22 TODO rows. The runtime suite adapts these contracts; this source asset is preserved as data and is not executed as a runtime proof."
+}
