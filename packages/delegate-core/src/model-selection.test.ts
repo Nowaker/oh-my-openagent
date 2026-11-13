@@ -29,6 +29,19 @@ const legacyGptEntry: DelegateFallbackEntry = {
 const gpt56SolFallbackChain = [nativeSolEntry, copilotSolEntry, legacyGptEntry]
 
 describe("resolveModelForDelegateTask", () => {
+  test("keeps an explicit primary and variant when the runtime owns model availability", () => {
+    // given
+    const input = {
+      userModel: "gateway/new-chat high",
+      userFallbackModels: ["openai/known-chat"],
+      availableModels: new Set(["openai/known-chat"]),
+      preserveUserModel: true,
+    }
+    // when
+    const result = resolveModelForDelegateTask(input, noCacheDeps)
+    // then
+    expect(result).toEqual({ model: "gateway/new-chat", variant: "high" })
+  })
   test("#given no provider cache exists #when no user override is configured #then returns skipped sentinel", () => {
     const result = resolveModelForDelegateTask({
       availableModels: new Set(),

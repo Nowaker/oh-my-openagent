@@ -19,6 +19,7 @@ export type DelegateModelResolutionInput = {
   readonly userFallbackModels?: readonly string[]
   readonly categoryDefaultModel?: string
   readonly isUserConfiguredCategoryModel?: boolean
+  readonly preserveUserModel?: boolean
   readonly fallbackChain?: readonly DelegateFallbackEntry[]
   /**
    * Let a chain rung match its model on a provider the rung does not list. Off by default: a builtin
@@ -98,6 +99,7 @@ export function resolveModelForDelegateTask(
 
     const userFallbackModels = input.userFallbackModels
     if (
+      !input.preserveUserModel &&
       input.availableModels.size > 0 &&
       userFallbackModels &&
       userFallbackModels.length > 0
