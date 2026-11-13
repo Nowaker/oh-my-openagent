@@ -37,7 +37,7 @@ const PROMPT_GATE_FILES = new Set([
 ])
 const RAW_PROMPT_ALLOWLIST = new Map<string, string>([
   [
-    path.join(SOURCE_ROOT, "plugin-v2", "v1-session.ts"),
+    path.join(SOURCE_ROOT, "plugin-v2", "v1-session-prompt.ts"),
     "implements the SDK transport beneath the existing shared prompt gate; serializes native agent/model selection before v2 admission and exposes no independent continuation route",
   ],
   [

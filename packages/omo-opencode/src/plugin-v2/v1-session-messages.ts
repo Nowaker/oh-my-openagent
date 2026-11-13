@@ -8,7 +8,7 @@ export type V1MessageView = {
   readonly info: {
     readonly id: string
     readonly sessionID: string
-    readonly role: "user" | "assistant"
+    readonly role?: "user" | "assistant"
     readonly v2: V2SessionMessage
     readonly [key: string]: unknown
   }
@@ -80,7 +80,7 @@ export function projectV1Message(message: V2SessionMessage, sessionID: string): 
     case "shell":
     case "compaction":
     case "idle":
-      return { info: { ...base, role: "user" as const }, parts: [] }
+      return { info: base, parts: [] }
     default:
       return assertExhaustive(message)
   }

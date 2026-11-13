@@ -1,9 +1,30 @@
 import { describe, expect, test } from "bun:test"
 import { createV1ClientAdapter, UnsupportedV1ClientCallError } from "./v1-client"
-import { assistantMessage, createClientFixture, sessionInfo } from "./v1-client-fixture.test"
+import { assistantMessage, createClientFixture, sessionInfo, userMessage } from "./v1-client-fixture.test"
 import { projectV1Message, type V2SessionMessage } from "./v1-session-messages"
+import { pollSyncSession } from "../tools/delegate-task/sync-session-poller"
+import { __resetTimingConfig, __setTimingConfig } from "../tools/delegate-task/timing"
 
 describe("v1 session bridge", () => {
+  test("hands back a completed child when a native idle record follows its answer", async () => {
+    // given
+    const { ctx, messages } = createClientFixture()
+    const idle = { id: "msg-003", type: "idle", outcome: "succeeded", time: { created: 13 } } satisfies V2SessionMessage
+    messages.set("session-1", [{ ...userMessage, id: "msg-001" }, { ...assistantMessage, id: "msg-002", content: [{ type: "text", text: "answer" }] }, idle])
+    const client = createV1ClientAdapter(ctx)
+    __setTimingConfig({ POLL_INTERVAL_MS: 1, MAX_POLL_TIME_MS: 50 })
+    try {
+      // when
+      const result = await pollSyncSession({ sessionID: "parent", messageID: "request", agent: "sisyphus", abort: new AbortController().signal }, client, {
+        sessionID: "session-1", agentToUse: "worker", toastManager: null, taskId: undefined,
+      })
+      // then
+      expect(result).toBeNull()
+    } finally {
+      __resetTimingConfig()
+    }
+  })
+
   test("projects complete native assistant records and tool content into the v1 message view", async () => {
     const { ctx } = createClientFixture()
     const client = createV1ClientAdapter(ctx)
@@ -84,7 +105,26 @@ describe("v1 session bridge", () => {
     expect(result.data).toEqual({ ...sessionInfo, directory: "/scratch/project/worktree" })
   })
 
-  test.each(["status", "children"] as const)("rejects unsupported session.%s", async (method) => {
+  test("reads every native status page and distinguishes the latest execution from its previous idle", async () => {
+    // given
+    const { ctx } = createClientFixture()
+    const active = { ...sessionInfo, id: "active", time: { created: 1, updated: 9, busy: 8, idle: 3 } }
+    const completed = { ...sessionInfo, id: "completed", time: { created: 1, updated: 10, busy: 8, idle: 9 } }
+    ctx.session.list = async (input) => input?.cursor === "next-page"
+      ? { data: [completed, sessionInfo], cursor: { next: null } }
+      : { data: [active], cursor: { next: "next-page" } }
+    const client = createV1ClientAdapter(ctx)
+    // when
+    const result = await client.session.status()
+    // then
+    expect(result.data).toEqual({
+      active: { type: "busy", updatedAt: 9 },
+      completed: { type: "idle", updatedAt: 10 },
+      "session-1": { type: "idle", updatedAt: 2 },
+    })
+  })
+
+  test.each(["children"] as const)("rejects unsupported session.%s", async (method) => {
     const { ctx } = createClientFixture()
     const client = createV1ClientAdapter(ctx)
 
@@ -107,16 +147,27 @@ describe("v1 session bridge", () => {
     })
   })
 
-  test("rejects prompt options that the native API cannot represent before side effects", async () => {
+  test("rejects ignored prompt text before authority side effects", async () => {
     const { ctx, admitted, authority } = createClientFixture()
     const client = createV1ClientAdapter(ctx)
 
-    const result = client.session.promptAsync({ path: { id: "session-1" }, body: { system: "private content", agent: "worker", parts: [{ type: "text", text: "request" }] } })
+    const result = client.session.promptAsync({ path: { id: "session-1" }, body: { system: "private content", agent: "worker", parts: [{ type: "text", text: "request", ignored: true }] } })
 
     await expect(result).rejects.toBeInstanceOf(UnsupportedV1ClientCallError)
-    await expect(result).rejects.toMatchObject({ message: "session.promptAsync.system" })
+    await expect(result).rejects.toMatchObject({ message: "session.promptAsync.parts.text" })
     expect(admitted).toEqual([])
     expect(authority).toEqual([])
+  })
+
+  test.each([undefined, 0, 1, 2, 5])("returns newest %s native context records chronologically", async (limit) => {
+    const { ctx, messages } = createClientFixture()
+    const third = { id: "third", type: "synthetic", text: "continuation", time: { created: 13 } } satisfies V2SessionMessage
+    messages.set("session-1", [assistantMessage, { ...assistantMessage, id: "second" }, third])
+    const client = createV1ClientAdapter(ctx)
+    const result = await client.session.messages({ path: { id: "session-1" }, query: { limit } })
+    const expected = limit === 0 ? [] : limit === 1 ? ["third"] : limit === 2 ? ["second", "third"] : ["msg-assistant", "second", "third"]
+    expect(result.data.map((row) => row.info.id)).toEqual(expected)
+    if (limit !== 0) expect(result.data.at(-1)?.info.v2).toEqual(third)
   })
 
   test("retains native user attachments and control messages", () => {

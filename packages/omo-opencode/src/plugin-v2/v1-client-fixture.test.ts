@@ -38,25 +38,68 @@ export const sessionInfo: Awaited<ReturnType<Plugin.Context["session"]["get"]>> 
 export function createClientFixture(): {
   readonly ctx: V1ClientContext & Pick<Plugin.Context, "location">
   readonly admitted: Parameters<Plugin.Context["session"]["prompt"]>[0][]
+  readonly synthetic: Parameters<Plugin.Context["session"]["synthetic"]>[0][]
   readonly authority: string[]
+  readonly sessions: Map<string, typeof sessionInfo>
+  readonly instructions: Map<string, Map<string, Parameters<Plugin.Context["session"]["instructions"]["entry"]["put"]>[0]["value"]>>
+  readonly messages: Map<string, V2SessionMessage[]>
 } {
   const admitted: Parameters<Plugin.Context["session"]["prompt"]>[0][] = []
+  const synthetic: Parameters<Plugin.Context["session"]["synthetic"]>[0][] = []
   const authority: string[] = []
+  const sessions = new Map([[sessionInfo.id, structuredClone(sessionInfo)]])
+  const instructions = new Map<string, Map<string, Parameters<Plugin.Context["session"]["instructions"]["entry"]["put"]>[0]["value"]>>()
+  const messages = new Map<string, V2SessionMessage[]>([[sessionInfo.id, [userMessage, assistantMessage]]])
+  const getSession = (id: string) => {
+    const session = sessions.get(id)
+    if (!session) throw new Error(`No native session ${id}`)
+    return structuredClone(session)
+  }
   const ctx: V1ClientContext & Pick<Plugin.Context, "location"> = {
     app: { name: "opencode", version: "2.2.7", channel: "stable" }, location,
     session: {
-      get: async () => sessionInfo,
-      list: async () => ({ data: [sessionInfo], cursor: {} }),
-      create: async (input) => ({ ...sessionInfo, parentID: input?.parentID ?? undefined, title: input?.title ?? undefined, location: input?.location ?? sessionInfo.location }),
-      context: async () => [userMessage, assistantMessage],
-      switchAgent: async (input) => { authority.push(`agent:${input.agent}`) },
-      switchModel: async (input) => { authority.push(`model:${input.model.providerID}/${input.model.id}:${input.model.variant}`) },
+      get: async (input) => getSession(input.sessionID),
+      list: async () => ({ data: [...sessions.values()], cursor: {} }),
+      create: async (input) => {
+        const session = { ...sessionInfo, id: input?.id ?? `session-${sessions.size + 1}`, parentID: input?.parentID ?? undefined, title: input?.title ?? undefined, location: input?.location ?? sessionInfo.location,
+          agent: input?.agent ?? sessionInfo.agent, model: input?.model ?? sessionInfo.model, permissions: input?.permissions?.map((rule) => ({ ...rule })) }
+        sessions.set(session.id, session)
+        messages.set(session.id, [])
+        return structuredClone(session)
+      },
+      context: async (input) => [...(messages.get(input.sessionID) ?? [])],
+      update: async (input) => {
+        const session = getSession(input.sessionID)
+        sessions.set(input.sessionID, { ...session, ...(input.permissions === undefined ? {} : { permissions: input.permissions.map((rule) => ({ ...rule })) }) })
+        authority.push("permissions")
+      },
+      instructions: { entry: {
+        list: async (input) => [...(instructions.get(input.sessionID) ?? [])].map(([key, value]) => ({ key, value })),
+        put: async (input) => {
+          const entries = instructions.get(input.sessionID) ?? new Map()
+          entries.set(input.key, input.value)
+          instructions.set(input.sessionID, entries)
+          authority.push(`instructions:${input.key}`)
+        },
+        remove: async (input) => { instructions.get(input.sessionID)?.delete(input.key) },
+      } },
+      switchAgent: async (input) => { sessions.set(input.sessionID, { ...getSession(input.sessionID), agent: input.agent }); authority.push(`agent:${input.agent}`) },
+      switchModel: async (input) => { sessions.set(input.sessionID, { ...getSession(input.sessionID), model: { ...input.model } }); authority.push(`model:${input.model.providerID}/${input.model.id}:${input.model.variant}`) },
       prompt: async (input) => {
         admitted.push(input)
         authority.push(`prompt:${input.text}`)
-        return { id: input.id ?? "msg-user", sessionID: input.sessionID, type: "user", time: { created: 10 }, delivery: input.delivery ?? "queue", payload: { text: input.text } }
+        const receipt = { id: input.id ?? "msg-user", sessionID: input.sessionID, type: "user" as const, time: { created: 10 }, delivery: input.delivery ?? "queue", payload: { text: input.text } }
+        messages.set(input.sessionID, [...(messages.get(input.sessionID) ?? []).filter((entry) => entry.id !== receipt.id), { ...receipt.payload, id: receipt.id, type: "user", time: receipt.time }])
+        return receipt
       },
-      wait: async () => {},
+      synthetic: async (input) => {
+        synthetic.push(input)
+        authority.push(`synthetic:${input.text}`)
+        const receipt = { id: input.id ?? "msg-synthetic", sessionID: input.sessionID, type: "synthetic" as const, time: { created: 10 }, delivery: input.delivery ?? "queue", payload: { text: input.text, description: input.description ?? undefined, metadata: input.metadata } }
+        messages.set(input.sessionID, [...(messages.get(input.sessionID) ?? []), { ...receipt.payload, id: receipt.id, type: "synthetic", time: receipt.time }])
+        return receipt
+      },
+      wait: async (input) => { messages.set(input.sessionID, [...(messages.get(input.sessionID) ?? []).filter((entry) => entry.id !== assistantMessage.id), assistantMessage]) },
       interrupt: async () => ({ interrupted: true }),
       remove: async () => {},
     },
@@ -64,5 +107,5 @@ export function createClientFixture(): {
     model: { list: async () => ({ location, data: [] }), default: async () => ({ location, data: null }) },
     provider: { list: async () => ({ location, data: [] }) },
   }
-  return { ctx, admitted, authority }
+  return { ctx, admitted, synthetic, authority, sessions, instructions, messages }
 }

@@ -26,7 +26,8 @@ afterEach(async () => {
 function fixture() {
   Reflect.set(globalThis, authorityKey, undefined)
   delete process.env.VIBETERM_MACHINE_ID
-  const { ctx: client } = createClientFixture()
+  const { ctx: client, sessions } = createClientFixture()
+  sessions.set(sessionID, { ...sessionInfo, id: sessionID })
   const callbacks = new Set<(event: SessionIdle) => Promise<void>>()
   const admitted: Parameters<Parameters<typeof registerNativeIdle>[0]["session"]["synthetic"]>[0][] = []
   let messages: readonly V2SessionMessage[] = []
