@@ -1,5 +1,6 @@
 import type { Hooks } from "@opencode-ai/plugin"
 import type { Plugin } from "@opencode/plugin"
+import { z } from "zod"
 import { log } from "../shared/logger"
 import type { Registration } from "./hook-bridge-types"
 
@@ -30,6 +31,10 @@ export async function applyToolAfter(event: ToolAfterInput, handler: NonNullable
   const content = result.content
   const text = typeof content === "string" ? content : content?.filter((part) => part.type === "text").map((part) => part.text).join("\n")
   const output = { title: typeof result.metadata?.title === "string" ? result.metadata.title : "", output: text ?? (typeof result.output === "string" ? result.output : ""), metadata: { ...result.metadata } }
+  if (event.tool === "read" || event.tool === "write" || event.tool === "edit") {
+    const path = z.object({ path: z.string() }).safeParse(event.input)
+    if (path.success && output.metadata.filePath === undefined) output.metadata.filePath = path.data.path
+  }
   const before = output.output
   try { await handler({ tool: event.tool, sessionID: event.sessionID, callID: event.id, args: event.input }, output) }
   catch (error) {

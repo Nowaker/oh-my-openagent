@@ -4,15 +4,23 @@ import { createMessagesView } from "./hook-bridge-messages"
 import { userMessageInfo } from "./hook-bridge-message-info"
 import { resolveHookModel } from "./hook-bridge-model"
 import { applyChatParamsView, buildChatParamsView } from "./hook-bridge-params"
+import type { NativeInstructions } from "./native-instructions"
 
 type RequestContext = Parameters<typeof userMessageInfo>[0] & Pick<SessionContext, "system" | "messages" | "options" | "tools">
 
-export async function applyContextHooks(ctx: Parameters<typeof resolveHookModel>[0], hooks: Hooks, event: RequestContext): Promise<void> {
+export async function applyContextHooks(ctx: Parameters<typeof resolveHookModel>[0], hooks: Hooks, event: RequestContext, instructions?: NativeInstructions): Promise<void> {
   const model = await resolveHookModel(ctx, event.model)
   const system = hooks["experimental.chat.system.transform"]
   if (system) {
     const output = { system: event.system.map((part) => part.text) }
     await system({ sessionID: event.sessionID, model: model.model }, output)
+    const added = output.system.slice(event.system.length)
+    if (instructions && added.length > 0) {
+      const carried = new Set(added.filter((text) => event.system.some((part) => part.text.includes(text)) || event.messages.some((message) =>
+        message.role === "system" && message.content.some((part) => part.type === "text" && part.text.includes(text)))))
+      if (carried.size !== added.length) await instructions.put(event.sessionID, "omo-system-guidance", added.join("\n\n"))
+      output.system = output.system.filter((text, index) => index < event.system.length || !carried.has(text))
+    }
     event.system = output.system.map((text) => event.system.find((part) => part.text === text) ?? { type: "text", text })
   }
   const messages = hooks["experimental.chat.messages.transform"]

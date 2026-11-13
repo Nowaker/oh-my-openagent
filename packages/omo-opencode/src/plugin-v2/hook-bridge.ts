@@ -8,6 +8,7 @@ import { userMessageInfo } from "./hook-bridge-message-info"
 import { bridgeToolHooks } from "./hook-bridge-tools"
 import { applyCompactionHook, applyContextHooks } from "./hook-bridge-transforms"
 import { UnsupportedHookMappingError, type Registration } from "./hook-bridge-types"
+import type { NativeInstructions } from "./native-instructions"
 
 async function runHook(name: string, action: () => Promise<void>): Promise<void> {
   try { await action() }
@@ -17,7 +18,7 @@ async function runHook(name: string, action: () => Promise<void>): Promise<void>
   }
 }
 
-export async function bridgeHooks(ctx: Plugin.Context, hooks: Hooks): Promise<() => Promise<void>> {
+export async function bridgeHooks(ctx: Plugin.Context, hooks: Hooks, instructions?: NativeInstructions): Promise<() => Promise<void>> {
   const registrations: Registration[] = []
   let disposeEvents: (() => Promise<void>) | undefined
   const cleanup = async () => {
@@ -43,7 +44,7 @@ export async function bridgeHooks(ctx: Plugin.Context, hooks: Hooks): Promise<()
       applyChatMessageView(event, view.output)
     })))
     if (hooks["experimental.chat.system.transform"] || hooks["experimental.chat.messages.transform"] || hooks["chat.params"] || hooks["tool.definition"]) {
-      registrations.push(await ctx.session.hook("context", (event) => runHook("context", () => applyContextHooks(ctx, hooks, event))))
+      registrations.push(await ctx.session.hook("context", (event) => runHook("context", () => applyContextHooks(ctx, hooks, event, instructions))))
       log("[v2-bridge] request projection gaps", { mappings: ["v1.message.persistence-fields", "v1.model.reasoning-capability-and-provider-origin", "messages.media-and-native-parts-opaque"] })
     }
     const headers = hooks["chat.headers"]
