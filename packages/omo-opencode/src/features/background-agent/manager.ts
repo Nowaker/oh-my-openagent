@@ -101,6 +101,7 @@ import {
 } from "./session-stream-activity"
 import { isActiveSessionStatus, isTerminalSessionStatus } from "./session-status-classifier"
 import { buildFallbackBody, FALLBACK_AGENT, isAgentNotFoundError } from "./spawner"
+import { buildDelegatedPrompt } from "./delegated-prompt"
 import { forkParentAsChildSession } from "./fork-child-session"
 import { invokeTmuxSessionCreatedCallback } from "./spawner/tmux-callback-invoker"
 import {
@@ -1027,14 +1028,9 @@ The fallback retry session is now created and can be inspected directly.
       promptLength: input.prompt.length,
     })
 
-    const promptBody = {
-      agent: input.agent,
-      ...(launchModel ? { model: launchModel } : {}),
-      ...(launchVariant ? { variant: launchVariant } : {}),
-      system: input.skillContent,
-      tools: launchTools,
-      parts: [createInternalAgentTextPart(input.prompt)],
-    }
+    const promptBody = buildDelegatedPrompt(this.client, input, {
+      model: launchModel, variant: launchVariant, tools: launchTools,
+    })
 
     this.taskRecovery.dispatch({
       path: { id: sessionID },
@@ -1675,10 +1671,9 @@ The fallback retry session is now created and can be inspected directly.
       shouldDispatch: () => !this.shutdownTriggered && this.taskRecovery.owns(input.sessionId, resumeGeneration),
       input: {
         path: { id: existingTask.sessionId },
-        body: {
-          agent: existingTask.agent,
-          ...(resumeModel ? { model: resumeModel } : {}),
-          ...(resumeVariant ? { variant: resumeVariant } : {}),
+        body: buildDelegatedPrompt(this.client, { agent: existingTask.agent, prompt: input.prompt }, {
+          model: resumeModel,
+          variant: resumeVariant,
           tools: (() => {
             const tools: Record<string, boolean> = {
               ...resumeTools,
@@ -1695,8 +1690,7 @@ The fallback retry session is now created and can be inspected directly.
             setSessionTools(existingTask.sessionId!, tools)
             return tools
           })(),
-          parts: [createInternalAgentTextPart(input.prompt)],
-        },
+        }),
         query: { directory: existingTask.cwd ?? this.directory },
       },
     }).then((promptResult) => {
