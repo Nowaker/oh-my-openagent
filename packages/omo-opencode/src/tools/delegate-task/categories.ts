@@ -13,6 +13,7 @@ export interface ResolveCategoryConfigOptions {
   inheritedModel?: string
   systemDefaultModel?: string
   availableModels?: Set<string>
+  preserveConfiguredModels?: boolean
 }
 
 export interface ResolveCategoryConfigResult {
@@ -66,7 +67,7 @@ export function resolveCategoryConfig(
   }
 
   let userConfig = configuredUserConfig
-  if (configuredUserConfig?.models && availableModels && availableModels.size > 0) {
+  if (!options.preserveConfiguredModels && configuredUserConfig?.models && availableModels && availableModels.size > 0) {
     const models = configuredUserConfig.models
       .map((entry) => resolveAvailableModelEntry(entry, availableModels))
       .filter((entry): entry is CategoryModelEntry => entry !== null)

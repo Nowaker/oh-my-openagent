@@ -18,6 +18,7 @@ import { applyCategoryParams } from "./delegated-model-config"
 import { applyFallbackEntrySettings } from "./fallback-entry-settings"
 import { lowerReasoningForModel } from "../../shared/agent-variant"
 import { distributeTaskModels } from "./models-distribution"
+import { isNativeDelegationClient } from "../../shared/native-delegation-client"
 
 function getConfiguredModel(entry: string | { model: string } | undefined): string | undefined {
   return typeof entry === "string" ? entry : entry?.model
@@ -106,6 +107,7 @@ export async function resolveCategoryExecution(
     inheritedModel,
     systemDefaultModel,
     availableModels,
+    preserveConfiguredModels: isNativeDelegationClient(client),
   })
 
   if (!resolved) {
@@ -182,6 +184,7 @@ Available categories: ${allCategoryNames}`)
   } else {
     const resolution = resolveModelForDelegateTask({
       userModel: explicitCategoryModel ?? overrideModel,
+      preserveUserModel: isNativeDelegationClient(client),
       userFallbackModels: flattenToFallbackModelStrings(normalizedConfiguredFallbackModels),
       categoryDefaultModel: categoryResolvedModel,
       isUserConfiguredCategoryModel: hasCanonicalModels
