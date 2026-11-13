@@ -1,12 +1,10 @@
 import type { DelegateTaskArgs, ToolContextWithMetadata } from "./types"
-import type { ExecutorContext, ParentContext, SessionMessage } from "./executor-types"
+import type { ExecutorContext, ParentContext } from "./executor-types"
 import { getDeliverableTag } from "./constants"
 import { handedBackSyncSessions, updateSessionAgent } from "../../features/claude-code-session-state"
 import { publishToolMetadata } from "../../features/tool-metadata-store"
 import { getTaskToastManager } from "../../features/task-toast-manager"
-import { getMessageDir, normalizeSDKResponse } from "../../shared"
 import { promptWithModelSuggestionRetry } from "../../shared/model-suggestion-retry"
-import { resolveMessageContext } from "../../features/hook-message-injector"
 import { formatDuration } from "./time-formatter"
 import { syncContinuationDeps, type SyncContinuationDeps } from "./sync-continuation-deps"
 import { setSessionTools } from "../../shared/session-tools-store"
@@ -22,16 +20,10 @@ import { getSessionModel, setSessionModel } from "../../shared/session-model-sta
 import { applySessionPromptParams } from "../../shared/session-prompt-params-helpers"
 import { buildPromptGenerationParams, buildSyncPromptTools } from "./sync-prompt-sender"
 import { SyncResumeStore } from "./sync-resume-store"
+import { delegationAgentForClient } from "../../shared/native-delegation-client"
+import { resolveResumeContext } from "./sync-resume-context"
 
 type ResumeModel = { providerID: string; modelID: string }
-
-type ResumeContext = {
-  resumeAgent?: string
-  resumeModel?: ResumeModel
-  resumeVariant?: string
-  anchorMessageCount?: number
-  anchorMessageID?: string
-}
 
 function shouldAttemptPollErrorRecovery(pollError: string): boolean {
   const trimmed = pollError.trim()
@@ -57,43 +49,6 @@ function shouldAttemptPollErrorRecovery(pollError: string): boolean {
   }
 
   return false
-}
-
-async function resolveResumeContext(
-  client: ExecutorContext["client"],
-  continuationID: string
-): Promise<ResumeContext> {
-  try {
-    const messagesResp = await client.session.messages({ path: { id: continuationID } })
-    const messages = normalizeSDKResponse(messagesResp, [] as SessionMessage[])
-
-    const context: ResumeContext = { anchorMessageCount: messages.length, anchorMessageID: messages.at(-1)?.info?.id }
-    for (let index = messages.length - 1; index >= 0; index--) {
-      const info = messages[index].info
-      context.resumeAgent ??= info?.agent
-      if (!context.resumeModel) {
-        context.resumeModel = info?.model ?? (info?.providerID && info.modelID
-          ? { providerID: info.providerID, modelID: info.modelID }
-          : undefined)
-        if (context.resumeModel) context.resumeVariant = info?.variant ?? info?.model?.variant
-      }
-      if (context.resumeAgent && context.resumeModel) break
-    }
-    return context
-  } catch (error) {
-    if (!(error instanceof Error)) throw error
-    const resumeMessageDir = getMessageDir(continuationID)
-    const { prevMessage } = await resolveMessageContext(continuationID, client, resumeMessageDir)
-    const resumeMessageModel = prevMessage?.model
-
-    return {
-      resumeAgent: prevMessage?.agent,
-      resumeModel: resumeMessageModel?.providerID && resumeMessageModel.modelID
-        ? { providerID: resumeMessageModel.providerID, modelID: resumeMessageModel.modelID }
-        : undefined,
-      resumeVariant: resumeMessageModel?.variant,
-    }
-  }
 }
 
 export async function executeSyncContinuation(
@@ -146,6 +101,7 @@ export async function executeSyncContinuation(
     const saved = syncSaved ?? await executorCtx.manager?.prepareSyncContinuation?.(continuationID)
     retirementAllowed = true
     resumeAgent = resumeContext.resumeAgent ?? saved?.agent
+    if (resumeAgent) resumeAgent = delegationAgentForClient(client, resumeAgent)
     resumeModel = resumeContext.resumeModel ?? getSessionModel(continuationID) ?? saved?.model
     const sameSavedModel = resumeModel?.providerID === saved?.model?.providerID && resumeModel?.modelID === saved?.model?.modelID
     const modelConfig = resumeModel ? { ...saved?.model, ...resumeModel, variant: sameSavedModel ? saved?.model?.variant : undefined } : undefined
