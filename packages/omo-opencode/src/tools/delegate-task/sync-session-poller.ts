@@ -15,10 +15,7 @@ const CHILD_WAKE_GRACE_MS = 5_000
 const MAX_NON_ACTIVE_STATUS_STALENESS_POLLS = 10
 
 function wait(milliseconds: number): Promise<void> {
-  const sharedBuffer = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT)
-  const typedArray = new Int32Array(sharedBuffer)
-  const result = Atomics.waitAsync(typedArray, 0, 0, milliseconds)
-  return result.async ? result.value.then(() => undefined) : Promise.resolve()
+  return new Promise((resolve) => setTimeout(resolve, milliseconds))
 }
 
 function abortSyncSession(client: OpencodeClient, sessionID: string, reason: string): void {
@@ -92,6 +89,7 @@ export async function pollSyncSession(
   let lastSeenAssistantId: string | undefined
   let lastObservedAssistantId: string | undefined
   let lastObservedMessageCount: number | undefined
+  let lastObservedTextLength: number | undefined
   const childSettleMs = input.childWakeGraceMs ?? CHILD_WAKE_GRACE_MS
   let childWaitAssistantId: string | undefined
   let childSettleStartedAt = 0
@@ -243,11 +241,13 @@ export async function pollSyncSession(
     if (!hasMessagesAfterAnchor(messages, input.anchorMessageID, input.anchorMessageCount)) continue
 
     const currentAssistantId = [...messages].reverse().find((m) => m.info?.role === "assistant")?.info?.id
+    const textLength = messages.reduce((total, message) => total + (message.parts ?? []).reduce((count, part) => count + (part.text?.length ?? 0), 0), 0)
     const messageStateChanged =
       lastObservedMessageCount !== undefined &&
-      (messages.length !== lastObservedMessageCount || currentAssistantId !== lastObservedAssistantId)
+      (messages.length !== lastObservedMessageCount || currentAssistantId !== lastObservedAssistantId || textLength !== lastObservedTextLength)
     lastObservedMessageCount = messages.length
     lastObservedAssistantId = currentAssistantId
+    lastObservedTextLength = textLength
     if (messageStateChanged) inactiveStart = Date.now()
 
     const sessionError = getTerminalSessionError(messages)

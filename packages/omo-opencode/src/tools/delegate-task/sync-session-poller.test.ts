@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test"
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test"
 declare const require: (name: string) => any
 import { __setTimingConfig, __resetTimingConfig } from "./timing"
 
@@ -14,6 +14,33 @@ function createMockCtx(aborted = false) {
 }
 
 describe("pollSyncSession", () => {
+  test("keeps a growing stream alive with unchanged message and assistant identities", async () => {
+    // given
+    __setTimingConfig({ POLL_INTERVAL_MS: 1, MAX_POLL_TIME_MS: 120 })
+    let now = 0
+    let reads = 0
+    const clock = spyOn(Date, "now").mockImplementation(() => now)
+    const { pollSyncSession } = require("./sync-session-poller")
+    const client = { session: {
+      status: async () => { now += 10; return { data: { stream: { type: reads >= 3 ? "idle" : "busy" } } } },
+      messages: async () => {
+        reads += 1
+        return { data: [
+          { info: { id: "msg-001", role: "user" } },
+          { info: { id: "msg-002", role: "assistant", ...(reads >= 3 ? { finish: "stop" } : {}) }, parts: [{ type: "text", text: "x".repeat(reads) }] },
+        ] }
+      },
+    } }
+    try {
+      // when
+      const result = await pollSyncSession(createMockCtx(), client, { sessionID: "stream", agentToUse: "worker", toastManager: null, taskId: undefined })
+      // then
+      expect(result).toBeNull()
+      expect(reads).toBe(4)
+    } finally {
+      clock.mockRestore()
+    }
+  })
   beforeEach(() => {
     __setTimingConfig({
       POLL_INTERVAL_MS: 10,
