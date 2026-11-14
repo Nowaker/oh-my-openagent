@@ -9,11 +9,11 @@ import type { ToolCall } from "../v2-parity/provider"
 import { created, latestTool, sessionGet, sessions, toolText } from "./assertions"
 import { delegationConfig, prepareDelegationFixture } from "./fixtures"
 
-export function createDelegationPermissionProbes(createHost: typeof createScenarioHost): readonly ParityProbe[] {
-  return [false, true].map((mixed) => createPermissionProbe(createHost, mixed))
+export function createDelegationPermissionProbes(createHost: typeof createScenarioHost, mode: "bridge" | "native" = "bridge"): readonly ParityProbe[] {
+  return [false, true].map((mixed) => createPermissionProbe(createHost, mixed, mode))
 }
 
-function createPermissionProbe(createHost: typeof createScenarioHost, mixed: boolean): ParityProbe {
+function createPermissionProbe(createHost: typeof createScenarioHost, mixed: boolean, mode: "bridge" | "native"): ParityProbe {
   const id = mixed ? "delegation-mixed-permission" : "delegation-permission"
   return {
     id, label: mixed ? "Mixed legacy launcher flags cannot reopen the native launcher" : "Delegated launcher deny reaches the native permission boundary",
@@ -23,6 +23,7 @@ function createPermissionProbe(createHost: typeof createScenarioHost, mixed: boo
       const answer = `permission-result-${token}`
       let launched = false
       let attempted = false
+      let admitted: readonly string[] = []
       await using host = await createHost(context, {
         id, omo: { ...delegationConfig, categories: {
           "delegation-fixture": { ...delegationConfig.categories["delegation-fixture"], tools: mixed ? { task: false, call_omo_agent: true } : { call_omo_agent: false, task: false } },
@@ -32,6 +33,7 @@ function createPermissionProbe(createHost: typeof createScenarioHost, mixed: boo
         handler(request) {
           const child = request.messages.some((entry) => entry.role === "user" && (JSON.stringify(entry.content) ?? "").includes(prompt))
           if (child) {
+            admitted = (request.tools ?? []).map((entry) => entry.function.name)
             if (!attempted) {
               attempted = true
               const call: ToolCall = mixed ? {
@@ -72,13 +74,14 @@ function createPermissionProbe(createHost: typeof createScenarioHost, mixed: boo
       const transcript = await api(`/api/session/${child.id}/message`)
       const blocked = latestTool(transcript, mixed ? "subagent" : "call_omo_agent")
       writeFileSync(join(host.sandbox.root, "permission-messages.json"), JSON.stringify(transcript, null, 2))
-      writeFileSync(join(host.sandbox.root, "permission-receipt.json"), JSON.stringify({ parent, child: selected, blocked, attempted, version: context.version }, null, 2))
-      for (const action of mixed ? ["task", "subagent"] : ["call_omo_agent", "subagent"]) assert.equal(permissions.findLast((rule) => rule.action === action && rule.resource === "*")?.effect, "deny", `Effective ${action} deny was lost`)
+      writeFileSync(join(host.sandbox.root, "permission-receipt.json"), JSON.stringify({ parent, child: selected, blocked, attempted, admitted, mode, version: context.version }, null, 2))
+      for (const action of mode === "bridge" ? mixed ? ["task", "subagent"] : ["call_omo_agent", "subagent"] : mixed ? ["task"] : ["call_omo_agent", "task"]) assert.equal(permissions.findLast((rule) => rule.action === action && rule.resource === "*")?.effect, "deny", `Effective ${action} deny was lost`)
+      if (mode === "native") assert.equal(admitted.includes("subagent"), false, "Host-owned delegation exposed its private native launcher")
       if (mixed) assert.equal(permissions.findLast((rule) => rule.action === "call_omo_agent" && rule.resource === "*")?.effect, "allow", "Original callable-agent allowance was lost")
       assert.equal(blocked.state.status, "error", "Denied launcher executed successfully")
       assert.match(JSON.stringify(blocked.state), /denied|permission|not.allowed|rejected|not.available|not.found|unknown.tool|no.tool.named.+currently.available/i)
       assert.equal(inventory.filter((entry) => entry.parentID === child.id).length, 0, "Denied launcher created a descendant")
-      return { status: "pass", detail: `${child.id}: ${mixed ? "mixed flags retain original allow and effective native deny" : "original/native denies retained"}; actual nested launcher failed without creating a child` }
+      return { status: "pass", detail: `${child.id}: ${mode === "native" ? "independent original deny retained and raw native launcher absent" : mixed ? "mixed flags retain original allow and effective native deny" : "original/native denies retained"}; actual nested launcher failed without creating a child` }
     },
   }
 }

@@ -5,7 +5,6 @@ const covered = (id: string, label: string, probes: readonly [string, ...string[
   note === undefined ? { id, label, kind: "runtime", probes } : { id, label, kind: "runtime", probes, note }
 const config = ["config-project-precedence", "config-profile-precedence", "config-catalog-precedence"] as const
 const delegation = ["delegation-foreground", "delegation-background"] as const
-const ownedByDelegation = "No runtime probe yet: reserved for the W2 delegation scenarios (script/qa/v2-delegation/), which do not cover this case"
 
 export const upstreamRows: readonly MatrixRow[] = [
   covered("upstream-plugin-load", "#9391 plugin load", ["bridge-directory-loading"]),
@@ -44,10 +43,10 @@ export const mustTierRows: readonly MatrixRow[] = [
   covered("must-compaction", "Compaction keeps context and todos", ["native-overflow", "native-instructions"],
     "Known gap, no consumer: a manual compaction that resumes an interrupted active turn does not invoke experimental.idle"),
   covered("must-task-lifecycle", "Task launch and result collection", [...delegation]),
-  skip("must-task-resume", "Task resume of the same child through task_id", ownedByDelegation),
-  skip("must-task-cancel", "Cancelling an active background child", ownedByDelegation),
-  skip("must-task-notice", "Background completion wakes the parent with exactly one notice", ownedByDelegation),
-  covered("must-permissions", "Permissions", ["native-permission", "delegation-permission", "delegation-mixed-permission"]),
+  covered("must-task-resume", "Task resume of the same child through task_id", ["native-restart"]),
+  covered("must-task-cancel", "Cancelling an active background child", ["native-cancel", "native-cancel-all"]),
+  covered("must-task-notice", "Background completion wakes the parent with exactly one notice", ["native-notice", "native-group", "native-handoff", "native-default"]),
+  covered("must-permissions", "Permissions", ["native-permission", "delegation-permission", "delegation-mixed-permission", "native-launcher-call-omo-agent", "native-launcher-task", "native-launcher-backend-deny", "native-permission-ask", "native-raw-launcher"]),
   covered("must-skills-loaders", "Skills, skill_mcp and loaders", ["skills-claude-loader-mcp", "mcp-v1-registration", "claude-agents-loader", "claude-commands-loader"]),
   covered("must-config", "Configuration compatibility", [...config]),
   covered("regression-seen-ref-codemode", "seen.ref schemas and codemode:false", ["bridge-schema-codemode"]),
