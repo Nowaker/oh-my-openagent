@@ -5,6 +5,40 @@ import { createSyncSession } from "../tools/delegate-task/sync-session-creator"
 
 describe("delegated session authority", () => {
   test.each([
+    { stage: "create", tools: { task: false, call_omo_agent: true }, expected: ["deny", "allow", "allow", "allow", "ask"] },
+    { stage: "create", tools: { call_omo_agent: false, task: true }, expected: ["allow", "deny", "allow", "allow", "allow"] },
+    { stage: "prompt", tools: { task: false, call_omo_agent: true }, expected: ["deny", "allow", "allow", "allow", "ask"] },
+    { stage: "prompt", tools: { call_omo_agent: false, task: true }, expected: ["allow", "deny", "allow", "allow", "allow"] },
+  ])("keeps host mixed frontend actions independent during $stage", async ({ stage, tools, expected }) => {
+    const { ctx } = createClientFixture()
+    ctx.agent.list = async () => ({ location: ctx.location, data: [{ id: "sisyphus", name: "Sisyphus", mode: "primary", hidden: false, permissions: [], request: { settings: {}, headers: {}, body: {} } }] })
+    const client = createV1ClientAdapter(ctx, { delegationOwner: "host" })
+    const sessionID = stage === "create"
+      ? (await client.session.create({ body: { permission: Object.entries(tools).map(([permission, enabled]) => ({ permission, pattern: "*", action: enabled ? "allow" : "deny" })) } })).data.id
+      : "session-1"
+    if (stage === "prompt") await client.session.promptAsync({ path: { id: sessionID }, body: { tools, parts: [{ type: "text", text: "host permission input" }] } })
+    const rules = (await ctx.session.get({ sessionID })).permissions ?? []
+    const requests = [["task", "*"], ["call_omo_agent", "*"], ["subagent", "explore"], ["subagent", "librarian"], ["subagent", "worker"]]
+    expect(requests.map(([action, resource]) => rules.findLast((rule) => rule.action === action && (rule.resource === "*" || rule.resource === resource))?.effect ?? "ask")).toEqual([...expected])
+  })
+
+  test.each(["agent", "session"] as const)("retains ordered %s backend authority when host facade creates a child", async (source) => {
+    const { ctx } = createClientFixture()
+    const backend = [
+      { action: "subagent", resource: "*", effect: "deny" },
+      { action: "subagent", resource: "explore", effect: "allow" },
+      { action: "subagent", resource: "librarian", effect: "ask" },
+    ] satisfies NonNullable<typeof sessionInfo.permissions>
+    ctx.agent.list = async () => ({ location: ctx.location, data: [{ id: "sisyphus", name: "Sisyphus", mode: "primary", hidden: false, permissions: source === "agent" ? backend : [], request: { settings: {}, headers: {}, body: {} } }] })
+    const client = createV1ClientAdapter(ctx, { delegationOwner: "host" })
+    const result = await client.session.create({ body: { permission: [
+      { permission: "task", pattern: "*", action: "allow" },
+      ...(source === "session" ? backend.map((rule) => ({ permission: rule.action, pattern: rule.resource, action: rule.effect })) : []),
+    ] } })
+    expect(["explore", "librarian", "worker"].map((target) => result.data.permissions?.findLast((rule) => rule.action === "subagent" && (rule.resource === "*" || rule.resource === target))?.effect)).toEqual(["allow", "ask", "deny"])
+  })
+
+  test.each([
     { stage: "create", tools: { task: false, call_omo_agent: true } },
     { stage: "create", tools: { call_omo_agent: true, task: false } },
     { stage: "prompt", tools: { task: false, call_omo_agent: true } },

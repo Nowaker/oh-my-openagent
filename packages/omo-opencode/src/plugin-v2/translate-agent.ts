@@ -2,7 +2,8 @@ import { Agent, Model, Provider, type Plugin } from "@opencode/plugin"
 import { z } from "zod"
 import { getAgentConfigKey } from "../shared/agent-display-names"
 import { log } from "../shared/logger"
-import { expandPermissionRules } from "./permission-actions"
+import { expandPermissionRules, type DelegationOptions, type PermissionRule } from "./permission-actions"
+import { projectHostPermissionRules } from "./host-permissions"
 
 const effect = z.enum(["allow", "ask", "deny"])
 const agentConfig = z.object({
@@ -27,9 +28,10 @@ type AgentDraft = Omit<z.infer<typeof agentConfig>, "model"> & {
   readonly id: string
   readonly model: Agent.Info["model"]
   readonly permissions: Agent.Info["permissions"]
+  readonly authoredPermissions: readonly PermissionRule[]
 }
 
-export function translateAgentConfigToV2Draft(name: string, raw: unknown): AgentDraft | undefined {
+export function translateAgentConfigToV2Draft(name: string, raw: unknown, options: DelegationOptions = {}): AgentDraft | undefined {
   const config = agentConfig.parse(raw)
   if (config.disable) return undefined
   const permissions: { action: string; resource: string; effect: z.infer<typeof effect> }[] = []
@@ -46,10 +48,12 @@ export function translateAgentConfigToV2Draft(name: string, raw: unknown): Agent
   const model = config.model !== undefined && slash > 0
     ? { providerID: Provider.ID.make(config.model.slice(0, slash)), id: Model.ID.make(config.model.slice(slash + 1)), ...(config.variant === undefined ? {} : { variant: Model.VariantID.make(config.variant) }) }
     : undefined
-  return { ...config, id: getAgentConfigKey(name), model, permissions: expandPermissionRules(permissions) }
+  const expanded = expandPermissionRules(permissions, options)
+  return { ...config, id: getAgentConfigKey(name), model, authoredPermissions: expanded,
+    permissions: options.delegationOwner === "host" ? projectHostPermissionRules(expanded) : expanded }
 }
 
-export async function registerV1Agents(ctx: Plugin.Context, value: unknown, defaultAgent: unknown): Promise<void> {
+export async function registerV1Agents(ctx: Pick<Plugin.Context, "agent">, value: unknown, defaultAgent: unknown, options: DelegationOptions = {}): Promise<void> {
   const configs = z.record(z.string(), z.unknown()).parse(value ?? {})
   const drafts = new Map<string, NonNullable<ReturnType<typeof translateAgentConfigToV2Draft>>>()
   const aliases = new Map<string, string>()
@@ -60,7 +64,7 @@ export async function registerV1Agents(ctx: Plugin.Context, value: unknown, defa
   }
   for (const [name, raw] of Object.entries(configs)) {
     if (raw === undefined) continue
-    const draft = translateAgentConfigToV2Draft(aliases.get(name) ?? name, raw)
+    const draft = translateAgentConfigToV2Draft(aliases.get(name) ?? name, raw, options)
     if (draft === undefined) continue
     // V1 adds hidden config-key aliases after its display entries. Keep the display entry.
     if (!drafts.has(draft.id)) drafts.set(draft.id, draft)
@@ -76,7 +80,8 @@ export async function registerV1Agents(ctx: Plugin.Context, value: unknown, defa
         agent.hidden = draft.hidden ?? false
         agent.steps = draft.maxSteps ?? draft.steps
         agent.system = draft.prompt
-        agent.permissions = draft.permissions.map((rule) => ({ ...rule }))
+        const permissions = options.delegationOwner === "host" ? projectHostPermissionRules(draft.authoredPermissions, agent.permissions ?? []) : draft.permissions
+        agent.permissions = permissions.map((rule) => ({ ...rule }))
         if (draft.temperature !== undefined) agent.request.settings.temperature = draft.temperature
         if (draft.top_p !== undefined) agent.request.settings.topP = draft.top_p
       })

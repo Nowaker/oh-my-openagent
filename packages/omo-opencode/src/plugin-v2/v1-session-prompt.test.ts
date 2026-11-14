@@ -4,6 +4,36 @@ import { createClientFixture, sessionInfo } from "./v1-client-fixture.test"
 import type { PromptBody } from "./v1-session-prompt"
 
 describe("delegated prompt admission", () => {
+  test.each([
+    { method: "promptAsync", synthetic: false, source: "agent" },
+    { method: "prompt", synthetic: false, source: "session" },
+    { method: "promptAsync", synthetic: true, source: "session" },
+    { method: "prompt", synthetic: true, source: "agent" },
+  ] as const)("preserves ordered $source backend authority before $method synthetic=$synthetic admission", async ({ method, synthetic, source }) => {
+    const { ctx, sessions } = createClientFixture()
+    const backend = [
+      { action: "subagent", resource: "*", effect: "allow" },
+      { action: "subagent", resource: "explore", effect: "deny" },
+      { action: "subagent", resource: "librarian", effect: "ask" },
+      { action: "subagent", resource: "worker", effect: "deny" },
+      { action: "subagent", resource: "worker", effect: "allow" },
+    ] satisfies NonNullable<typeof sessionInfo.permissions>
+    sessions.set(sessionInfo.id, { ...sessionInfo, permissions: source === "session" ? backend : [] })
+    ctx.agent.list = async () => ({ location: ctx.location, data: [{ id: "selected", name: "Selected", mode: "subagent", hidden: false, permissions: source === "agent" ? backend : [], request: { settings: {}, headers: {}, body: {} } }] })
+    let admittedPermissions: typeof sessionInfo.permissions
+    if (synthetic) {
+      const original = ctx.session.synthetic
+      ctx.session.synthetic = async (input) => { admittedPermissions = (await ctx.session.get({ sessionID: input.sessionID })).permissions; return original(input) }
+    } else {
+      const original = ctx.session.prompt
+      ctx.session.prompt = async (input) => { admittedPermissions = (await ctx.session.get({ sessionID: input.sessionID })).permissions; return original(input) }
+    }
+    const client = createV1ClientAdapter(ctx, { delegationOwner: "host" })
+    await client.session[method]({ path: { id: sessionInfo.id }, body: { agent: "selected", tools: { task: true, call_omo_agent: false }, noReply: true, parts: [{ type: "text", text: "host policy admission", synthetic }] } })
+    expect(["explore", "librarian", "worker"].map((target) => admittedPermissions?.findLast((rule) => rule.action === "subagent" && (rule.resource === "*" || rule.resource === target))?.effect)).toEqual(["deny", "ask", "allow"])
+    expect(admittedPermissions?.findLast((rule) => rule.action === "call_omo_agent")?.effect).toBe("deny")
+  })
+
   test.each([true, false])("admits synthetic text with noReply=%s using native synthetic input", async (noReply) => {
     const { ctx, admitted, synthetic } = createClientFixture()
     const client = createV1ClientAdapter(ctx)

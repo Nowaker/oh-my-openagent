@@ -4,6 +4,7 @@ import { normalizeAgentForPromptKey } from "../shared/agent-display-names"
 import { unsupportedV1Call } from "./v1-client-errors"
 import { applyPromptAuthority } from "./v1-session-authority"
 import type { V1SessionContext } from "./v1-session"
+import type { DelegationOptions } from "./permission-actions"
 
 type NativeSession = Plugin.Context["session"]
 type UserInput = Parameters<NativeSession["prompt"]>[0]
@@ -49,13 +50,13 @@ function assertExhaustive(value: never): never {
   throw new TypeError("Unrecognized v1 prompt part")
 }
 
-export function createPromptAdmission(ctx: V1SessionContext): (input: PromptInput, method: string) => Promise<AdmissionReceipt> {
+export function createPromptAdmission(ctx: V1SessionContext, options: DelegationOptions = {}): (input: PromptInput, method: string) => Promise<AdmissionReceipt> {
   const admissions = new Map<string, Promise<void>>()
   return async (input, method) => {
     const payload = promptPayload(input, method)
     const previous = admissions.get(input.path.id) ?? Promise.resolve()
     const operation = previous.then(async () => {
-      await applyPromptAuthority(ctx, input, method)
+      await applyPromptAuthority(ctx, input, { ...options, method })
       switch (payload.type) {
         case "user": return ctx.session.prompt(payload.input)
         case "synthetic": return ctx.session.synthetic(payload.input)

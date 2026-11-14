@@ -5,6 +5,7 @@ import { projectV1Message, type V1MessageView } from "./v1-session-messages"
 import { nativeTodos } from "./native-todos"
 import { createDelegatedSession, type CreateInput } from "./v1-session-authority"
 import { createPromptAdmission, type AdmissionReceipt, type PromptInput } from "./v1-session-prompt"
+import type { DelegationOptions } from "./permission-actions"
 
 type SessionPath = { readonly path: { readonly id: string } }
 type StatusInput = { readonly query?: { readonly directory?: string } }
@@ -12,6 +13,7 @@ type V1SessionStatus = { readonly type: "busy" | "idle"; readonly updatedAt: num
 
 export type V1SessionContext = {
   readonly location: Pick<Plugin.Context["location"], "directory">
+  readonly agent: Pick<Plugin.Context["agent"], "list">
   readonly session: Pick<Plugin.Context["session"], "get" | "list" | "create" | "context" | "switchAgent" | "switchModel" | "prompt" | "synthetic" | "update" | "instructions" | "wait" | "interrupt" | "remove">
 }
 
@@ -31,8 +33,8 @@ export type V1SessionAdapter = {
   readonly children: () => Promise<never>
 }
 
-export function createV1SessionAdapter(ctx: V1SessionContext): V1SessionAdapter {
-  const admit = createPromptAdmission(ctx)
+export function createV1SessionAdapter(ctx: V1SessionContext, options: DelegationOptions = {}): V1SessionAdapter {
+  const admit = createPromptAdmission(ctx, options)
   return guardV1Surface({
     get: async (input: SessionPath) => {
       const session = await ctx.session.get({ sessionID: input.path.id })
@@ -43,7 +45,7 @@ export function createV1SessionAdapter(ctx: V1SessionContext): V1SessionAdapter 
       return { data: result.data.map((session) => ({ ...session, directory: session.location.directory })) }
     },
     create: async (input?: CreateInput) => {
-      const session = await createDelegatedSession(ctx, input)
+      const session = await createDelegatedSession(ctx, input, options)
       return { data: { ...session, directory: session.location.directory } }
     },
     messages: async (input: SessionPath & { readonly query?: { readonly limit?: number } }) => {

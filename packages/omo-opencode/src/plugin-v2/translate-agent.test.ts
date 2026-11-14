@@ -1,7 +1,79 @@
 import { describe, expect, it } from "bun:test"
-import { translateAgentConfigToV2Draft } from "./translate-agent"
+import { Agent, type Plugin } from "@opencode/plugin"
+import type { AgentEditor } from "@opencode/plugin/promise/agent"
+import { registerV1Agents, translateAgentConfigToV2Draft } from "./translate-agent"
+import { createClientFixture } from "./v1-client-fixture.test"
 
 describe("V1 agent translation", () => {
+  it.each([
+    { permission: { task: "deny", call_omo_agent: "allow" }, expected: ["deny", "allow", "allow", "allow", "ask"] },
+    { permission: { call_omo_agent: "allow", task: "deny" }, expected: ["deny", "allow", "allow", "allow", "ask"] },
+    { permission: { task: "allow", call_omo_agent: "deny" }, expected: ["allow", "deny", "allow", "allow", "allow"] },
+    { permission: { call_omo_agent: "deny", task: "allow" }, expected: ["allow", "deny", "allow", "allow", "allow"] },
+    { permission: { task: "deny", call_omo_agent: "deny" }, expected: ["deny", "deny", "ask", "ask", "ask"] },
+    { permission: { task: "deny", call_omo_agent: "ask" }, expected: ["deny", "ask", "allow", "allow", "ask"] },
+    { permission: {}, expected: ["ask", "ask", "allow", "allow", "allow"] },
+  ])("keeps host frontend actions independent and projects only callable backend targets: %j", ({ permission, expected }) => {
+    // given / when
+    const draft = translateAgentConfigToV2Draft("worker", { permission }, { delegationOwner: "host" })
+    // then
+    const requests = [["task", "*"], ["call_omo_agent", "*"], ["subagent", "explore"], ["subagent", "librarian"], ["subagent", "worker"]]
+    expect(requests.map(([action, resource]) => draft?.permissions?.findLast((rule) => rule.action === action && (rule.resource === "*" || rule.resource === resource))?.effect ?? "ask")).toEqual([...expected])
+  })
+
+  it("keeps authored native backend deny and ask order after host projection", () => {
+    // given / when
+    const draft = translateAgentConfigToV2Draft("worker", { permission: { task: "allow", call_omo_agent: "deny", subagent: { "*": "deny", explore: "allow", librarian: "ask" } } }, { delegationOwner: "host" })
+    // then
+    expect(["explore", "librarian", "worker"].map((target) => draft?.permissions?.findLast((rule) => rule.action === "subagent" && (rule.resource === "*" || rule.resource === target))?.effect)).toEqual(["allow", "ask", "deny"])
+  })
+
+  it("permits a scoped frontend allow after a whole-tool deny without a second backend ask", () => {
+    const draft = translateAgentConfigToV2Draft("worker", { permission: { task: { "*": "deny", oracle: "allow" }, call_omo_agent: "deny" } }, { delegationOwner: "host" })
+    const decision = draft?.permissions?.findLast((rule) => rule.action === "subagent" && (rule.resource === "*" || rule.resource === "oracle"))?.effect ?? "ask"
+    expect(decision).toBe("allow")
+  })
+
+  it.each([
+    {
+      name: "retained native deny and ask after generated grants",
+      nativeRules: [
+        { action: "subagent", resource: "*", effect: "allow" },
+        { action: "subagent", resource: "explore", effect: "deny" },
+        { action: "subagent", resource: "librarian", effect: "ask" },
+        { action: "subagent", resource: "worker", effect: "deny" },
+        { action: "subagent", resource: "worker", effect: "allow" },
+      ] satisfies NonNullable<Agent.Info["permissions"]>,
+      authored: {}, expected: ["deny", "ask", "allow"],
+    },
+    {
+      name: "authored backend deny and ask after native default allow",
+      nativeRules: [{ action: "*", resource: "*", effect: "allow" }] satisfies NonNullable<Agent.Info["permissions"]>,
+      authored: { subagent: { explore: "deny", librarian: "ask", worker: "allow" } }, expected: ["deny", "ask", "allow"],
+    },
+    {
+      name: "authored later allow keeps ordered resource precedence",
+      nativeRules: [{ action: "*", resource: "*", effect: "allow" }] satisfies NonNullable<Agent.Info["permissions"]>,
+      authored: { subagent: { "*": "deny", explore: "allow", librarian: "ask" } }, expected: ["allow", "ask", "deny"],
+    },
+  ])("preserves host registration policy: $name", async ({ nativeRules, authored, expected }) => {
+    // given
+    const { ctx } = createClientFixture()
+    const agent: ReturnType<AgentEditor["list"]>[number] = { id: Agent.ID.make("worker"), name: Agent.Name.make("worker"), mode: "subagent", hidden: false, permissions: nativeRules, request: { settings: {}, headers: {}, body: {} } }
+    const domain: Plugin.Context["agent"] = { ...ctx.agent,
+      get: async () => ({ location: ctx.location, data: agent }), reload: async () => {},
+      transform: async (callback) => {
+        callback({ list: () => [agent], get: () => agent, default: () => {}, remove: () => {}, update: (_id, update) => update(agent) })
+        return { dispose: async () => {} }
+      },
+    }
+    // when
+    await registerV1Agents({ agent: domain }, { worker: { permission: { task: "deny", call_omo_agent: "allow", ...authored } } }, undefined, { delegationOwner: "host" })
+    // then
+    expect(["explore", "librarian", "worker"].map((target) => agent.permissions?.findLast((rule) => rule.action === "subagent" && (rule.resource === "*" || rule.resource === target))?.effect)).toEqual([...expected])
+    expect(["task", "call_omo_agent"].map((action) => agent.permissions?.findLast((rule) => rule.action === action)?.effect)).toEqual(["deny", "allow"])
+  })
+
   it.each([
     { task: "deny", call_omo_agent: "allow" },
     { call_omo_agent: "allow", task: "deny" },

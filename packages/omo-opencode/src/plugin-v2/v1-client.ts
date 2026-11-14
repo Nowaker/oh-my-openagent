@@ -1,5 +1,6 @@
 import type { Plugin } from "@opencode/plugin"
 import { markNativeDelegationClient } from "../shared/native-delegation-client"
+import type { DelegationOptions } from "./permission-actions"
 import { guardV1Surface, unsupportedV1Call } from "./v1-client-errors"
 import { createV1SessionAdapter, type V1SessionContext, type V1SessionAdapter, type V1Envelope } from "./v1-session"
 
@@ -39,7 +40,7 @@ function projectModel(model: NativeModel): ProjectedModel {
   }
 }
 
-export function createV1ClientAdapter(ctx: V1ClientContext): V1ClientAdapter {
+export function createV1ClientAdapter(ctx: V1ClientContext, options: DelegationOptions = {}): V1ClientAdapter {
   const providerList = async () => {
     const [providers, models, defaultModel] = await Promise.all([ctx.provider.list(), ctx.model.list(), ctx.model.default()])
     const all = providers.data.map((provider) => ({
@@ -53,7 +54,7 @@ export function createV1ClientAdapter(ctx: V1ClientContext): V1ClientAdapter {
     } }
   }
   return markNativeDelegationClient(guardV1Surface({
-    session: createV1SessionAdapter(ctx),
+    session: createV1SessionAdapter(ctx, options),
     app: guardV1Surface({
       get: async () => ({ data: ctx.app }),
       agents: async () => {
