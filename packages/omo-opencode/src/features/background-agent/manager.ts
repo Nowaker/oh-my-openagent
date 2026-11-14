@@ -81,7 +81,7 @@ import {
   recordToolCall,
   resolveCircuitBreakerSettings,
 } from "./loop-detector"
-import { ParentWakeNotifier, type ParentWakePromptContext } from "./parent-wake-notifier"
+import { ParentWakeNotifier, type ParentWakePromptContext, type UndeliveredParentWake } from "./parent-wake-notifier"
 import type { PendingParentWake } from "./parent-wake-dedupe"
 import { registerManagerForCleanup, unregisterManagerForCleanup } from "./process-cleanup"
 import { removeTaskToastTracking } from "./remove-task-toast-tracking"
@@ -2880,6 +2880,11 @@ The task was re-queued on a fallback model after a retryable failure.
   /** Tasks still running or waiting for a slot: what a restart of this process would cut off. */
   listUnfinishedTasks(): BackgroundTask[] {
     return Array.from(this.tasks.values()).filter(t => t.status === "running" || t.status === "pending")
+  }
+
+  /** Wakes this process still owes a parent session, which a restart of this process would lose with it. */
+  listUndeliveredParentWakes(): UndeliveredParentWake[] {
+    return this.parentWakeNotifier.listUndeliveredWakes()
   }
 
   /**

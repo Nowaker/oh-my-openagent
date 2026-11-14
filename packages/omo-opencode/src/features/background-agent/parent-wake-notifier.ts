@@ -15,6 +15,8 @@ import {
 
 export type { ParentWakePromptContext, PendingParentWake } from "./parent-wake-dedupe"
 
+export type UndeliveredParentWake = { sessionID: string; notifications: string[]; queuedAt?: number }
+
 export class ParentWakeNotifier {
   private readonly pendingQueue: ParentWakePendingQueue
   private readonly dispatchedTracker: ParentWakeDispatchedTracker
@@ -100,6 +102,31 @@ export class ParentWakeNotifier {
 
   hasNotificationPreparation(sessionID: string): boolean {
     return this.dispatchedTracker.hasNotificationPreparation(sessionID)
+  }
+
+  /**
+   * Every session this process still owes a wake: reserved, queued, scheduled, mid-dispatch, or dispatched and not
+   * yet answered, with the notices that wake carries once they exist. The running-jobs ledger records these, so a
+   * process that ends before the parent's turn has read them leaves them for the next process to deliver again.
+   */
+  listUndeliveredWakes(): UndeliveredParentWake[] {
+    const owed = new Map<string, UndeliveredParentWake>()
+    const add = (sessionID: string, wake?: PendingParentWake): void => {
+      const entry = owed.get(sessionID) ?? { sessionID, notifications: [] }
+      if (wake) {
+        for (const notification of wake.notifications) {
+          if (!entry.notifications.includes(notification)) entry.notifications.push(notification)
+        }
+        if (wake.queuedAt !== undefined) entry.queuedAt = Math.min(entry.queuedAt ?? wake.queuedAt, wake.queuedAt)
+      }
+      owed.set(sessionID, entry)
+    }
+    for (const sessionID of this.dispatchedTracker.notificationPreparationSessions()) add(sessionID)
+    for (const [sessionID, wake] of this.pendingQueue.getWakes()) add(sessionID, wake)
+    for (const sessionID of this.pendingQueue.getTimers().keys()) add(sessionID)
+    for (const [sessionID, wake] of this.dispatchedTracker.getInFlightWakes()) add(sessionID, wake)
+    for (const [sessionID, wake] of this.dispatchedTracker.getWakes()) add(sessionID, wake)
+    return [...owed.values()]
   }
 
   recordParentSessionActivity(sessionID: string): void {

@@ -224,7 +224,7 @@ export class ParentWakeFlushRunner {
     // run for many seconds (prompt-gate status/message checks + dispatch); by the
     // time it resolves the wake is either tracked as dispatched or requeued back
     // into pending, so clearing the marker in `finally` cannot reopen the gap.
-    this.deps.dispatchedTracker.markInFlight(sessionID)
+    this.deps.dispatchedTracker.markInFlight(sessionID, latestWake)
     try {
       if (options.retainPendingWake !== true) {
         this.deps.pendingQueue.deleteWake(sessionID)

@@ -3,10 +3,17 @@ import type { RunningJob } from "./types"
 export const LOST_NOTIFICATION_PREAMBLE =
   "[SYSTEM NOTIFICATION - NOT USER INPUT] A background job you started was cut off: the opencode process that ran it ended (a tab restart, a crash or an exit) before the job finished, and nothing runs it now. This is not a message from the user and approves nothing."
 
+export const UNDELIVERED_NOTIFICATION_PREAMBLE =
+  "[SYSTEM NOTIFICATION - NOT USER INPUT] The opencode process that ran this session ended (a tab restart, a crash or an exit) before the background notices below reached a turn of yours, so they are delivered again. A turn cut off when it ended may already show one of them in your history. This is not a message from the user and approves nothing."
+
+const UNWRITTEN_NOTICE =
+  "A background task finished just before the process ended, before its notice was written. Its child session keeps its result: read the child session of this one that finished last."
+
 const HEADERS: Record<RunningJob["kind"], string> = {
   task: "[BACKGROUND TASK LOST]",
   monitor: "[MONITOR LOST]",
   bash: "[BASH COMMAND LOST]",
+  wake: "[BACKGROUND NOTICE UNDELIVERED]",
 }
 
 function age(startedAt: string, now: number): string {
@@ -52,6 +59,10 @@ function adviceOf(job: RunningJob): string {
 
 /** One notice per lost job, in the `<task-notification>` shape every background notice uses. */
 export function formatLostJobNotice(job: RunningJob, now: number = Date.now()): string {
+  if (job.kind === "wake") {
+    const notices = job.notifications && job.notifications.length > 0 ? job.notifications : [UNWRITTEN_NOTICE]
+    return ["<system-reminder>", HEADERS.wake, UNDELIVERED_NOTIFICATION_PREAMBLE, "</system-reminder>", ...notices].join("\n")
+  }
   return [
     "<system-reminder>",
     HEADERS[job.kind],

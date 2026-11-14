@@ -18,6 +18,8 @@ type TaskSource = {
     prompt: string
     status: string
   }>
+  /** Wakes owed to a parent session; a finished task's result reaches its parent only through one. */
+  listUndeliveredParentWakes?(): ReadonlyArray<{ sessionID: string; notifications: readonly string[]; queuedAt?: number }>
   queueSessionNotice(sessionID: string, notification: string): Promise<void>
 }
 type MonitorSource = {
@@ -61,6 +63,15 @@ export function createRunningJobsLedger(input: {
       agent: task.agent,
       ...(task.sessionId ? { childSessionId: task.sessionId } : { prompt: task.prompt }),
     }))
+  const wakes = (): RunningJob[] =>
+    (input.backgroundManager.listUndeliveredParentWakes?.() ?? []).map((wake) => ({
+      kind: "wake",
+      id: `wake_${wake.sessionID}`,
+      sessionId: wake.sessionID,
+      description: `${wake.notifications.length} undelivered background notice${wake.notifications.length === 1 ? "" : "s"}`,
+      startedAt: new Date(wake.queuedAt ?? Date.now()).toISOString(),
+      notifications: [...wake.notifications],
+    }))
   const monitors = (): RunningJob[] =>
     (input.monitorManager?.listRunning() ?? []).map((record) => ({
       kind: "monitor",
@@ -85,7 +96,7 @@ export function createRunningJobsLedger(input: {
     }))
 
   const ledger = new RunningJobsLedger({
-    sources: [tasks, monitors, commands],
+    sources: [tasks, wakes, monitors, commands],
     ...(input.root ? { root: input.root } : {}),
     ...(input.pid !== undefined ? { pid: input.pid } : {}),
     ...(input.isAlive ? { isAlive: input.isAlive } : {}),

@@ -15,7 +15,9 @@ export class ParentWakeDispatchedTracker {
   // already deleted and the dispatched entry is not yet tracked, so without this
   // marker `hasPendingParentWake` would briefly report "no wake owed" and let the
   // sync poller settle on a stale pre-results turn.
-  private inFlightDispatches: Set<string> = new Set()
+  // Each in-flight dispatch keeps the wake it is sending, so a process that ends mid-dispatch can still say which
+  // notices it never delivered.
+  private inFlightDispatches: Map<string, PendingParentWake> = new Map()
   // Parent sessions whose final child has been marked terminal but whose wake has
   // not yet been queued, because the completion path is still awaiting the child's
   // session teardown (abort with a 10s timeout, plus the tmux callback). During
@@ -36,8 +38,8 @@ export class ParentWakeDispatchedTracker {
     return this.dispatchedParentWakeTimers
   }
 
-  markInFlight(sessionID: string): void {
-    this.inFlightDispatches.add(sessionID)
+  markInFlight(sessionID: string, wake: PendingParentWake): void {
+    this.inFlightDispatches.set(sessionID, wake)
   }
 
   clearInFlight(sessionID: string): void {
@@ -66,6 +68,14 @@ export class ParentWakeDispatchedTracker {
 
   hasNotificationPreparation(sessionID: string): boolean {
     return (this.notificationPreparations.get(sessionID) ?? 0) > 0
+  }
+
+  getInFlightWakes(): ReadonlyMap<string, PendingParentWake> {
+    return this.inFlightDispatches
+  }
+
+  notificationPreparationSessions(): string[] {
+    return [...this.notificationPreparations.keys()]
   }
 
   getWake(sessionID: string): PendingParentWake | undefined {

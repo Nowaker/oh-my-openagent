@@ -71,4 +71,47 @@ describe("createRunningJobsLedger", () => {
     ledger.flush()
     expect(JSON.parse(readFileSync(join(root, "ses_p.json"), "utf8")).jobs[0]).toMatchObject({ kind: "task", prompt: "count", startedAt: "1970-01-01T00:00:00.000Z" })
   })
+
+  test("#given a finished task whose parent wake is not delivered yet #when flushed #then the session keeps its record, and a later process delivers the wake's notices again", async () => {
+    // given
+    const root = mkdtempSync(join(tmpdir(), "omo-running-jobs-wiring-"))
+    roots.push(root)
+    const notice = "<system-reminder>\n[BACKGROUND TASK COMPLETED]\n<task-id>bg_7e6b181a</task-id>\n</system-reminder>"
+    const ledger = createRunningJobsLedger({
+      root,
+      backgroundManager: {
+        listUnfinishedTasks: () => [],
+        listUndeliveredParentWakes: () => [{ sessionID: "ses_p", notifications: [notice], queuedAt: 0 }],
+        queueSessionNotice: async () => {},
+      },
+      bashBackgroundManager: { listAll: () => [] },
+      argv: [],
+    })
+
+    // when
+    ledger.flush()
+
+    // then
+    const jobs = JSON.parse(readFileSync(join(root, "ses_p.json"), "utf8")).jobs
+    expect(jobs).toEqual([{ kind: "wake", id: "wake_ses_p", sessionId: "ses_p", description: "1 undelivered background notice", startedAt: "1970-01-01T00:00:00.000Z", notifications: [notice] }])
+
+    // when
+    const notices: Array<[string, string]> = []
+    const next = createRunningJobsLedger({
+      root,
+      backgroundManager: { listUnfinishedTasks: () => [], queueSessionNotice: async (s, n) => { notices.push([s, n]) } },
+      bashBackgroundManager: { listAll: () => [] },
+      argv: [],
+      isAlive: () => false,
+      pid: process.pid + 1,
+    })
+    next.claimSession("ses_p")
+    await Promise.resolve()
+
+    // then
+    expect(notices).toHaveLength(1)
+    expect(notices[0]?.[0]).toBe("ses_p")
+    expect(notices[0]?.[1].split("\n")[1]).toBe("[BACKGROUND NOTICE UNDELIVERED]")
+    expect(notices[0]?.[1]).toContain(notice)
+  })
 })

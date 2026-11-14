@@ -1,4 +1,4 @@
-export type RunningJobKind = "task" | "monitor" | "bash"
+export type RunningJobKind = "task" | "monitor" | "bash" | "wake"
 
 /** One unfinished job of a session, as the ledger records it: enough to tell the session what was lost and how to resume it. */
 export interface RunningJob {
@@ -16,4 +16,6 @@ export interface RunningJob {
   readonly command?: string
   readonly timeoutMs?: number
   readonly outputPath?: string
+  /** A wake's notices, which a later process delivers again when this one ended before the session read them. */
+  readonly notifications?: readonly string[]
 }
