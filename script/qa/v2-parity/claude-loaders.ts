@@ -25,7 +25,7 @@ async function claudeAgent(context: ParityContext, enabled: boolean) {
     prepare(sandbox) {
       const directory = join(sandbox.project, ".claude", "agents")
       mkdirSync(directory, { recursive: true })
-      writeFileSync(join(directory, `${name}.md`), `---\nname: ${name}\ndescription: ${description}\nmode: all\n---\n${system}\n`)
+      writeFileSync(join(directory, `${name}.md`), `---\nname: ${name}\ndescription: ${description}\nmodel: fake/fake-model\nmode: all\n---\n${system}\n`)
     },
   })
   const response = await host.request("/api/agent")

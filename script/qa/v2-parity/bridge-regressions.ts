@@ -1,7 +1,8 @@
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
-import { readFileSync, writeFileSync } from "node:fs"
+import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
+import { pathToFileURL } from "node:url"
 import { z } from "zod"
 import type { ParityContext, ParityProbe } from "./contracts"
 import { createScenarioHost } from "./harness"
@@ -38,7 +39,28 @@ async function toolTurn(context: ParityContext, spec: { readonly id: string; rea
     return { kind: "text", text: "Bridge fixture turn ended." }
   }
   await using host = await createScenarioHost(context, { id: spec.id, handler,
-    prepare(sandbox) { project = sandbox.project; writeFileSync(join(project, "bridge-demo.txt"), "OMO bridge parity fixture\n") },
+    prepare(sandbox) {
+      project = sandbox.project
+      writeFileSync(join(project, "bridge-demo.txt"), "OMO bridge parity fixture\n")
+      writeFileSync(join(sandbox.root, "omo-plugin/server.ts"), [
+        `import plugin from ${JSON.stringify(pathToFileURL(context.pluginBundle).href)}`,
+        'import { writeFileSync } from "node:fs"',
+        "export default { ...plugin, async setup(ctx) {",
+        "  const native = ctx.job.result",
+        "  const job = new Proxy(ctx.job, { get(target, key, receiver) {",
+        "    if (key !== 'result') return Reflect.get(target, key, receiver)",
+        "    return async (input, options) => {",
+        "      try { return await native.call(target, input, options) } catch (error) {",
+        "        const tag = error && typeof error === 'object' && '_tag' in error ? error._tag : null",
+        `        writeFileSync(${JSON.stringify(join(sandbox.root, "missing-job-error.json"))}, JSON.stringify({ ...input, tag }))`,
+        "        throw error",
+        "      }",
+        "    }",
+        "  } })",
+        "  return plugin.setup(new Proxy(ctx, { get(target, key, receiver) { return key === 'job' ? job : Reflect.get(target, key, receiver) } }))",
+        "} }",
+      ].join("\n"))
+    },
   })
   const created = await host.request("/api/session", { method: "POST", body: { title: spec.id, agent: "sisyphus",
     model: { providerID: "fake", id: "fake-model" }, permissions: [{ action: "*", resource: "*", effect: "allow" }],
@@ -59,38 +81,44 @@ async function toolTurn(context: ParityContext, spec: { readonly id: string; rea
   const terminal = await finished.result
   const response = await host.request(`/api/session/${id}/message`)
   assert.equal(response.status, 200, "Bridge message read failed")
+  writeFileSync(join(host.sandbox.root, "bridge-messages.json"), JSON.stringify(response.body, null, 2))
   const parts = messagesSchema.parse(response.body).data.flatMap((message) => message.content ?? [])
-    .filter((part) => part.type === "tool" && part.state?.status === "completed")
+    .filter((part) => part.type === "tool")
   const modelRequests = host.provider.requests.filter((request) => (request.tools?.length ?? 0) > 0)
   const names = [...new Set(modelRequests.flatMap((request) => request.tools ?? []).map((tool) => tool.function.name))].sort()
   const glob = parts.find((part) => part.name === "glob")
   const background = parts.find((part) => part.name === "background_output")
   const globText = JSON.stringify(glob?.state?.content ?? null)
   const backgroundText = JSON.stringify(background?.state?.content ?? null)
+  const nativeErrorFile = join(host.sandbox.root, "missing-job-error.json")
+  const nativeError = existsSync(nativeErrorFile) ? z.object({ parentID: z.string(), jobID: z.string(), tag: z.string().nullable() }).parse(JSON.parse(readFileSync(nativeErrorFile, "utf8"))) : undefined
+  const nativeMissing = background?.state?.status === "error"
+    && nativeError?.tag === "Job.NotFoundError" && nativeError.parentID === id && nativeError.jobID === missingTask
   const receipt = { ...provenance(context), sessionID: id, events, terminal: terminal.type,
     providerRequestCount: host.provider.requests.length, modelToolNames: names,
     modelSchemas: modelRequests.flatMap((request) => (request.tools ?? []).filter((tool) => ["glob", "background_output"].includes(tool.function.name))
       .map((tool) => ({ name: tool.function.name, parameters: tool.function["parameters"] }))),
-    completedTools: parts.map((part) => ({ name: part.name, state: part.state })),
+    completedTools: parts.filter((part) => part.state?.status === "completed").map((part) => ({ name: part.name, state: part.state })),
+    nativeMissing, nativeError,
     nativeGlobWouldLookSuccessful: globText.includes("bridge-demo.txt"), omoGlobResult: globText.includes("Found 1 file(s)"),
-    omoOnlyAdmitted: names.includes("background_output"), omoOnlyCompleted: backgroundText.includes(`Task not found: ${missingTask}`),
+    omoOnlyAdmitted: names.includes("background_output"), omoOnlyCompleted: nativeMissing || backgroundText.includes(`Task not found: ${missingTask}`),
   }
   writeFileSync(join(host.sandbox.root, "bridge-receipt.json"), JSON.stringify(receipt, null, 2) + "\n")
   assert.equal(terminal.type, "session.execution.succeeded", "Bridge turn failed before regression assertions")
   assert.equal(receipt.omoOnlyAdmitted, true, "OMO-only background_output was not admitted into the model's tool registry; native glob completion cannot prove OMO execution")
   assert.equal(receipt.omoOnlyCompleted, true, "OMO-only background_output did not execute to its missing-task result")
-  assert.ok(events.includes("session.tool.success"), "Native session.tool.success was not observed")
+  assert.ok(events.includes(nativeMissing ? "session.tool.failed" : "session.tool.success"), "The actual tool terminal event was not observed")
   if (spec.glob) {
     assert.equal(receipt.nativeGlobWouldLookSuccessful, true, "Glob did not return the fixture filename")
     assert.equal(receipt.omoGlobResult, true, "Glob returned a native result instead of the OMO implementation")
   } else {
     const submitted = host.submittedTools()
-    assert.ok(submitted.includes("background_output"), "OMO setup did not submit its distinctive tool")
+    assert.ok(submitted.includes("skill_mcp"), "OMO setup did not submit its distinctive bridged tool")
     const missing = submitted.filter((name) => !names.includes(name))
     assert.deepEqual(missing, [], "OMO tool schemas were submitted but skipped by native admission (seen.ref/codemode regression)")
     writeFileSync(join(host.sandbox.root, "admission-receipt.json"), JSON.stringify({ submitted, admitted: names, missing }, null, 2) + "\n")
   }
-  return { status: "pass" as const, detail: `${modelRequests.length} model requests; OMO-only handler completed; ${spec.glob ? "OMO glob result distinguishes native false positives" : "all submitted schemas admitted as direct tools (seen.ref and codemode:false)"}` }
+  return { status: "pass" as const, detail: `${modelRequests.length} model requests; OMO-only handler reached its missing-task outcome; ${spec.glob ? "OMO glob result distinguishes native false positives" : "all submitted schemas admitted as direct tools (seen.ref and codemode:false)"}` }
 }
 
 export const bridgeRegressionProbes: readonly ParityProbe[] = [
@@ -108,7 +136,7 @@ export const bridgeRegressionProbes: readonly ParityProbe[] = [
       assert.equal(plugin?.state.status, "active", "OMO directory did not become active")
       assert.equal(plugin?.source.type, "local", "OMO was not loaded from the configured local directory")
       assert.equal(plugin?.source.path, host.pluginDirectory, "OMO inventory points to a different source than the directory wrapper")
-      assert.ok(submitted.includes("background_output"), "Actual OMO setup did not submit its tools")
+      assert.ok(submitted.includes("skill_mcp"), "Actual OMO setup did not submit its bridged tools")
       const fileBox = context.harness.createSandbox(context, "bridge-directory-file-control")
       const entry = join(host.pluginDirectory, "server.ts")
       writeFileSync(join(fileBox.config, "opencode.json"), JSON.stringify({ plugins: [entry] }))
