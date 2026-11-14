@@ -68,6 +68,14 @@ Shared permission expansion resolves a collision only at the native alias/action
 
 The [fresh scoped gate review](https://portal.vibeterm.desktop.ts.nowaker.net/session/ses_e29391a18ffefCwYQLBwzYU0Jd) approves the corrected shared boundary and all four actual vt17 rows with high confidence, accepting the prior audit for unchanged step 2 code. `gate-cleared.txt` records that scope and `alias-artifacts.sha256` binds the local captures. The labelled controller publishes the corrected four-row results in the same Portal session; its earlier three-row result is historical.
 
+## Effective default selection
+
+The bridge resolves prompt identity through the native `ctx.session.selection` getter when the host advertises `sessionSelection`. Stored agent/model choices may be absent; the bridge neither guesses defaults nor writes them back. An older host still accepts a complete explicit stored identity and reports a named capability gap for omitted selections. Native selection errors propagate unchanged.
+
+On installed desktop `opencode v2.2.7-vt-28-5f76acb125`, three actual turns pass: both choices omitted, model omitted, and agent omitted. The native getter, persisted assistant and provider request agree on the configured non-first agent `hephaestus`, model `fake/gpt-6.1-sol`, and variants `high`, `high`, `low`. The server bundle is `946a013182323190cd3eb42417d903d4a579149c09a3227700ceecc3da5ac7bc`; the matching engine PID exits 0. Captures are `.omo/evidence/20261111-v2-delegation/selection-vt28-accepted/`, with the decisive identities in `delegation-default-selection/selection-receipt.json`. The six owner cases, restored getter-bypass mutation, source/script types and canonical build pass. The [scoped gate](https://portal.vibeterm.desktop.ts.nowaker.net/session/ses_e2795b7dbffeXLG6NT0KmM2urJ) approves this repair with high confidence; it does not approve the separate native delegation increment or claim Mac proof.
+
+This run uses the shared scenario host's complete fake-agent roster and final native model/HTTP/websocket guard, with `provider.use` restricted to the fake provider. The Linux controller, provider and engine run together in a loopback-only user/network namespace. Actual controls separately prove unconfigured-agent and redirected-HTTP refusal before provider traffic; websocket refusal is source-verified only. The initial vt28 attempt's native wait returned successful HTTP 204 while the fixture expected 200; the final fixture accepts 200/204 and retains all identity and output assertions.
+
 ## Native fills
 
 [W8](https://portal.vibeterm.desktop.ts.nowaker.net/session/ses_e36056891ffeoRauziS8U3zIrx) adds v2-only initialization overrides and native registrations. The normal v1 factory defaults and entry modules retain their behavior. Permission forwarding already existed in the spike; the new work proves both real outcomes rather than adding another permission implementation.
