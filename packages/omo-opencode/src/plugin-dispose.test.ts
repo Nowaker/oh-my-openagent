@@ -4,6 +4,19 @@ import { disposeCreatedHooks } from "./create-hooks"
 import { createPluginDispose } from "./plugin-dispose"
 
 describe("createPluginDispose", () => {
+  test("uses manager-bundle shutdown without a background manager and continues disposal after its failure", async () => {
+    const calls: string[] = []
+    const dispose = createPluginDispose({
+      shutdownManagers: async () => { calls.push("managers"); throw new Error("owner shutdown failed") },
+      skillMcpManager: { disconnectAll: async () => { calls.push("skills") } },
+      disposeHooks: () => { calls.push("hooks") },
+    })
+
+    await Promise.all([dispose(), dispose()])
+
+    expect(calls).toEqual(["managers", "skills", "hooks"])
+  })
+
   test("#given plugin with active managers and hooks #when dispose() is called #then backgroundManager.shutdown() is called", async () => {
     // given
     const backgroundManager = {

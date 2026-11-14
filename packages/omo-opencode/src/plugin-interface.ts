@@ -161,6 +161,7 @@ export function createPluginInterface(args: {
     "tool.execute.before": createToolExecuteBeforeHandler({
       ctx,
       hooks,
+      delegationOwner: managers.delegationOwner,
       backgroundManager: managers.backgroundManager,
     }),
 

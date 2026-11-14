@@ -3,9 +3,10 @@ import { log } from "./shared"
 export type PluginDispose = () => Promise<void>
 
 export function createPluginDispose(args: {
-  backgroundManager: {
+  backgroundManager?: {
     shutdown: () => void | Promise<void>
   }
+  shutdownManagers?: () => Promise<void>
   skillMcpManager: {
     disconnectAll: () => Promise<void>
   }
@@ -17,7 +18,7 @@ export function createPluginDispose(args: {
   }
   disposeHooks: () => void
 }): PluginDispose {
-  const { backgroundManager, skillMcpManager, tuiStateMirror, runningJobsLedger, disposeHooks } = args
+  const { backgroundManager, shutdownManagers, skillMcpManager, tuiStateMirror, runningJobsLedger, disposeHooks } = args
   let disposePromise: Promise<void> | null = null
 
   return async (): Promise<void> => {
@@ -34,12 +35,13 @@ export function createPluginDispose(args: {
         log("[plugin-dispose] runningJobsLedger.shutdown() error:", error)
       }
       try {
-        tuiStateMirror?.stop()
+        if (!shutdownManagers) tuiStateMirror?.stop()
       } catch (error) {
         log("[plugin-dispose] tuiStateMirror.stop() error:", error)
       }
       try {
-        await backgroundManager.shutdown()
+        if (shutdownManagers) await shutdownManagers()
+        else await backgroundManager?.shutdown()
       } catch (error) {
         log("[plugin-dispose] backgroundManager.shutdown() error:", error)
       }

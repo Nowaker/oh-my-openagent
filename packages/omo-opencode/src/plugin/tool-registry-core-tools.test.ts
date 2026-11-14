@@ -5,6 +5,10 @@ import type { ToolRegistryFactories } from "./tool-registry-factories"
 
 import { unsafeTestValue } from "../../../../test-support/unsafe-test-value"
 import { createCoreTools } from "./tool-registry-core-tools"
+import { createTeamModeToolsRecord } from "./tool-registry-team-tools"
+import { createManagers, UnsupportedHostDelegationError } from "../create-managers"
+import { OhMyOpenCodeConfigSchema } from "../config/schema/oh-my-opencode-config"
+import { createHostDelegationFixture } from "../testing/host-delegation-test-fixture"
 
 const fakeTool = tool({
   description: "fake tool",
@@ -83,6 +87,49 @@ describe("#given disabled native skills in the registry skill context", () => {
 })
 
 describe("#given core skill tools are registered", () => {
+  test("#when the host owns delegation #then legacy factories never run and independent tools remain executable", async () => {
+    const { ctx, args } = createHostDelegationFixture()
+    const managers = createManagers({ ...args, delegationOwner: "host" })
+    const unavailable = (): never => { throw new Error("Legacy delegation factory invoked") }
+    const factories = {
+      ...createFactories(() => fakeTool),
+      createBackgroundTools: unavailable,
+      createCallOmoAgent: unavailable,
+      createDelegateTask: unavailable,
+      createGrepTools: () => ({ grep: fakeTool }),
+    }
+
+    try {
+      const tools = createCoreTools({
+        ctx, pluginConfig: args.pluginConfig, managers,
+        skillContext: { mergedSkills: [], availableSkills: [], browserProvider: "playwright", disabledSkills: new Set() },
+        availableCategories: [], factories,
+      })
+
+      expect(Object.keys(tools).sort()).toEqual(["grep", "look_at", "skill", "skill_mcp"])
+      expect(await tools.grep.execute({}, { sessionID: "test", messageID: "message", agent: "worker", abort: new AbortController().signal, directory: ctx.directory, worktree: ctx.worktree, metadata: () => {}, ask: async () => {} })).toBe("ok")
+    } finally {
+      await managers.shutdown?.()
+      await managers.skillMcpManager.disconnectAll()
+    }
+  })
+
+  test("#when teams are enabled without the legacy manager #then registration rejects the unsupported capability", async () => {
+    const { ctx, args } = createHostDelegationFixture()
+    const managers = createManagers({ ...args, delegationOwner: "host" })
+
+    try {
+      expect(() => createTeamModeToolsRecord({
+        ctx, managers,
+        pluginConfig: OhMyOpenCodeConfigSchema.parse({ team_mode: { enabled: true } }),
+        factories: createFactories(() => fakeTool),
+      })).toThrow(UnsupportedHostDelegationError)
+    } finally {
+      await managers.shutdown?.()
+      await managers.skillMcpManager.disconnectAll()
+    }
+  })
+
   test.each([
     { agents: false, expected: false },
     { agents: undefined, expected: true },

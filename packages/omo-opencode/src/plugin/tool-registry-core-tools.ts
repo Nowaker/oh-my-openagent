@@ -26,13 +26,13 @@ export function createCoreTools(args: {
   readonly factories: ToolRegistryFactories
 }): Record<string, ToolDefinition> {
   const { ctx, pluginConfig, managers, skillContext, availableCategories, factories } = args
-  const backgroundTools = factories.createBackgroundTools(
+  const backgroundTools = managers.backgroundManager ? factories.createBackgroundTools(
     managers.backgroundManager,
     ctx.client,
     managers.monitorManager,
     managers.bashBackgroundManager,
-  )
-  const callOmoAgent = factories.createCallOmoAgent(
+  ) : {}
+  const callOmoAgent = managers.backgroundManager ? factories.createCallOmoAgent(
     ctx,
     managers.backgroundManager,
     pluginConfig.disabled_agents ?? [],
@@ -41,7 +41,7 @@ export function createCoreTools(args: {
     managers.modelFallbackControllerAccessor,
     pluginConfig.background_task?.syncPollTimeoutMs,
     pluginConfig.background_task?.foregroundHandoffMs,
-  )
+  ) : undefined
   const isMultimodalLookerEnabled = !(pluginConfig.disabled_agents ?? []).some(
     (agent) => agent.toLowerCase() === "multimodal-looker",
   )
@@ -56,7 +56,7 @@ export function createCoreTools(args: {
     buildMergedSkills: async (hostSkills) =>
       (await createSkillContext({ directory: ctx.directory, pluginConfig, hostSkills })).mergedSkills,
   })
-  const delegateTask = factories.createDelegateTask({
+  const delegateTask = managers.backgroundManager ? factories.createDelegateTask({
     manager: managers.backgroundManager,
     client: ctx.client,
     directory: ctx.directory,
@@ -111,7 +111,7 @@ export function createCoreTools(args: {
         })
       }
     },
-  })
+  }) : undefined
 
   const skillMcpTool = factories.createSkillMcpTool({
     manager: managers.skillMcpManager,
@@ -144,12 +144,12 @@ export function createCoreTools(args: {
     ...factories.createGlobTools(ctx),
     ...factories.createSessionManagerTools(ctx),
     ...backgroundTools,
-    call_omo_agent: callOmoAgent,
+    ...(callOmoAgent ? { call_omo_agent: callOmoAgent } : {}),
   }
   if (isMultimodalLookerEnabled) {
     tools.look_at = factories.createLookAt(ctx)
   }
-  tools.task = delegateTask
+  if (delegateTask) tools.task = delegateTask
   tools.skill_mcp = skillMcpTool
   tools.skill = skillTool
 

@@ -158,6 +158,25 @@ function createDeps(): NonNullable<Parameters<typeof createManagers>[0]["deps"]>
 }
 
 describe("createManagers monitor", () => {
+  it("#given host delegation #when owner shutdown and process cleanup run #then tmux and monitors close exactly once", async () => {
+    const managers = createManagers({
+      ctx: createContext("/tmp/project"),
+      pluginConfig: OhMyOpenCodeConfigSchema.parse({ monitor: { enabled: true } }),
+      tmuxConfig: createTmuxConfig(),
+      modelCacheState: createModelCacheState(),
+      backgroundNotificationHookEnabled: true,
+      delegationOwner: "host",
+      deps: createDeps(),
+    })
+
+    await Promise.all([managers.shutdown?.(), managers.shutdown?.()])
+    await registeredCleanupManagers[0]?.shutdown()
+
+    expect(managers.backgroundManager).toBeUndefined()
+    expect(cleanupCalls).toEqual(["tmux", "monitor"])
+    expect(monitorShutdown).toHaveBeenCalledTimes(1)
+  })
+
   beforeEach(() => {
     registeredCleanupManagers.length = 0
     cleanupCalls.length = 0
@@ -193,7 +212,7 @@ describe("createManagers monitor", () => {
     })
   })
 
-  it("#given monitor is enabled #when managers are created #then cleanup registration is invoked exactly once", () => {
+  it("#given monitor is enabled #when managers are created #then ledger freeze and owner shutdown are registered once each", () => {
     createManagers({
       ctx: createContext("/tmp/project"),
       pluginConfig: OhMyOpenCodeConfigSchema.parse({ monitor: { enabled: true } }),
@@ -203,7 +222,7 @@ describe("createManagers monitor", () => {
       deps: createDeps(),
     })
 
-    expect(registeredCleanupManagers).toHaveLength(1)
+    expect(registeredCleanupManagers).toHaveLength(2)
   })
 
   it("#given monitor is enabled #when process cleanup runs #then the monitor manager shuts down once", async () => {
@@ -216,7 +235,7 @@ describe("createManagers monitor", () => {
       deps: createDeps(),
     })
 
-    await registeredCleanupManagers[0]?.shutdown()
+    for (const manager of registeredCleanupManagers) await manager.shutdown()
 
     expect(monitorShutdown).toHaveBeenCalledTimes(1)
     expect(cleanupCalls).toEqual(["tmux", "monitor"])
@@ -232,6 +251,7 @@ describe("createManagers monitor", () => {
       deps: createDeps(),
     })
 
+    if (!managers.backgroundManager) throw new Error("Expected plugin background manager")
     await managers.backgroundManager.shutdown()
 
     expect(monitorShutdown).toHaveBeenCalledTimes(1)

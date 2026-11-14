@@ -1,6 +1,7 @@
 import type { ToolDefinition } from "@opencode-ai/plugin"
 import type { OhMyOpenCodeConfig } from "../config"
 import type { Managers } from "../create-managers"
+import { UnsupportedHostDelegationError } from "../create-managers"
 import type { PluginContext } from "./types"
 import type { ToolRegistryFactories } from "./tool-registry-factories"
 
@@ -16,6 +17,7 @@ export function createTeamModeToolsRecord(args: {
 }): Record<string, ToolDefinition> {
   const { pluginConfig, ctx, managers, factories } = args
   if (!pluginConfig.team_mode?.enabled) return {}
+  if (!managers.backgroundManager) throw new UnsupportedHostDelegationError()
 
   return {
     team_create: factories.createTeamCreateTool(

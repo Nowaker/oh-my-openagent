@@ -1,47 +1,18 @@
 import type { Hooks, Plugin, PluginModule } from "@opencode-ai/plugin"
 import type { HookName } from "../config"
-import { validatePluginConfig } from "../config/validate"
-import { initConfigContext } from "../cli/config-manager/config-context"
+import { UnsupportedHostDelegationError } from "../create-managers"
 import { ensureTuiPluginEntry } from "../cli/config-manager/add-tui-plugin-to-tui-config"
-
-import { createHooks } from "../create-hooks"
-import { createManagers } from "../create-managers"
-import { createRuntimeTmuxConfig, isTmuxIntegrationEnabled } from "../create-runtime-tmux-config"
-import { createTools } from "../create-tools"
-import { createRuntimeSkillSourceServer, selectRuntimeSecuritySkills } from "../features/opencode-runtime-skills"
-import { initializeOpenClaw } from "../openclaw"
+import { selectRuntimeSecuritySkills } from "../features/opencode-runtime-skills"
 import { createPluginDispose } from "../plugin-dispose"
-import { createPluginInterface } from "../plugin-interface"
-import { loadPluginConfig } from "../plugin-config"
-import { createModelCacheState } from "../plugin-state"
 import {
   createCompactionAutocontinueHandler,
   createSessionCompactingHandler,
   type CompactionAutocontinueHook,
 } from "../plugin/session-compacting"
-import { installAgentSortShim, setAgentSortOrder } from "../shared/agent-sort-shim"
-import {
-  detectDuplicateOmoPlugin,
-  detectExternalSkillPlugin,
-  getDuplicateOmoPluginWarning,
-  getSkillPluginConflictWarning,
-} from "../shared/external-plugin-detector"
-import { createFirstMessageVariantGate } from "../shared/first-message-variant"
-import { initI18n } from "../shared/i18n"
-import { log } from "../shared/logger"
-import { logLegacyPluginStartupWarning } from "../shared/log-legacy-plugin-startup-warning"
-import { migrateLegacyWorkspaceDirectory } from "../shared/legacy-workspace-migration"
-import { sweepOmoFamiliesBestEffort } from "../shared/omo-process-sweep"
-import { injectServerAuthIntoClient } from "../shared/opencode-server-auth"
-import { recordPluginTelemetry } from "../shared/posthog"
-import {
-  initLiveServerRoute,
-  setLiveParentWakeRoutingDisabled,
-  warmLiveServerProbe,
-} from "../shared/live-server-route"
-import { startBackgroundCheck as startTmuxCheck } from "../tools/interactive-bash"
-import { runOpenCodeStartupMigration } from "../startup-migration"
 import { registerContinuationConsumer } from "../features/run-continuation-state/loaded-consumer"
+import { defaultPluginModuleDeps, type PluginModuleDeps } from "./plugin-module-dependencies"
+
+export type { PluginModuleDeps } from "./plugin-module-dependencies"
 
 type StartupToastClient = {
   readonly tui?: {
@@ -52,74 +23,6 @@ type StartupToastClient = {
 type HooksWithRuntimeLifecycle = Hooks & {
   "experimental.compaction.autocontinue"?: CompactionAutocontinueHook
   dispose?: () => Promise<void>
-}
-
-export type PluginModuleDeps = {
-  initConfigContext: typeof initConfigContext
-  installAgentSortShim: typeof installAgentSortShim
-  setAgentSortOrder: typeof setAgentSortOrder
-  log: typeof log
-  logLegacyPluginStartupWarning: typeof logLegacyPluginStartupWarning
-  migrateLegacyWorkspaceDirectory: typeof migrateLegacyWorkspaceDirectory
-  runOpenCodeStartupMigration: typeof runOpenCodeStartupMigration
-  startOmoProcessSweep: () => Promise<void>
-  detectDuplicateOmoPlugin: typeof detectDuplicateOmoPlugin
-  getDuplicateOmoPluginWarning: typeof getDuplicateOmoPluginWarning
-  detectExternalSkillPlugin: typeof detectExternalSkillPlugin
-  getSkillPluginConflictWarning: typeof getSkillPluginConflictWarning
-  injectServerAuthIntoClient: typeof injectServerAuthIntoClient
-  initLiveServerRoute: typeof initLiveServerRoute
-  setLiveParentWakeRoutingDisabled: typeof setLiveParentWakeRoutingDisabled
-  warmLiveServerProbe: typeof warmLiveServerProbe
-  loadConfigChain: typeof validatePluginConfig
-  loadPluginConfig: typeof loadPluginConfig
-  recordPluginTelemetry: typeof recordPluginTelemetry
-  initI18n: typeof initI18n
-  initializeOpenClaw: typeof initializeOpenClaw
-  isTmuxIntegrationEnabled: typeof isTmuxIntegrationEnabled
-  startTmuxCheck: typeof startTmuxCheck
-  createFirstMessageVariantGate: typeof createFirstMessageVariantGate
-  createRuntimeTmuxConfig: typeof createRuntimeTmuxConfig
-  createModelCacheState: typeof createModelCacheState
-  createManagers: typeof createManagers
-  createTools: typeof createTools
-  createRuntimeSkillSourceServer: typeof createRuntimeSkillSourceServer
-  createHooks: typeof createHooks
-  createPluginInterface: typeof createPluginInterface
-}
-
-const defaultPluginModuleDeps: PluginModuleDeps = {
-  initConfigContext,
-  installAgentSortShim,
-  setAgentSortOrder,
-  log,
-  logLegacyPluginStartupWarning,
-  migrateLegacyWorkspaceDirectory,
-  runOpenCodeStartupMigration,
-  startOmoProcessSweep: () => sweepOmoFamiliesBestEffort({ log }),
-  detectDuplicateOmoPlugin,
-  getDuplicateOmoPluginWarning,
-  detectExternalSkillPlugin,
-  getSkillPluginConflictWarning,
-  injectServerAuthIntoClient,
-  initLiveServerRoute,
-  setLiveParentWakeRoutingDisabled,
-  warmLiveServerProbe,
-  loadConfigChain: validatePluginConfig,
-  loadPluginConfig,
-  recordPluginTelemetry,
-  initI18n,
-  initializeOpenClaw,
-  isTmuxIntegrationEnabled,
-  startTmuxCheck,
-  createFirstMessageVariantGate,
-  createRuntimeTmuxConfig,
-  createModelCacheState,
-  createManagers,
-  createTools,
-  createRuntimeSkillSourceServer,
-  createHooks,
-  createPluginInterface,
 }
 
 function showStartupToast(
@@ -159,7 +62,10 @@ function startupToastBody(input: {
   return undefined
 }
 
-export function createPluginModule(overrides: Partial<PluginModuleDeps> = {}): PluginModule {
+export function createPluginModule(
+  overrides: Partial<PluginModuleDeps> = {},
+  runtimeOptions: { readonly delegationOwner?: "plugin" | "host" } = { delegationOwner: "plugin" },
+): PluginModule {
   const deps = { ...defaultPluginModuleDeps, ...overrides }
   let startupMigration: ReturnType<PluginModuleDeps["runOpenCodeStartupMigration"]> | undefined
   const serverPlugin: Plugin = async (input, _options): Promise<Hooks> => {
@@ -223,6 +129,7 @@ export function createPluginModule(overrides: Partial<PluginModuleDeps> = {}): P
     deps.injectServerAuthIntoClient(input.client)
 
     const pluginConfig = startupValidation.config
+    if (runtimeOptions.delegationOwner === "host" && pluginConfig.team_mode?.enabled) throw new UnsupportedHostDelegationError()
     try {
       deps.recordPluginTelemetry({ configEnabled: pluginConfig.telemetry })
     } catch (error) {
@@ -297,6 +204,7 @@ export function createPluginModule(overrides: Partial<PluginModuleDeps> = {}): P
       tmuxConfig,
       modelCacheState,
       backgroundNotificationHookEnabled: isHookEnabled("background-notification"),
+      delegationOwner: runtimeOptions.delegationOwner ?? "plugin",
       runtimeSkillSourceUrl: runtimeSkillSource?.url,
     })
 
@@ -330,6 +238,7 @@ export function createPluginModule(overrides: Partial<PluginModuleDeps> = {}): P
 
     const dispose = createPluginDispose({
       backgroundManager: managers.backgroundManager,
+      shutdownManagers: managers.shutdown,
       skillMcpManager: managers.skillMcpManager,
       tuiStateMirror: managers.tuiStateMirror,
       runningJobsLedger: managers.runningJobsLedger,

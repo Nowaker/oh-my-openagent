@@ -44,6 +44,7 @@ function isPureSleepCommand(command: string): boolean {
 export function createToolExecuteBeforeHandler(args: {
   ctx: PluginContext
   hooks: CreatedHooks
+  delegationOwner?: "plugin" | "host"
   backgroundManager?: Pick<BackgroundManager, "hasActiveChildTasks" | "hasPendingParentWake">
 }): (
   input: { tool: string; sessionID: string; callID: string },
@@ -134,7 +135,7 @@ export function createToolExecuteBeforeHandler(args: {
       })
     }
 
-    if (input.tool === "task") {
+    if (input.tool === "task" && args.delegationOwner !== "host") {
       const category = typeof output.args.category === "string" ? output.args.category : undefined
       const subagentType = typeof output.args.subagent_type === "string" ? output.args.subagent_type : undefined
       const taskId = typeof output.args.task_id === "string" ? output.args.task_id : undefined

@@ -2,60 +2,29 @@ import type { OhMyOpenCodeConfig } from "./config"
 import type { ModelCacheState } from "./plugin-state"
 import type { PluginContext, TmuxConfig } from "./plugin/types"
 
-import type { SubagentSessionCreatedEvent } from "./features/background-agent"
-import { BackgroundManager } from "./features/background-agent"
+import type { BackgroundManager, SubagentSessionCreatedEvent } from "./features/background-agent"
 import type { MonitorManager } from "./features/monitor"
-import { createMonitorManager } from "./features/monitor"
 import { BashBackgroundManager, cancelBackgroundJob } from "./features/bash-background"
 import { createRunningJobsLedger, type RunningJobsLedger } from "./features/running-jobs"
-import { SkillMcpManager } from "./features/skill-mcp-manager"
-import { cleanupSessionTeamRuns } from "./features/team-mode/team-runtime/session-cleanup"
+import type { SkillMcpManager } from "./features/skill-mcp-manager"
 import { lookupTeamSession } from "./features/team-mode/team-session-registry"
-import { TuiStateMirror } from "./features/tui-sidebar/mirror-manager"
+import type { TuiStateMirror } from "./features/tui-sidebar/mirror-manager"
 import { createModelFallbackControllerAccessor } from "./hooks/model-fallback"
-import { initTaskToastManager } from "./features/task-toast-manager"
 import {
   selectTmuxManagerEnvironmentPredicate,
-  TmuxSessionManager,
+  type TmuxSessionManager,
 } from "./features/tmux-subagent"
 import * as openclawRuntimeDispatch from "./openclaw/runtime-dispatch"
-import { registerManagerForCleanup } from "./features/background-agent/process-cleanup"
-import { createConfigHandler } from "./plugin-handlers"
+import type { createConfigHandler } from "./plugin-handlers"
 import { log } from "./shared"
-import { markServerRunningInProcess } from "./shared/tmux/tmux-utils/server-health"
 import type { ModelFallbackControllerAccessor } from "./hooks/model-fallback"
-import { subscribeSkillDiagnostics } from "@oh-my-opencode/skills-loader-core/opencode-skill-loader"
 import { showSkillSecurityNotice } from "./plugin/skill-security-notice"
-
-type CreateManagersDeps = {
-  BackgroundManagerClass: typeof BackgroundManager
-  SkillMcpManagerClass: typeof SkillMcpManager
-  TmuxSessionManagerClass: typeof TmuxSessionManager
-  TuiStateMirrorClass: typeof TuiStateMirror
-  createMonitorManagerFn: typeof createMonitorManager
-  initTaskToastManagerFn: typeof initTaskToastManager
-  registerManagerForCleanupFn: typeof registerManagerForCleanup
-  cleanupSessionTeamRunsFn: typeof cleanupSessionTeamRuns
-  createConfigHandlerFn: typeof createConfigHandler
-  markServerRunningInProcessFn: typeof markServerRunningInProcess
-}
-
-const defaultCreateManagersDeps: CreateManagersDeps = {
-  BackgroundManagerClass: BackgroundManager,
-  SkillMcpManagerClass: SkillMcpManager,
-  TmuxSessionManagerClass: TmuxSessionManager,
-  TuiStateMirrorClass: TuiStateMirror,
-  createMonitorManagerFn: createMonitorManager,
-  initTaskToastManagerFn: initTaskToastManager,
-  registerManagerForCleanupFn: registerManagerForCleanup,
-  cleanupSessionTeamRunsFn: cleanupSessionTeamRuns,
-  createConfigHandlerFn: createConfigHandler,
-  markServerRunningInProcessFn: markServerRunningInProcess,
-}
+import { defaultCreateManagersDeps, type CreateManagersDeps } from "./manager-dependencies"
 
 export type Managers = {
+  readonly delegationOwner?: "plugin" | "host"
   tmuxSessionManager: TmuxSessionManager
-  backgroundManager: BackgroundManager
+  backgroundManager?: BackgroundManager
   skillMcpManager: SkillMcpManager
   configHandler: ReturnType<typeof createConfigHandler>
   modelFallbackControllerAccessor: ModelFallbackControllerAccessor
@@ -63,6 +32,16 @@ export type Managers = {
   monitorManager?: MonitorManager
   bashBackgroundManager?: BashBackgroundManager
   runningJobsLedger?: RunningJobsLedger
+  shutdown?: () => Promise<void>
+}
+
+export class UnsupportedHostDelegationError extends Error {
+  readonly feature = "team_mode" as const
+
+  constructor() {
+    super("Legacy team mode requires plugin-owned delegation")
+    this.name = "UnsupportedHostDelegationError"
+  }
 }
 
 export function createManagers(args: {
@@ -71,12 +50,14 @@ export function createManagers(args: {
   tmuxConfig: TmuxConfig
   modelCacheState: ModelCacheState
   backgroundNotificationHookEnabled: boolean
+  delegationOwner?: "plugin" | "host"
   runtimeSkillSourceUrl?: string
   deps?: Partial<CreateManagersDeps>
 }): Managers {
   const { ctx, pluginConfig, tmuxConfig, modelCacheState, backgroundNotificationHookEnabled, runtimeSkillSourceUrl } = args
+  if (args.delegationOwner === "host" && pluginConfig.team_mode?.enabled) throw new UnsupportedHostDelegationError()
   const deps = { ...defaultCreateManagersDeps, ...args.deps }
-  const unsubscribeSkillDiagnostics = subscribeSkillDiagnostics((diagnostic) => showSkillSecurityNotice(ctx, diagnostic.message, diagnostic.category))
+  const unsubscribeSkillDiagnostics = deps.subscribeSkillDiagnosticsFn((diagnostic) => showSkillSecurityNotice(ctx, diagnostic.message, diagnostic.category))
 
   // Only mark the server as in-process when the SDK actually exposes a
   // serverUrl. `tmuxConfig.enabled` alone is not proof of a running server —
@@ -125,8 +106,9 @@ export function createManagers(args: {
     }
   }
 
-  deps.registerManagerForCleanupFn({
-    shutdown: async () => {
+  let cleanupPromise: Promise<void> | undefined
+  const cleanup = (): Promise<void> => {
+    cleanupPromise ??= (async () => {
       unsubscribeSkillDiagnostics()
       tuiStateMirror?.stop()
       await cleanupTeamModeRuns().catch((error) => {
@@ -138,10 +120,11 @@ export function createManagers(args: {
       await monitorManager?.shutdown().catch((error) => {
         log("[create-managers] monitor cleanup error during process shutdown:", error)
       })
-    },
-  })
+    })()
+    return cleanupPromise
+  }
 
-  backgroundManager = new deps.BackgroundManagerClass({
+  backgroundManager = args.delegationOwner === "host" ? undefined : new deps.BackgroundManagerClass({
     pluginContext: ctx,
     config: pluginConfig.background_task,
     tmuxConfig,
@@ -198,37 +181,27 @@ export function createManagers(args: {
 
       log("[create-managers] onSubagentSessionDeleted callback completed")
     },
-    onShutdown: async () => {
-      tuiStateMirror?.stop()
-      await cleanupTeamModeRuns().catch((error) => {
-        log("[create-managers] team-mode cleanup error during shutdown:", error)
-      })
-      await tmuxSessionManager.cleanup().catch((error) => {
-        log("[create-managers] tmux cleanup error during shutdown:", error)
-      })
-      await monitorManager?.shutdown().catch((error) => {
-        log("[create-managers] monitor cleanup error during shutdown:", error)
-      })
-    },
+    onShutdown: cleanup,
     enableParentSessionNotifications: backgroundNotificationHookEnabled,
     modelFallbackControllerAccessor,
   })
 
   const parentWakeManager = backgroundManager
-  const bashBackgroundManager = new BashBackgroundManager({
+  const bashBackgroundManager = parentWakeManager ? new BashBackgroundManager({
     notify: (sessionID, notice) => parentWakeManager.queueSessionNotice(sessionID, notice),
     cancelJob: (id) => cancelBackgroundJob(ctx.client, ctx.directory, id),
-  })
-  const runningJobsLedger = createRunningJobsLedger({
+  }) : undefined
+  const runningJobsLedger = parentWakeManager && bashBackgroundManager ? createRunningJobsLedger({
     backgroundManager: parentWakeManager,
     ...(monitorManager ? { monitorManager } : {}),
     bashBackgroundManager,
-  })
-  runningJobsLedger.start()
+  }) : undefined
+  runningJobsLedger?.start()
   // Freezes the ledger before the shutdown's own cancellations empty it, so they stay recorded as lost.
-  deps.registerManagerForCleanupFn({ shutdown: async () => runningJobsLedger.shutdown() })
+  const ledgerCleanupTarget = runningJobsLedger ? { shutdown: async () => runningJobsLedger.shutdown() } : undefined
+  if (ledgerCleanupTarget) deps.registerManagerForCleanupFn(ledgerCleanupTarget)
 
-  if (pluginConfig.tui?.sidebar?.enabled !== false) {
+  if (backgroundManager && pluginConfig.tui?.sidebar?.enabled !== false) {
     tuiStateMirror = new deps.TuiStateMirrorClass({
       client: ctx.client,
       projectDir: ctx.directory,
@@ -249,7 +222,30 @@ export function createManagers(args: {
     modelCacheState,
     runtimeSkillSourceUrl,
   })
+  let shutdownPromise: Promise<void> | undefined
+  const shutdown = (): Promise<void> => {
+    shutdownPromise ??= (async () => {
+      try {
+        try {
+          runningJobsLedger?.shutdown()
+        } finally {
+          await backgroundManager?.shutdown()
+        }
+      } finally {
+        try {
+          await cleanup()
+        } finally {
+          deps.unregisterManagerForCleanupFn(cleanupTarget)
+          if (ledgerCleanupTarget) deps.unregisterManagerForCleanupFn(ledgerCleanupTarget)
+        }
+      }
+    })()
+    return shutdownPromise
+  }
+  const cleanupTarget = { shutdown }
+  deps.registerManagerForCleanupFn(cleanupTarget)
   return {
+    delegationOwner: args.delegationOwner ?? "plugin",
     tmuxSessionManager,
     backgroundManager,
     skillMcpManager,
@@ -259,5 +255,6 @@ export function createManagers(args: {
     monitorManager,
     bashBackgroundManager,
     runningJobsLedger,
+    shutdown,
   }
 }

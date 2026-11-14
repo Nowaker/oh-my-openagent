@@ -39,7 +39,7 @@ export function createHooks(args: {
   ctx: PluginContext
   pluginConfig: OhMyOpenCodeConfig
   modelCacheState: ModelCacheState
-  backgroundManager: BackgroundManager
+  backgroundManager?: BackgroundManager
   modelFallbackControllerAccessor?: ModelFallbackControllerAccessor
   monitorManager?: MonitorManager
   isHookEnabled: (hookName: HookName) => boolean
@@ -64,7 +64,6 @@ export function createHooks(args: {
     ctx,
     pluginConfig,
     modelCacheState,
-    backgroundManager,
     modelFallbackControllerAccessor,
     monitorManager,
     isHookEnabled,

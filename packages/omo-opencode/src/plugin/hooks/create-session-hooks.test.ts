@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test"
 import type { OhMyOpenCodeConfig } from "../../config"
-import type { BackgroundManager } from "../../features/background-agent"
 import type { ModelCacheState } from "../../plugin-state"
 import type { PluginContext } from "../types"
 import { createSessionHooks } from "./create-session-hooks"
@@ -21,7 +20,6 @@ const mockContext = unsafeTestValue<PluginContext>({
 })
 
 const mockModelCacheState = {} as ModelCacheState
-const mockBackgroundManager = unsafeTestValue<BackgroundManager>({})
 
 describe("createSessionHooks", () => {
   describe("Hephaestus AGENTS.md registration", () => {
@@ -45,7 +43,6 @@ describe("createSessionHooks", () => {
         ctx: mockContext,
         pluginConfig: unsafeTestValue<OhMyOpenCodeConfig>({}),
         modelCacheState: mockModelCacheState,
-        backgroundManager: mockBackgroundManager,
         isHookEnabled: (hookName) => enabled && hookName === "hephaestus-agents-md-injector",
         safeHookEnabled: true,
       })
@@ -64,7 +61,6 @@ describe("createSessionHooks", () => {
       ctx: mockContext,
       pluginConfig,
       modelCacheState: mockModelCacheState,
-      backgroundManager: mockBackgroundManager,
       isHookEnabled: (hookName) => hookName === "model-fallback",
       safeHookEnabled: true,
     })
@@ -82,7 +78,6 @@ describe("createSessionHooks", () => {
       ctx: mockContext,
       pluginConfig,
       modelCacheState: mockModelCacheState,
-      backgroundManager: mockBackgroundManager,
       isHookEnabled: (hookName) => hookName === "model-fallback",
       safeHookEnabled: true,
     })
@@ -100,7 +95,6 @@ describe("createSessionHooks", () => {
       ctx: mockContext,
       pluginConfig,
       modelCacheState: mockModelCacheState,
-      backgroundManager: mockBackgroundManager,
       isHookEnabled: (hookName: string) => hookName === "context-window-monitor",
       safeHookEnabled: true,
     })
@@ -127,7 +121,6 @@ describe("createSessionHooks", () => {
       ctx: mockContext,
       pluginConfig,
       modelCacheState: mockModelCacheState,
-      backgroundManager: mockBackgroundManager,
       isHookEnabled: (hookName) => hookName === "interactive-bash-session",
       safeHookEnabled: true,
     })
@@ -145,7 +138,6 @@ describe("createSessionHooks", () => {
       ctx: mockContext,
       pluginConfig,
       modelCacheState: mockModelCacheState,
-      backgroundManager: mockBackgroundManager,
       isHookEnabled: (hookName) => hookName !== "ast-grep-sg-provision",
       safeHookEnabled: true,
     })
@@ -163,7 +155,6 @@ describe("createSessionHooks", () => {
       ctx: mockContext,
       pluginConfig,
       modelCacheState: mockModelCacheState,
-      backgroundManager: mockBackgroundManager,
       isHookEnabled: (hookName) => hookName === "ast-grep-sg-provision",
       safeHookEnabled: true,
     })

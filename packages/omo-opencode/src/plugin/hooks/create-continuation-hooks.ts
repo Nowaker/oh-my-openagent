@@ -28,7 +28,7 @@ export function createContinuationHooks(args: {
   pluginConfig: OhMyOpenCodeConfig
   isHookEnabled: (hookName: HookName) => boolean
   safeHookEnabled: boolean
-  backgroundManager: BackgroundManager
+  backgroundManager?: BackgroundManager
 }): ContinuationHooks {
   const {
     ctx,
@@ -65,12 +65,12 @@ export function createContinuationHooks(args: {
         }))
     : null
 
-  const unstableAgentBabysitter = isHookEnabled("unstable-agent-babysitter")
+  const unstableAgentBabysitter = backgroundManager && isHookEnabled("unstable-agent-babysitter")
     ? safeHook("unstable-agent-babysitter", () =>
         createUnstableAgentBabysitter({ ctx, backgroundManager, pluginConfig }))
     : null
 
-  const backgroundNotificationHook = isHookEnabled("background-notification")
+  const backgroundNotificationHook = backgroundManager && isHookEnabled("background-notification")
     ? safeHook("background-notification", () => createBackgroundNotificationHook(backgroundManager))
     : null
 
