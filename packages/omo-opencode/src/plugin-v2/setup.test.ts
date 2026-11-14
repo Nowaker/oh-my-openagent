@@ -37,7 +37,11 @@ function context(): Plugin.Context {
       get instructions() { return unused() },
     },
     tool: {
-      transform: registered, list: unused, reload: unused,
+      transform: async (callback) => {
+        const native = { id: "subagent", name: "subagent", description: "Fixture native tool", input: { type: "object" }, execute: unused }
+        callback({ add: () => {}, get: () => native, list: () => [native], namespace: unused, update: unused, remove: () => {} })
+        return registered()
+      }, list: unused, reload: unused,
       hook: async () => ({ dispose: async () => { if (hookFailure) throw hookFailure } }),
     },
     mcp: { transform: registered, list: unused, reload: unused },
