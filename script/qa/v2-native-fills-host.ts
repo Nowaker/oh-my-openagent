@@ -8,6 +8,7 @@ import { prepareNativeFixtures } from "./v2-native-fills-fixtures"
 import { configureSandbox, createSandbox, evidenceWriter, fingerprint } from "./v2-native-fills-sandbox"
 import { NativeFillFailure, requireProof } from "./v2-native-fills-contract"
 import type { DriverOptions, ScenarioHost } from "./v2-native-fills-contract"
+import { retainNativeScratch } from "./v2-parity/sandbox-storage"
 
 export async function withNativeHost<T>(options: DriverOptions, scenario: (host: ScenarioHost) => Promise<T>): Promise<T> {
   const sandbox = createSandbox(options)
@@ -128,6 +129,7 @@ export async function withNativeHost<T>(options: DriverOptions, scenario: (host:
     process.removeListener("SIGINT", onSignal)
     process.removeListener("SIGTERM", onSignal)
     save("cleanup.json", { ownedPID: child?.pid ?? null, ownedProcessGroup: child?.pid ?? null, outcome, forced, providerStopped, eventStreamAborted: true, socketsCreated: [], liveDatabaseAccess: false })
+    if (sandbox.scratchRoot !== sandbox.root) retainNativeScratch(sandbox)
   }
   const skipped = z.object({ status: z.literal("skipped"), reason: z.string() }).safeParse(result)
   save("summary.json", { status: failure === undefined ? skipped.success ? "skipped" : "passed" : "failed", scenario: options.scenario, root: sandbox.root, result, ...(failure === undefined ? {} : { error: failure instanceof Error ? failure.message : "Non-Error failure" }) })

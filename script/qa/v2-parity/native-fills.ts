@@ -22,12 +22,20 @@ export const nativeFillProbes: readonly ParityProbe[] = scenarios.map(([scenario
   id: `native-${scenario}`, label,
   async run(context) {
     let captureRoot = ""
-    const outcome = await withNativeHost<unknown>({ evidenceRoot: join(context.root, "native-fills"), binary: context.binary, plugin: context.pluginBundle, scenario },
+    const scratch = context.harness.createSandbox(context, `native-fill-${scenario}`)
+    const outcome = await withNativeHost<unknown>({ evidenceRoot: join(context.root, "native-fills"), engineRoot: scratch.scratchRoot, binary: context.binary, plugin: context.pluginBundle, scenario },
       async (host: ScenarioHost) => {
         captureRoot = host.root
         const info = engineInfo.parse(await host.api("/api/info"))
         assert.equal(bareVersion(info.version), bareVersion(context.version), "Native-fill engine differs from the preflighted executable")
         const result = await run(host)
+        const balanced = () => {
+          const current = host.events.filter((event) => event.type === "session.execution.started" || terminalTypes.some((type) => type === event.type))
+          const ids = [...new Set(current.map((event) => String(event.data["sessionID"])))]
+          return ids.every((id) => current.filter((event) => event.data["sessionID"] === id && event.type === "session.execution.started").length
+            === current.filter((event) => event.data["sessionID"] === id && event.type !== "session.execution.started").length)
+        }
+        if (!balanced()) await host.waitEvent((event) => terminalTypes.some((type) => type === event.type) && balanced())
         const executions = host.events.filter((event) => event.type === "session.execution.started" || terminalTypes.some((type) => type === event.type))
         const sessions = [...new Set(executions.map((event) => String(event.data["sessionID"])))]
         assert.ok(sessions.length > 0 || skipped.safeParse(result).success, "Native-fill scenario ran no native execution")

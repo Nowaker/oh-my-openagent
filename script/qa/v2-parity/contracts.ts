@@ -8,6 +8,8 @@ export type ProbeResult = { readonly id: string; readonly label: string; readonl
 export type Probe = { readonly id: string; readonly label: string; readonly run: (context: ProbeContext) => Promise<Finding> }
 export type Report = { readonly binary: string; readonly version: string; readonly root: string; readonly results: readonly ProbeResult[]; readonly ok: boolean }
 export type Sandbox = {
+  readonly scratchRoot?: string
+  readonly nativeRunRoot?: string
   readonly root: string; readonly home: string; readonly project: string; readonly database: string; readonly config: string;
   readonly env: Record<string, string> & { readonly TMPDIR: string }
 }

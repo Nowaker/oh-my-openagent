@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url"
 import { z } from "zod"
 import type { Engine, Harness, JsonObject, NativeEvent, ParityContext, ScenarioOptions } from "./contracts"
 import { createScriptedProvider } from "./provider"
+import { retainNativeScratch } from "./sandbox-storage"
 
 export async function loadHarness(toolsDirectory: string): Promise<Harness> {
   const module = (name: string) => pathToFileURL(join(toolsDirectory, "_lib/opencode-v2-probe", name)).href
@@ -14,7 +15,41 @@ export async function loadHarness(toolsDirectory: string): Promise<Harness> {
   const runner: Pick<Harness, "runChecks"> = await import(module("runner.ts"))
   const artifacts: Pick<Harness, "createRunRoot" | "settleRunArtifacts" | "completeRun"> = await import(module("artifacts.ts"))
   const render: Pick<Harness, "renderProbeReport"> = await import(module("render.ts"))
-  return { ...isolation, ...engine, ...events, ...runner, ...artifacts, ...render }
+  const temporary: { readonly systemTmpScratch: (area: string, label?: string) => string } = await import(pathToFileURL(join(toolsDirectory, "_lib/data-dir/index.ts")).href)
+  const nativeRuns = new Map<string, Set<Engine["process"]>>()
+  const createSandbox: Harness["createSandbox"] = (context, name) => {
+    const nativeRunRoot = artifacts.createRunRoot(temporary.systemTmpScratch("omo-v2-parity", name))
+    nativeRuns.set(nativeRunRoot, new Set())
+    const native = isolation.createSandbox({ root: nativeRunRoot }, name)
+    const root = join(context.root, name)
+    mkdirSync(root, { recursive: true })
+    writeFileSync(join(root, "isolation.json"), JSON.stringify({ scratchRoot: native.root, nativeRunRoot, home: native.home, project: native.project, database: native.database, config: native.config, artifacts: root }, null, 2))
+    return { ...native, root, scratchRoot: native.root, nativeRunRoot }
+  }
+  const startEngine: Harness["startEngine"] = async (context, sandbox) => {
+    try {
+      const native = await engine.startEngine(context, sandbox)
+      const active = sandbox.nativeRunRoot ? nativeRuns.get(sandbox.nativeRunRoot) : undefined
+      active?.add(native.process)
+      let stopped: Promise<void> | undefined
+      const stop = () => stopped ??= (async () => {
+        try { await native.stop(); active?.delete(native.process) } finally { retainNativeScratch(sandbox) }
+      })()
+      return { ...native, stop, [Symbol.asyncDispose]: stop }
+    } catch (error) { retainNativeScratch(sandbox); throw error }
+  }
+  const execute: Harness["execute"] = async (context, sandbox, input) => {
+    try { return await engine.execute(context, sandbox, input) } finally { retainNativeScratch(sandbox) }
+  }
+  const runChecks: Harness["runChecks"] = (context, probes, afterCheck) => runner.runChecks(context, probes, () => {
+    for (const [root, processes] of nativeRuns) {
+      assert.equal(processes.size, 0, `Owned native engine has no settled lease; scratch retained at ${root}`)
+      artifacts.settleRunArtifacts(root)
+      nativeRuns.delete(root)
+    }
+    afterCheck?.()
+  })
+  return { ...isolation, ...engine, ...events, ...runner, ...artifacts, ...render, createSandbox, startEngine, execute, runChecks }
 }
 
 const inventorySchema = z.object({ data: z.array(z.looseObject({

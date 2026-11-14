@@ -22,6 +22,7 @@ export type NativeFixtures =
   | { readonly scenario: "todos" | "overflow" | "default-mode" }
 export type DriverOptions = {
   readonly evidenceRoot: string
+  readonly engineRoot?: string
   readonly binary: string
   readonly plugin: string
   readonly scenario: ScenarioName
