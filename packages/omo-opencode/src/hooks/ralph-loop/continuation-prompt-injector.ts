@@ -170,6 +170,9 @@ export async function injectContinuationPrompt(
 		if (promptResult.status === "queued") {
 			return { status: "deferred", reason: "reserved" }
 		}
+		if (promptResult.status === "cancelled") {
+			return { status: "deferred", reason: "active" }
+		}
 		if (promptResult.status === "active" || promptResult.status === "reserved") {
 			return { status: "deferred", reason: promptResult.status }
 		}
