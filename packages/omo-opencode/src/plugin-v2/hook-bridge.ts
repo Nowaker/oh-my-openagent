@@ -9,6 +9,7 @@ import { bridgeToolHooks } from "./hook-bridge-tools"
 import { applyCompactionHook, applyContextHooks } from "./hook-bridge-transforms"
 import { UnsupportedHookMappingError, type Registration } from "./hook-bridge-types"
 import type { NativeInstructions } from "./native-instructions"
+import { resolveNativeSelection } from "./native-selection"
 
 async function runHook(name: string, action: () => Promise<void>): Promise<void> {
   try { await action() }
@@ -36,9 +37,7 @@ export async function bridgeHooks(ctx: Plugin.Context, hooks: Hooks, instruction
   try {
     const prompt = hooks["chat.message"]
     if (prompt) registrations.push(await ctx.session.hook("prompt", (event) => runHook("chat.message", async () => {
-      const session = await ctx.session.get({ sessionID: event.sessionID })
-      if (!session.agent || !session.model) throw new UnsupportedHookMappingError("prompt.session-selection")
-      const identity = { agent: session.agent, model: session.model }
+       const identity = await resolveNativeSelection(ctx, event.sessionID)
       const view = buildChatMessageView(event, identity)
       await prompt(view.input, view.output)
       applyChatMessageView(event, view.output)
