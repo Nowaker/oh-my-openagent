@@ -1,9 +1,9 @@
 import assert from "node:assert/strict"
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { pathToFileURL } from "node:url"
 import { z } from "zod"
-import type { Engine, Harness, NativeEvent, ParityContext, ScenarioOptions } from "./contracts"
+import type { Engine, Harness, JsonObject, NativeEvent, ParityContext, ScenarioOptions } from "./contracts"
 import { createScriptedProvider } from "./provider"
 
 export async function loadHarness(toolsDirectory: string): Promise<Harness> {
@@ -42,14 +42,18 @@ export async function createScenarioHost(context: ParityContext, options: Scenar
     sandbox.env["OMO_DISABLE_PROCESS_CLEANUP"] = "1"
     const omoHome = join(sandbox.home, ".omo")
     mkdirSync(omoHome)
+    const configuredAgents: Record<string, JsonObject> = Object.fromEntries(agents.map((name) => [name, { model: name === "hephaestus" ? "fake/gpt-6.1-sol" : "fake/fake-model" }]))
+    for (const [name, override] of Object.entries(z.record(z.string(), z.record(z.string(), z.json())).parse(options.omo?.["agents"] ?? {}))) {
+      configuredAgents[name] = { ...configuredAgents[name], ...override }
+    }
     writeFileSync(join(omoHome, "omo.jsonc"), JSON.stringify({ "[opencode]": {
       telemetry: false,
-      agents: Object.fromEntries(agents.map((name) => [name, { model: name === "hephaestus" ? "fake/gpt-6.1-sol" : "fake/fake-model" }])),
       disabled_hooks: ["native-edition-nudge", "auto-update-checker", "hephaestus-agents-md-injector", "ast-grep-sg-provision"],
       disabled_mcps: ["context7", "grep_app", "websearch", "lsp"],
       experimental: { disable_live_parent_wake_routing: true },
       claude_code: { mcp: false, commands: false, skills: false, agents: false, hooks: false, plugins: false },
       ...options.omo,
+      agents: configuredAgents,
     } }))
     writeFileSync(join(sandbox.config, "opencode.json"), JSON.stringify({
       model: "fake/fake-model", plugins: [pluginDirectory],
@@ -60,6 +64,25 @@ export async function createScenarioHost(context: ParityContext, options: Scenar
       experimental: { todo: true }, ...options.opencode,
     }))
     await options.prepare?.(sandbox)
+    const nativeFile = join(sandbox.config, "opencode.json")
+    const native = z.looseObject({ policies: z.array(z.json()).optional() }).parse(JSON.parse(readFileSync(nativeFile, "utf8")))
+    writeFileSync(nativeFile, JSON.stringify({ ...native, policies: [...native.policies ?? [],
+      { action: "provider.use", resource: "*", effect: "deny" },
+      { action: "provider.use", resource: "fake", effect: "allow" },
+    ] }))
+    renameSync(join(pluginDirectory, "server.ts"), join(pluginDirectory, "scenario-server.ts"))
+    writeFileSync(join(pluginDirectory, "server.ts"), [
+      'import plugin from "./scenario-server.ts"',
+      `import { installProviderGuard } from ${JSON.stringify(new URL("./provider-guard.ts", import.meta.url).href)}`,
+      "export default { ...plugin, async setup(ctx) {",
+      "  const cleanup = await plugin.setup(ctx)",
+      "  let guard",
+      "  try {",
+      `    guard = await installProviderGuard(ctx, ${JSON.stringify({ origin: new URL(provider.url).origin, logFile: join(sandbox.root, "provider-guard.jsonl") })})`,
+      "  } catch (error) { await cleanup?.(); throw error }",
+      "  return async () => { try { await cleanup?.() } finally { await guard() } }",
+      "} }",
+    ].join("\n"))
     engine = await harness.startEngine(context, sandbox)
     const running = engine
     await using activation = await harness.subscribeEvent(context, running, (event) => event.type === "plugin.updated" && event.location?.directory === sandbox.project)
