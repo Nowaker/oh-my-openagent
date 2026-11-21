@@ -10,6 +10,7 @@ import { getMessageDir } from "./message-dir"
 import { getSessionTools } from "../../shared/session-tools-store"
 import { sanitizeSubagentType } from "../delegate-task/subagent-discovery"
 import { getAgentDisplayName, stripAgentListSortPrefix } from "../../shared/agent-display-names"
+import { readEffectiveAutoSwitchRoute } from "../../plugin/auto-switch"
 
 export async function executeBackground(
   args: CallOmoAgentArgs,
@@ -42,6 +43,7 @@ export async function executeBackground(
       resolvedParentAgent: parentAgent,
     })
 
+    const effective = readEffectiveAutoSwitchRoute(toolContext)
     const task = await manager.launch({
       description: args.description,
       prompt: args.prompt,
@@ -49,6 +51,7 @@ export async function executeBackground(
       parentSessionId: toolContext.sessionID,
       parentMessageId: toolContext.messageID,
       parentAgent,
+      ...(effective ? { parentModel: { providerID: effective.providerID, modelID: effective.modelID } } : {}),
       parentTools: getSessionTools(toolContext.sessionID),
       model,
       fallbackChain,

@@ -8,6 +8,7 @@ import { publishToolMetadata } from "../../features/tool-metadata-store"
 import { log } from "../../shared/logger"
 import { delay } from "./delay"
 import { getMessageDir } from "./message-dir"
+import { readEffectiveAutoSwitchRoute } from "../../plugin/auto-switch"
 
 type ToolContextWithMetadata = {
   sessionID: string
@@ -49,8 +50,10 @@ export function createBackgroundTask(manager: BackgroundManager, client: PluginI
           resolvedParentAgent: parentAgent,
         })
 
-        const parentModel =
-          prevMessage?.model?.providerID && prevMessage?.model?.modelID
+        const effective = readEffectiveAutoSwitchRoute(ctx)
+        const parentModel = effective
+          ? { providerID: effective.providerID, modelID: effective.modelID, variant: effective.variant }
+          : prevMessage?.model?.providerID && prevMessage?.model?.modelID
             ? {
                 providerID: prevMessage.model.providerID,
                 modelID: prevMessage.model.modelID,

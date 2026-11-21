@@ -5,11 +5,18 @@ import { resolveMessageContext } from "../../features/hook-message-injector"
 import { getSessionAgent } from "../../features/claude-code-session-state"
 import { log } from "../../shared/logger"
 import { getMessageDir } from "../../shared/opencode-message-dir"
+import { readEffectiveAutoSwitchRoute } from "../../plugin/auto-switch"
 
 export async function resolveParentContext(
   ctx: ToolContextWithMetadata,
   client: OpencodeClient,
 ): Promise<ParentContext> {
+  const effective = readEffectiveAutoSwitchRoute(ctx)
+  if (effective) {
+    const { agent, ...model } = effective
+    return { sessionID: ctx.sessionID, messageID: ctx.messageID, agent, model }
+  }
+
   const messageDir = getMessageDir(ctx.sessionID)
   const { prevMessage, firstMessageAgent } = await resolveMessageContext(ctx.sessionID, client, messageDir)
 
