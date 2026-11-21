@@ -76,7 +76,7 @@ test("allows only the exact registered primary pair on this owner without rewrit
     for (const input of [
       { ...prepare, version: 2 },
       { ...prepare, target: { ...target, agent: "hephaestus" } },
-      { ...prepare, source: target, target: source },
+      { ...prepare, source: target, target },
       { ...prepare, target: { ...target, agent: "build" } },
       { ...prepare, target: { ...target, variant: "high" } },
       { ...prepare, source: { ...source, modelID: "seat/claude-opus-5-5" } },
@@ -99,6 +99,40 @@ test("allows only the exact registered primary pair on this owner without rewrit
     clearSessionAgent(sessionID)
   }
 })
+
+test.each(["xhigh", "max"])(
+  "qualifies reverse OMO at exact Sol %s without changing the session agent",
+  async (variant) => {
+    const api = createOwner()
+    const preferred = { ...target, variant }
+    const reverse = { ...prepare, source: preferred, target: source }
+    const hephaestus = configuredAgent(preferred)
+    const sisyphus = configuredAgent(source)
+    const register = (from: typeof hephaestus, to: typeof sisyphus) =>
+      api.config?.({ agent: { [preferred.agent]: from, [source.agent]: to } })
+    await register(hephaestus, sisyphus)
+    updateSessionAgent(sessionID, preferred.agent)
+
+    try {
+      expect(await prepareFor(api, reverse)).toBe("allow")
+      expect(await prepareFor(createOwner(), reverse)).toBe("deny")
+      expect(
+        await prepareFor(api, { ...reverse, source: { ...preferred, variant: variant === "max" ? "xhigh" : "max" } }),
+      ).toBe("deny")
+
+      const unqualifiedTarget = { ...source, variant: "max" }
+      await register(hephaestus, configuredAgent(unqualifiedTarget))
+      expect(await prepareFor(api, { ...reverse, target: unqualifiedTarget })).toBe("deny")
+
+      const unqualifiedSource = { ...preferred, variant: "high" }
+      await register(configuredAgent(unqualifiedSource), sisyphus)
+      expect(await prepareFor(api, { ...reverse, source: unqualifiedSource })).toBe("deny")
+      expect(getSessionAgent(sessionID)).toBe(preferred.agent)
+    } finally {
+      clearSessionAgent(sessionID)
+    }
+  },
+)
 
 test("refuses sessions with unqualified pending context without consuming it or disabling a sibling session", async () => {
   const collector = new ContextCollector()
@@ -128,27 +162,31 @@ test("refuses team mode before an alternate can consume a mailbox message", asyn
   expect(await prepareFor(api, prepare)).toBe("deny")
 })
 
-test("does not apply preferred prompt settings or rewrite the user variant on the alternate request", async () => {
+test.each([
+  { preferred: source, effective: target },
+  { preferred: { ...target, variant: "max" }, effective: source },
+])("does not carry preferred prompt settings onto $effective.providerID", async ({ preferred, effective }) => {
   const api = createOwner()
-  const message = { variant: "high" }
-  const output = { options: { reasoningEffort: "xhigh" } }
+  const message = { variant: preferred.variant }
+  const options = effective.providerID === "anthropic" ? { effort: "high" } : { reasoningEffort: "xhigh" }
+  const output = { options: { ...options } }
   setSessionPromptParams(sessionID, { options: { reasoningEffort: "low", preferredOnly: true } })
 
   try {
     await api["chat.params"]?.(
       unsafeTestValue({
         sessionID,
-        agent: { name: target.agent },
-        model: { providerID: target.providerID, id: target.modelID },
-        provider: { id: target.providerID },
+        agent: { name: effective.agent },
+        model: { providerID: effective.providerID, id: effective.modelID },
+        provider: { id: effective.providerID },
         message,
-        autoSwitch,
+        autoSwitch: { version: 1, preferred, effective },
       }),
       output,
     )
 
-    expect(output.options).toEqual({ reasoningEffort: "xhigh" })
-    expect(message.variant).toBe("high")
+    expect(output.options).toEqual(options)
+    expect(message.variant).toBe(preferred.variant)
   } finally {
     clearSessionPromptParams(sessionID)
   }

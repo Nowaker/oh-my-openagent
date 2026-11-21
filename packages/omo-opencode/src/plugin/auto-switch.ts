@@ -29,19 +29,29 @@ type AgentConfig = Parameters<NonNullable<PluginInstance["config"]>>[0]["agent"]
 type AgentPin = { readonly model: string; readonly variant: string }
 export type PrepareAutoSwitch = (input: unknown, output: { decision?: "allow" | "deny" }) => Promise<void>
 
-function isPhaseOneModelHop(source: Route, target: Route): boolean {
-  return (
-    source.providerID === "anthropic" &&
-    source.modelID === "claude-opus-5-5" &&
-    source.variant === "high" &&
-    target.providerID === "openai" &&
-    target.modelID === "gpt-6.2-sol" &&
-    target.variant === "xhigh"
-  )
+function isOpusHigh(route: Route): boolean {
+  return route.providerID === "anthropic" && route.modelID === "claude-opus-5-5" && route.variant === "high"
 }
 
-function isPhaseOneAgentSwap(source: Route, target: Route): boolean {
-  return getAgentConfigKey(source.agent) === "sisyphus" && getAgentConfigKey(target.agent) === "hephaestus"
+function isSol(route: Route): boolean {
+  return route.providerID === "openai" && route.modelID === "gpt-6.2-sol"
+}
+
+function qualifiedRolePair(source: Route, target: Route) {
+  if (isOpusHigh(source) && isSol(target) && target.variant === "xhigh") {
+    return { source: "sisyphus", target: "hephaestus" }
+  }
+  if (isSol(source) && (source.variant === "xhigh" || source.variant === "max") && isOpusHigh(target)) {
+    return { source: "hephaestus", target: "sisyphus" }
+  }
+  return undefined
+}
+
+function isQualifiedHop(source: Route, target: Route, allowModelOnly: boolean): boolean {
+  const pair = qualifiedRolePair(source, target)
+  if (!pair) return false
+  if (allowModelOnly && source.agent === target.agent) return true
+  return getAgentConfigKey(source.agent) === pair.source && getAgentConfigKey(target.agent) === pair.target
 }
 
 export function readAutoSwitchContext(input: unknown) {
@@ -49,8 +59,7 @@ export function readAutoSwitchContext(input: unknown) {
   if (!hookInput.success) return undefined
   const context = hookInput.data.autoSwitch
   const { preferred, effective } = context
-  if (!isPhaseOneModelHop(preferred, effective)) return undefined
-  return preferred.agent === effective.agent || isPhaseOneAgentSwap(preferred, effective) ? context : undefined
+  return isQualifiedHop(preferred, effective, true) ? context : undefined
 }
 
 export function readEffectiveAutoSwitchRoute(input: unknown): Route | undefined {
@@ -89,11 +98,11 @@ export function createAutoSwitchPolicy(canPrepareSession: (sessionID: string) =>
         return
       }
       const { sessionID, source, target } = proposal.data
+      // The v1 hook does not attest whether a different submitted source effort was selectable or pinned.
       output.decision =
         isRegistered(source) &&
         isRegistered(target) &&
-        isPhaseOneModelHop(source, target) &&
-        isPhaseOneAgentSwap(source, target) &&
+        isQualifiedHop(source, target, false) &&
         canPrepareSession(sessionID)
           ? "allow"
           : "deny"
