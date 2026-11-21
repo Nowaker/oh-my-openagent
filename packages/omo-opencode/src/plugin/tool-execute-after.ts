@@ -2,7 +2,7 @@ import { recoverToolMetadata } from "../features/tool-metadata-store"
 import type { CreatedHooks } from "../create-hooks"
 import { log as defaultLog } from "../shared/logger"
 import type { PluginContext } from "./types"
-import { readEffectiveAutoSwitchRoute } from "./auto-switch"
+import { readAutoSwitchContext } from "./auto-switch"
 
 const METADATA_LINKED_TOOLS = new Set(["background_output", "edit", "task"])
 
@@ -97,7 +97,8 @@ export function createToolExecuteAfterHandler(args: {
       await hooks.rulesInjector?.["tool.execute.after"]?.(hookInput, output)
       await hooks.emptyTaskResponseDetector?.["tool.execute.after"]?.(hookInput, output)
       await hooks.momusReviewPersistence?.["tool.execute.after"]?.(hookInput, output)
-      if (!readEffectiveAutoSwitchRoute(input)) {
+      const context = readAutoSwitchContext(input)
+      if (!context || context.preferred.agent === context.effective.agent) {
         await hooks.agentUsageReminder?.["tool.execute.after"]?.(hookInput, output)
         await hooks.categorySkillReminder?.["tool.execute.after"]?.(hookInput, output)
       }

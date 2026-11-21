@@ -4,7 +4,7 @@ import type { Message, Part } from "@opencode-ai/sdk"
 import { log } from "../shared/logger"
 import { normalizeModelID } from "../shared/model-normalization"
 import type { CreatedHooks } from "../create-hooks"
-import { readEffectiveAutoSwitchRoute } from "./auto-switch"
+import { readAutoSwitchContext } from "./auto-switch"
 
 const ASSISTANT_PREFILL_RECOVERY_TEXT = "[internal] Continue from the previous assistant state."
 const ASSISTANT_PREFILL_UNSUPPORTED_PROVIDERS = new Set([
@@ -278,10 +278,14 @@ export function createMessagesTransformHandler(args: {
   hooks: MessagesTransformHooks
 }): (input: Record<string, never>, output: MessagesTransformOutput) => Promise<void> {
   return async (input, output): Promise<void> => {
-    const effective = readEffectiveAutoSwitchRoute(input)
+    const context = readAutoSwitchContext(input)
     for (const hook of MESSAGES_TRANSFORM_HOOKS) {
       // Leave pending context for the engine's final prepare check instead of claiming it for the alternate.
-      if (effective && (hook.key === "categorySkillReminder" || hook.key === "contextInjectorMessagesTransform")) {
+      if (
+        context &&
+        context.preferred.agent !== context.effective.agent &&
+        (hook.key === "categorySkillReminder" || hook.key === "contextInjectorMessagesTransform")
+      ) {
         continue
       }
       const handler = args.hooks[hook.key]?.["experimental.chat.messages.transform"]
@@ -292,6 +296,6 @@ export function createMessagesTransformHandler(args: {
       await runMessagesTransformHookSafely(hook.name, handler, input, output)
     }
 
-    ensureUserTurnAfterAssistantTail(output, effective)
+    ensureUserTurnAfterAssistantTail(output, context?.effective)
   }
 }

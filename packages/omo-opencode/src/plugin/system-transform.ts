@@ -2,7 +2,7 @@ import type { DefaultModeConfig } from "../config/schema/default-mode"
 import { reconcileSisyphusRuntimePrompt } from "../agents/sisyphus-runtime-prompt-reconciler"
 import { reconcileNativeModelPrompts } from "../agents/native-model-prompt"
 import type { NativePromptContext } from "../agents/native-prompt-frame"
-import { readEffectiveAutoSwitchRoute } from "./auto-switch"
+import { readAutoSwitchContext } from "./auto-switch"
 
 const ULTRAWORK_MODE_TAG = "<ultrawork-mode>"
 
@@ -37,9 +37,12 @@ export function createSystemTransformHandler(
     // from the *configured* model in .omo/omo.jsonc. This per-request hook
     // is the only seam that knows the model actually selected at runtime, so
     // rebuild the whole body for the runtime model here (issue #5297/#6966).
-    const effective = readEffectiveAutoSwitchRoute(input)
+    const context = readAutoSwitchContext(input)
+    const effective = context?.effective
     const runtimeModel = toCanonicalModel(input.model)
-    if (!effective) reconcileSisyphusRuntimePrompt(output.system, runtimeModel)
+    if (!context || context.preferred.agent === context.effective.agent) {
+      reconcileSisyphusRuntimePrompt(output.system, runtimeModel)
+    }
     const runtimePermissions = await getSessionToolPermissions?.(input.sessionID)
     const canRefreshTools = !getSessionToolPermissions || runtimePermissions !== undefined
     reconcileNativeModelPrompts(

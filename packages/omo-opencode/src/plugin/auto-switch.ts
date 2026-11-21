@@ -29,24 +29,32 @@ type AgentConfig = Parameters<NonNullable<PluginInstance["config"]>>[0]["agent"]
 type AgentPin = { readonly model: string; readonly variant: string }
 export type PrepareAutoSwitch = (input: unknown, output: { decision?: "allow" | "deny" }) => Promise<void>
 
-function isPhaseOneSwitch(source: Route, target: Route): boolean {
+function isPhaseOneModelHop(source: Route, target: Route): boolean {
   return (
-    getAgentConfigKey(source.agent) === "sisyphus" &&
     source.providerID === "anthropic" &&
     source.modelID === "claude-opus-5-5" &&
     source.variant === "high" &&
-    getAgentConfigKey(target.agent) === "hephaestus" &&
     target.providerID === "openai" &&
     target.modelID === "gpt-6.2-sol" &&
     target.variant === "xhigh"
   )
 }
 
-export function readEffectiveAutoSwitchRoute(input: unknown): Route | undefined {
+function isPhaseOneAgentSwap(source: Route, target: Route): boolean {
+  return getAgentConfigKey(source.agent) === "sisyphus" && getAgentConfigKey(target.agent) === "hephaestus"
+}
+
+export function readAutoSwitchContext(input: unknown) {
   const hookInput = contextInputSchema.safeParse(input)
   if (!hookInput.success) return undefined
-  const { preferred, effective } = hookInput.data.autoSwitch
-  return isPhaseOneSwitch(preferred, effective) ? effective : undefined
+  const context = hookInput.data.autoSwitch
+  const { preferred, effective } = context
+  if (!isPhaseOneModelHop(preferred, effective)) return undefined
+  return preferred.agent === effective.agent || isPhaseOneAgentSwap(preferred, effective) ? context : undefined
+}
+
+export function readEffectiveAutoSwitchRoute(input: unknown): Route | undefined {
+  return readAutoSwitchContext(input)?.effective
 }
 
 export function createAutoSwitchPolicy(canPrepareSession: (sessionID: string) => boolean) {
@@ -82,7 +90,11 @@ export function createAutoSwitchPolicy(canPrepareSession: (sessionID: string) =>
       }
       const { sessionID, source, target } = proposal.data
       output.decision =
-        isRegistered(source) && isRegistered(target) && isPhaseOneSwitch(source, target) && canPrepareSession(sessionID)
+        isRegistered(source) &&
+        isRegistered(target) &&
+        isPhaseOneModelHop(source, target) &&
+        isPhaseOneAgentSwap(source, target) &&
+        canPrepareSession(sessionID)
           ? "allow"
           : "deny"
     },

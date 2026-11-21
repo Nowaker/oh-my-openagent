@@ -153,3 +153,32 @@ test("does not apply preferred prompt settings or rewrite the user variant on th
     clearSessionPromptParams(sessionID)
   }
 })
+
+test("keeps Junior's role on a model-only alternate without carrying its Claude request options", async () => {
+  const api = createOwner()
+  const junior = "Sisyphus-Junior"
+  const preferred = { ...source, agent: junior }
+  const effective = { ...target, agent: junior }
+  const message = { variant: "high" }
+  const output = { options: { reasoningEffort: "xhigh" } }
+  setSessionPromptParams(sessionID, { options: { reasoningEffort: "low", preferredOnly: true } })
+
+  try {
+    await api["chat.params"]?.(
+      unsafeTestValue({
+        sessionID,
+        agent: { name: junior },
+        model: { providerID: effective.providerID, id: effective.modelID },
+        provider: { id: effective.providerID },
+        message,
+        autoSwitch: { version: 1, preferred, effective },
+      }),
+      output,
+    )
+    expect(message.variant).toBe("high")
+    expect(output.options).toEqual({ reasoningEffort: "xhigh" })
+    expect(await prepareFor(api, { ...prepare, source: preferred, target: effective })).toBe("deny")
+  } finally {
+    clearSessionPromptParams(sessionID)
+  }
+})
