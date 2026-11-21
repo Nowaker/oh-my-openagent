@@ -338,9 +338,9 @@ export function createKeywordDetectorHook(
     clearSession: (sessionID: string): void => {
       explicitUltraworkSessions.delete(sessionID)
     },
-    getSystemTransformGuidance: (sessionID: string, modelID?: string): string | undefined => {
+    getSystemTransformGuidance: (sessionID: string, modelID?: string, effectiveAgent?: string): string | undefined => {
       const activeUltrawork = explicitUltraworkSessions.get(sessionID)
-      const agent = getSessionAgent(sessionID)
+      const agent = effectiveAgent ?? getSessionAgent(sessionID)
       if (
         !activeUltrawork?.needsRestoration ||
         isPlannerAgent(agent) ||

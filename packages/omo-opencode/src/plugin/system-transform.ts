@@ -2,11 +2,12 @@ import type { DefaultModeConfig } from "../config/schema/default-mode"
 import { reconcileSisyphusRuntimePrompt } from "../agents/sisyphus-runtime-prompt-reconciler"
 import { reconcileNativeModelPrompts } from "../agents/native-model-prompt"
 import type { NativePromptContext } from "../agents/native-prompt-frame"
+import { readEffectiveAutoSwitchRoute } from "./auto-switch"
 
 const ULTRAWORK_MODE_TAG = "<ultrawork-mode>"
 
 type UltraworkRestoration = {
-  getSystemTransformGuidance?: (sessionID: string, modelID?: string) => string | undefined
+  getSystemTransformGuidance?: (sessionID: string, modelID?: string, effectiveAgent?: string) => string | undefined
 }
 
 /**
@@ -36,19 +37,25 @@ export function createSystemTransformHandler(
     // from the *configured* model in .omo/omo.jsonc. This per-request hook
     // is the only seam that knows the model actually selected at runtime, so
     // rebuild the whole body for the runtime model here (issue #5297/#6966).
-    reconcileSisyphusRuntimePrompt(output.system, toCanonicalModel(input.model))
+    const effective = readEffectiveAutoSwitchRoute(input)
+    const runtimeModel = toCanonicalModel(input.model)
+    if (!effective) reconcileSisyphusRuntimePrompt(output.system, runtimeModel)
     const runtimePermissions = await getSessionToolPermissions?.(input.sessionID)
     const canRefreshTools = !getSessionToolPermissions || runtimePermissions !== undefined
     reconcileNativeModelPrompts(
       output.system,
-      toCanonicalModel(input.model),
+      runtimeModel,
       canRefreshTools ? getToolSnippets?.() : undefined,
       undefined,
       runtimePermissions,
     )
 
     const restoredGuidance = input.sessionID
-      ? ultraworkRestoration?.getSystemTransformGuidance?.(input.sessionID, input.model?.id)
+      ? ultraworkRestoration?.getSystemTransformGuidance?.(
+          input.sessionID,
+          effective?.modelID ?? input.model?.id,
+          effective?.agent,
+        )
       : undefined
     if (restoredGuidance) {
       if (!output.system.some((part) => part.includes(ULTRAWORK_MODE_TAG))) {
@@ -63,8 +70,7 @@ export function createSystemTransformHandler(
     // (e.g. after compaction the system prompt is rebuilt and this hook fires again)
     if (output.system.some((part) => part.includes(ULTRAWORK_MODE_TAG))) return
 
-    const modelID = input.model?.id
-    const ultraworkMessage = getUltraworkMessage("sisyphus", modelID)
+    const ultraworkMessage = getUltraworkMessage(effective?.agent ?? "sisyphus", effective?.modelID ?? input.model?.id)
     if (!ultraworkMessage) return
 
     output.system.push(ultraworkMessage)

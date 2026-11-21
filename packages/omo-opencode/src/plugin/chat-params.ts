@@ -1,6 +1,7 @@
 import { isRecord } from "@oh-my-opencode/utils"
 import { getSessionPromptParams } from "../shared/session-prompt-params-state"
 import { getModelCapabilities, log, resolveCompatibleModelSettings } from "../shared"
+import { readEffectiveAutoSwitchRoute } from "./auto-switch"
 
 const SAFE_MAX_OUTPUT_TOKENS_FALLBACK = 4096
 
@@ -87,7 +88,8 @@ export function createChatParamsHandler(
     if (!normalizedInput) return
     if (!isChatParamsOutput(output)) return
 
-    const storedPromptParams = getSessionPromptParams(normalizedInput.sessionID)
+    const effective = readEffectiveAutoSwitchRoute(input)
+    const storedPromptParams = effective ? undefined : getSessionPromptParams(normalizedInput.sessionID)
     if (storedPromptParams) {
       if (storedPromptParams.temperature !== undefined) {
         output.temperature = storedPromptParams.temperature
@@ -116,7 +118,9 @@ export function createChatParamsHandler(
       providerID: normalizedInput.model.providerID,
       modelID: normalizedInput.model.modelID,
       desired: {
-        variant: typeof normalizedInput.message.variant === "string" ? normalizedInput.message.variant : undefined,
+        variant:
+          effective?.variant ??
+          (typeof normalizedInput.message.variant === "string" ? normalizedInput.message.variant : undefined),
         reasoningEffort:
           typeof output.options.reasoningEffort === "string" ? output.options.reasoningEffort : undefined,
         temperature: typeof output.temperature === "number" ? output.temperature : undefined,
@@ -127,14 +131,13 @@ export function createChatParamsHandler(
       capabilities,
     })
 
-    if (normalizedInput.rawMessage) {
+    if (!effective && normalizedInput.rawMessage) {
       if (compatibility.variant !== undefined) {
         normalizedInput.rawMessage.variant = compatibility.variant
       } else {
         delete normalizedInput.rawMessage.variant
       }
     }
-    normalizedInput.message = normalizedInput.rawMessage as { variant?: string }
 
     if (compatibility.reasoningEffort !== undefined) {
       output.options.reasoningEffort = compatibility.reasoningEffort

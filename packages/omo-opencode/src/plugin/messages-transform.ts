@@ -4,6 +4,7 @@ import type { Message, Part } from "@opencode-ai/sdk"
 import { log } from "../shared/logger"
 import { normalizeModelID } from "../shared/model-normalization"
 import type { CreatedHooks } from "../create-hooks"
+import { readEffectiveAutoSwitchRoute } from "./auto-switch"
 
 const ASSISTANT_PREFILL_RECOVERY_TEXT = "[internal] Continue from the previous assistant state."
 const ASSISTANT_PREFILL_UNSUPPORTED_PROVIDERS = new Set([
@@ -232,7 +233,7 @@ function createAssistantPrefillRecoveryMessage(
   }
 }
 
-function ensureUserTurnAfterAssistantTail(output: MessagesTransformOutput): void {
+function ensureUserTurnAfterAssistantTail(output: MessagesTransformOutput, effectiveModel?: ModelIdentifier): void {
   const lastMessage = output.messages.at(-1)
   if (!lastMessage || lastMessage.info.role !== "assistant" || assistantTailEndsOnToolResult(lastMessage)) {
     return
@@ -240,8 +241,10 @@ function ensureUserTurnAfterAssistantTail(output: MessagesTransformOutput): void
 
   const shouldRepairAssistantTail =
     hasInternalContinuationTrigger(output.messages) ||
-    shouldRepairAssistantPrefillForModel(findLastUserModel(output.messages)) ||
-    shouldRepairAssistantPrefillForModel(readModelIdentifier(lastMessage.info))
+    (effectiveModel
+      ? shouldRepairAssistantPrefillForModel(effectiveModel)
+      : shouldRepairAssistantPrefillForModel(findLastUserModel(output.messages)) ||
+        shouldRepairAssistantPrefillForModel(readModelIdentifier(lastMessage.info)))
   if (!shouldRepairAssistantTail) {
     return
   }
@@ -275,7 +278,12 @@ export function createMessagesTransformHandler(args: {
   hooks: MessagesTransformHooks
 }): (input: Record<string, never>, output: MessagesTransformOutput) => Promise<void> {
   return async (input, output): Promise<void> => {
+    const effective = readEffectiveAutoSwitchRoute(input)
     for (const hook of MESSAGES_TRANSFORM_HOOKS) {
+      // Leave pending context for the engine's final prepare check instead of claiming it for the alternate.
+      if (effective && (hook.key === "categorySkillReminder" || hook.key === "contextInjectorMessagesTransform")) {
+        continue
+      }
       const handler = args.hooks[hook.key]?.["experimental.chat.messages.transform"]
       if (hook.fatal) {
         if (handler) await Promise.resolve(handler(input, output))
@@ -284,6 +292,6 @@ export function createMessagesTransformHandler(args: {
       await runMessagesTransformHookSafely(hook.name, handler, input, output)
     }
 
-    ensureUserTurnAfterAssistantTail(output)
+    ensureUserTurnAfterAssistantTail(output, effective)
   }
 }

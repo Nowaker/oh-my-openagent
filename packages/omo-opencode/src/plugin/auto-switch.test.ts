@@ -1,0 +1,155 @@
+import { expect, test } from "bun:test"
+import { unsafeTestValue } from "../../../../test-support/unsafe-test-value"
+import { createPluginInterface } from "../plugin-interface"
+import { clearSessionAgent, getSessionAgent, updateSessionAgent } from "../features/claude-code-session-state"
+import { ContextCollector, createContextInjectorMessagesTransformHook } from "../features/context-injector"
+import { getAgentDisplayName } from "../shared/agent-display-names"
+import { clearSessionPromptParams, setSessionPromptParams } from "../shared/session-prompt-params-state"
+
+const source = {
+  agent: getAgentDisplayName("sisyphus"),
+  providerID: "anthropic",
+  modelID: "claude-opus-5-5",
+  variant: "high",
+}
+const target = {
+  agent: getAgentDisplayName("hephaestus"),
+  providerID: "openai",
+  modelID: "gpt-6.2-sol",
+  variant: "xhigh",
+}
+const sessionID = "ses-phase-one-switch"
+const prepare = { version: 1, sessionID, source, target }
+const autoSwitch = { version: 1, preferred: source, effective: target }
+
+function createOwner(options: { teamMode?: boolean; collector?: ContextCollector } = {}) {
+  return createPluginInterface({
+    ctx: unsafeTestValue({ client: { session: {} } }),
+    pluginConfig: unsafeTestValue({
+      agents: { hephaestus: { variant: "medium" } },
+      team_mode: options.teamMode === undefined ? undefined : { enabled: options.teamMode },
+    }),
+    firstMessageVariantGate: {
+      shouldOverride: () => false,
+      markApplied: () => {},
+      markSessionCreated: () => {},
+      clear: () => {},
+    },
+    managers: unsafeTestValue({
+      backgroundManager: { setSessionRuntimeRetirementHandler() {} },
+      configHandler: async () => {},
+    }),
+    hooks: unsafeTestValue({
+      contextInjectorMessagesTransform:
+        options.collector && createContextInjectorMessagesTransformHook(options.collector),
+    }),
+    tools: {},
+  })
+}
+
+async function prepareFor(instance: ReturnType<typeof createOwner>, input: unknown) {
+  const output: { decision?: "allow" | "deny" } = {}
+  await instance["experimental.chat.autoSwitch.prepare"]?.(input, output)
+  return output.decision
+}
+
+function configuredAgent(route: typeof source) {
+  return {
+    mode: "primary",
+    prompt: "Fixture",
+    model: `${route.providerID}/${route.modelID}`,
+    variant: route.variant,
+  } as const
+}
+
+test("allows only the exact registered primary pair on this owner without rewriting session identity", async () => {
+  const api = createOwner()
+  const otherOwner = createOwner()
+  const sourceAgent = configuredAgent(source)
+  const targetAgent = configuredAgent(target)
+  await api.config?.({ agent: { [source.agent]: sourceAgent, [target.agent]: targetAgent } })
+  updateSessionAgent(sessionID, source.agent)
+
+  try {
+    expect(await prepareFor(api, prepare)).toBe("allow")
+    expect(await prepareFor(otherOwner, prepare)).toBe("deny")
+    for (const input of [
+      { ...prepare, version: 2 },
+      { ...prepare, target: { ...target, agent: "hephaestus" } },
+      { ...prepare, source: target, target: source },
+      { ...prepare, target: { ...target, agent: "build" } },
+      { ...prepare, target: { ...target, variant: "high" } },
+      { ...prepare, source: { ...source, modelID: "seat/claude-opus-5-5" } },
+      { ...prepare, target: { ...target, providerID: "openai-meridian" } },
+      { ...prepare, target: { ...target, modelID: "gpt-6.2-sol-fast" } },
+    ]) {
+      expect(await prepareFor(api, input)).toBe("deny")
+    }
+    expect(getSessionAgent(sessionID)).toBe(source.agent)
+    for (const ineligible of [
+      { ...targetAgent, disable: true },
+      { ...targetAgent, hidden: true },
+      { ...targetAgent, variant: "high" },
+      { ...targetAgent, model: "openai/gpt-6.2-astra" },
+    ]) {
+      await api.config?.({ agent: { [source.agent]: sourceAgent, [target.agent]: ineligible } })
+      expect(await prepareFor(api, prepare)).toBe("deny")
+    }
+  } finally {
+    clearSessionAgent(sessionID)
+  }
+})
+
+test("refuses sessions with unqualified pending context without consuming it or disabling a sibling session", async () => {
+  const collector = new ContextCollector()
+  const api = createOwner({ collector })
+  await api.config?.({ agent: { [source.agent]: configuredAgent(source), [target.agent]: configuredAgent(target) } })
+  expect(await prepareFor(api, prepare)).toBe("allow")
+
+  collector.register(sessionID, { id: "late-context", source: "custom", content: "Retain this constraint." })
+  const messageID = "msg_phase_one_context"
+  await api["experimental.chat.messages.transform"]?.(unsafeTestValue({ autoSwitch }), {
+    messages: [
+      {
+        info: { id: messageID, sessionID, time: { created: 1 }, role: "user", agent: source.agent, model: source },
+        parts: [{ id: "prt_phase_one_context", sessionID, messageID, type: "text", text: "Proceed." }],
+      },
+    ],
+  })
+  expect(await prepareFor(api, prepare)).toBe("deny")
+  expect(await prepareFor(api, { ...prepare, sessionID: "ses-unrelated" })).toBe("allow")
+  expect(collector.getPending(sessionID).merged).toBe("Retain this constraint.")
+})
+
+test("refuses team mode before an alternate can consume a mailbox message", async () => {
+  const api = createOwner({ teamMode: true })
+  await api.config?.({ agent: { [source.agent]: configuredAgent(source), [target.agent]: configuredAgent(target) } })
+
+  expect(await prepareFor(api, prepare)).toBe("deny")
+})
+
+test("does not apply preferred prompt settings or rewrite the user variant on the alternate request", async () => {
+  const api = createOwner()
+  const message = { variant: "high" }
+  const output = { options: { reasoningEffort: "xhigh" } }
+  setSessionPromptParams(sessionID, { options: { reasoningEffort: "low", preferredOnly: true } })
+
+  try {
+    await api["chat.params"]?.(
+      unsafeTestValue({
+        sessionID,
+        agent: { name: target.agent },
+        model: { providerID: target.providerID, id: target.modelID },
+        provider: { id: target.providerID },
+        message,
+        autoSwitch,
+      }),
+      output,
+    )
+
+    expect(output.options).toEqual({ reasoningEffort: "xhigh" })
+    expect(message.variant).toBe("high")
+  } finally {
+    clearSessionPromptParams(sessionID)
+  }
+})
