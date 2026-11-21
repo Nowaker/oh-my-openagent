@@ -54,7 +54,7 @@ export function handleSessionIdleBackgroundEvent(args: {
 
   validateSessionHasOutput(sessionID, taskOutputSince(task))
     .then(async (hasValidOutput) => {
-      if (task.status !== "running") {
+      if (task.status !== "running" || task.startedAt !== startedAt) {
         log("[background-agent] Task status changed during validation, skipping:", {
           taskId: task.id,
           status: task.status,
@@ -69,7 +69,7 @@ export function handleSessionIdleBackgroundEvent(args: {
 
       const hasIncompleteTodos = await checkSessionTodos(sessionID)
 
-      if (task.status !== "running") {
+      if (task.status !== "running" || task.startedAt !== startedAt) {
         log("[background-agent] Task status changed during todo check, skipping:", {
           taskId: task.id,
           status: task.status,

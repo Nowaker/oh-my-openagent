@@ -176,5 +176,5 @@ export function scheduleRetryAttempt(
 }
 
 export function findAttemptBySession(task: BackgroundTask, sessionID: string): BackgroundTaskAttempt | undefined {
-  return task.attempts?.find((attempt) => attempt.sessionId === sessionID)
+  return task.attempts?.findLast((attempt) => attempt.sessionId === sessionID)
 }
