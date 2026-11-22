@@ -4,11 +4,8 @@ import { getAgentConfigKey } from "../../shared/agent-display-names"
 import { mergeCategories } from "../../shared/merge-categories"
 import { resolveProviderModelPin } from "../../shared/provider-model-pin"
 import { resolveCategoryConfig } from "./categories"
-import {
-  categoryResolutionError,
-  resolveCategoryPromptAppendForModel,
-  type CategoryResolutionResult,
-} from "./category-resolver"
+import { resolveCategoryPromptAppendForModel } from "./category-prompt-append"
+import { categoryResolutionError, type CategoryResolutionResult } from "./category-resolution-result"
 import type { ExecutorContext } from "./executor-types"
 import { SISYPHUS_JUNIOR_AGENT } from "./sisyphus-junior-agent"
 import type { DelegatedModelConfig, DelegateTaskArgs } from "./types"
