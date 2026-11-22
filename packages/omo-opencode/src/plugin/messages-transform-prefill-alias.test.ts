@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import type { Message, Part } from "@opencode-ai/sdk"
 
 import { createMessagesTransformHandler } from "./messages-transform"
+import { unsafeTestValue } from "../../../../test-support/unsafe-test-value"
 
 type TestMessage = {
   info: Message
@@ -54,6 +55,28 @@ async function runHandler(messages: TestMessage[]): Promise<void> {
   const handler = createMessagesTransformHandler({ hooks: {} })
   await handler({}, { messages })
 }
+
+test("does not repair a historical Claude assistant tail for an effective GPT request", async () => {
+  const sessionID = "ses_effective_gpt_prefill"
+  const messages = [
+    { info: userMessage({ id: "user", sessionID, providerID: "anthropic", modelID: "claude-opus-4-8" }), parts: [] },
+    { info: assistantMessage({ id: "assistant", sessionID }), parts: [] },
+  ]
+  const handler = createMessagesTransformHandler({ hooks: {} })
+
+  await handler(
+    unsafeTestValue({
+      autoSwitch: {
+        version: 1,
+        preferred: { agent: "sisyphus", providerID: "anthropic", modelID: "claude-opus-5-5", variant: "high" },
+        effective: { agent: "hephaestus", providerID: "openai", modelID: "gpt-6.2-sol", variant: "xhigh" },
+      },
+    }),
+    { messages },
+  )
+
+  expect(messages.at(-1)?.info.id).toBe("assistant")
+})
 
 describe("messages transform assistant prefill alias repair", () => {
   test("#given Anthropic-backed alias providers end with a rejecting assistant tail #when messages transform runs #then it appends a synthetic user recovery turn", async () => {

@@ -3,6 +3,7 @@ import type { OhMyOpenCodeConfig } from "./config"
 
 import { applyAgentVariant } from "./shared/agent-variant"
 import { createChatParamsHandler } from "./plugin/chat-params"
+import { createAutoSwitchPolicy, readEffectiveAutoSwitchRoute } from "./plugin/auto-switch"
 import { createChatHeadersHandler } from "./plugin/chat-headers"
 import { createChatMessageHandler } from "./plugin/chat-message"
 import { withRunningJobsClaim } from "./features/running-jobs"
@@ -42,6 +43,10 @@ export function createPluginInterface(args: {
     Object.entries(tools).map(([name, definition]) => [name, toolPromptSnippet(definition.description)]),
   )
   const sessionToolPermissions = createSessionToolPermissionLookup(ctx)
+  const autoSwitchPolicy = createAutoSwitchPolicy(
+    (sessionID) =>
+      !pluginConfig.team_mode?.enabled && !hooks.contextInjectorMessagesTransform?.hasPendingContext(sessionID),
+  )
   const handleEvent = createEventHandler({
     ctx,
     pluginConfig,
@@ -60,6 +65,8 @@ export function createPluginInterface(args: {
   return {
     tool: tools,
 
+    "experimental.chat.autoSwitch.prepare": autoSwitchPolicy.prepare,
+
     "chat.params": async (input: unknown, output: unknown) => {
       const chatParamsInput = input as {
         agent?: string | { name?: string }
@@ -70,7 +77,12 @@ export function createPluginInterface(args: {
       const providerID = chatParamsInput.model?.providerID
       const rawModelID = chatParamsInput.model?.modelID ?? chatParamsInput.model?.id
       const modelID = typeof rawModelID === "string" ? rawModelID : undefined
-      if (chatParamsInput.message && typeof providerID === "string" && modelID !== undefined) {
+      if (
+        !readEffectiveAutoSwitchRoute(input) &&
+        chatParamsInput.message &&
+        typeof providerID === "string" &&
+        modelID !== undefined
+      ) {
         applyAgentVariant(pluginConfig, agentName, chatParamsInput.message, { providerID, modelID })
       }
       const handler = createChatParamsHandler({
@@ -142,6 +154,7 @@ export function createPluginInterface(args: {
         rebaseSisyphusRuntimePrompt(agent.prompt, rewritten, rewrite)
         agent.prompt = rewritten
       }
+      autoSwitchPolicy.configure(config.agent)
     },
 
     event: async (input) => {

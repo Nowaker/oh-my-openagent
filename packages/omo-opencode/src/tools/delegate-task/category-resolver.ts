@@ -6,7 +6,9 @@ import { canonicalCategoryName } from "@oh-my-opencode/omo-config-core"
 import { mergeCategories } from "../../shared/merge-categories"
 import { SISYPHUS_JUNIOR_AGENT } from "./sisyphus-junior-agent"
 import { resolveCategoryConfig } from "./categories"
-import { builtinCategoryGateModels, CATEGORY_PROMPT_APPEND_RESOLVERS } from "./constants"
+import { builtinCategoryGateModels, categoryGateServedModels } from "./constants"
+import { categoryResolutionError, type CategoryResolutionResult } from "./category-resolution-result"
+import { resolveCategoryPromptAppendForModel } from "./category-prompt-append"
 import { parseModelString } from "../../shared/model-string-parser"
 import { CATEGORY_MODEL_REQUIREMENTS } from "../../shared/model-requirements"
 import { normalizeFallbackModels, flattenToFallbackModelStrings } from "../../shared/model-resolver"
@@ -22,48 +24,6 @@ import { isNativeDelegationClient } from "../../shared/native-delegation-client"
 
 function getConfiguredModel(entry: string | { model: string } | undefined): string | undefined {
   return typeof entry === "string" ? entry : entry?.model
-}
-
-export function resolveCategoryPromptAppendForModel(
-  categoryName: string,
-  actualModel: string | undefined,
-  staticPromptAppend: string,
-  userPromptAppend: string | undefined,
-): string | undefined {
-  const dynamicResolver = CATEGORY_PROMPT_APPEND_RESOLVERS[categoryName]
-  if (!dynamicResolver) {
-    return staticPromptAppend || undefined
-  }
-  const dynamicBase = dynamicResolver(actualModel)
-  if (!userPromptAppend) {
-    return dynamicBase || undefined
-  }
-  return dynamicBase ? `${dynamicBase}\n\n${userPromptAppend}` : userPromptAppend
-}
-
-export interface CategoryResolutionResult {
-  agentToUse: string
-  categoryModel: DelegatedModelConfig | undefined
-  categoryPromptAppend: string | undefined
-  maxPromptTokens?: number
-  modelInfo: ModelFallbackInfo | undefined
-  actualModel: string | undefined
-  isUnstableAgent: boolean
-  fallbackChain?: FallbackEntry[] // For runtime retry on model errors
-  error?: string
-}
-
-export function categoryResolutionError(error: string): CategoryResolutionResult {
-  return {
-    agentToUse: "",
-    categoryModel: undefined,
-    categoryPromptAppend: undefined,
-    maxPromptTokens: undefined,
-    modelInfo: undefined,
-    actualModel: undefined,
-    isUnstableAgent: false,
-    error,
-  }
 }
 
 export async function resolveCategoryExecution(
@@ -109,6 +69,7 @@ export async function resolveCategoryExecution(
     systemDefaultModel,
     availableModels,
     preserveConfiguredModels: isNativeDelegationClient(client),
+    modelOverride: sisyphusJuniorModel,
   })
 
   if (!resolved) {
@@ -184,6 +145,15 @@ Available categories: ${allCategoryNames}`)
         : undefined
     }
   } else {
+    // With no user model or fallback list, a gated category resolves from its builtin default and chain
+    // alone, so it sees only the registry models that serve its gate exactly. A user override keeps the
+    // whole registry: the user's own spelling of a model stays theirs.
+    const builtinOnlyModels =
+      explicitCategoryModel === undefined &&
+      overrideModel === undefined &&
+      (normalizedConfiguredFallbackModels?.length ?? 0) === 0
+        ? categoryGateServedModels(categoryName, availableModels)
+        : undefined
     const resolution = resolveModelForDelegateTask({
       userModel: explicitCategoryModel ?? overrideModel,
       preserveUserModel: isNativeDelegationClient(client),
@@ -193,7 +163,7 @@ Available categories: ${allCategoryNames}`)
         ? configuredPrimaryModel !== undefined
         : resolved.isUserConfiguredModel,
       fallbackChain: requirement.fallbackChain,
-      availableModels,
+      availableModels: builtinOnlyModels ?? availableModels,
       systemDefaultModel,
     })
 

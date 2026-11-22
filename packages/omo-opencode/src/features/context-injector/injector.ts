@@ -70,6 +70,7 @@ interface MessageWithParts {
 }
 
 type MessagesTransformHook = {
+  hasPendingContext: (sessionID: string) => boolean
   "experimental.chat.messages.transform"?: (
     input: Record<string, never>,
     output: { messages: MessageWithParts[] },
@@ -86,6 +87,7 @@ function hasText(part: Part): boolean {
 
 export function createContextInjectorMessagesTransformHook(collector: ContextCollector): MessagesTransformHook {
   return {
+    hasPendingContext: (sessionID) => collector.hasPending(sessionID),
     "experimental.chat.messages.transform": async (_input, output) => {
       const { messages } = output
       if (messages.length === 0) {
