@@ -15,6 +15,10 @@ const TOAST_MESSAGE = [
   "Do NOT use Sisyphus with GPT (except GPT-5.4, GPT-5.5, and GPT-5.6 Sol, which have GPT-native prompt support).",
   "For other GPT models, always use Hephaestus.",
 ].join("\n")
+const ALL_GPT_TOAST_MESSAGE = [
+  "This setup sends every GPT model to Hephaestus (sisyphus_agent.gpt_to_hephaestus), GPT-native Sisyphus prompts included.",
+  "The message was switched to Hephaestus. Use a Claude, Kimi, or GLM model for Sisyphus.",
+].join("\n")
 const HEPHAESTUS_UNAVAILABLE_TOAST_MESSAGE = [
   "Sisyphus is running with a GPT model it has no native prompt for.",
   "Hephaestus is not available in this session (disabled, or its configured model is not a supported GPT model), so the agent was not switched.",
@@ -52,7 +56,12 @@ function getNativeSisyphusGptVariant(model: { providerID: string; modelID: strin
   return chain.find((entry) => entry.model === model.modelID)?.variant
 }
 
-export function createNoSisyphusGptHook(ctx: PluginInput) {
+export type NoSisyphusGptHookOptions = {
+  /** Send Sisyphus on any GPT model to Hephaestus, not only GPT models without a GPT-native Sisyphus prompt. */
+  gptToHephaestus?: boolean
+}
+
+export function createNoSisyphusGptHook(ctx: PluginInput, options: NoSisyphusGptHookOptions = {}) {
   return {
     "chat.message": async (
       input: {
@@ -67,8 +76,11 @@ export function createNoSisyphusGptHook(ctx: PluginInput) {
       const rawAgent = input.agent ?? getSessionAgent(input.sessionID) ?? ""
       const agentKey = getAgentConfigKey(rawAgent)
       const modelID = input.model?.modelID
+      const native = !!modelID && (isGptNativeSisyphusModel(modelID) || isGpt6Model(modelID))
+      const redirect = agentKey === "sisyphus" && !!modelID && isGptModel(modelID) && (!native || options.gptToHephaestus === true)
 
       if (
+        !redirect &&
         agentKey === "sisyphus" &&
         input.model &&
         modelID &&
@@ -82,13 +94,7 @@ export function createNoSisyphusGptHook(ctx: PluginInput) {
         }
       }
 
-      if (
-        agentKey === "sisyphus" &&
-        modelID &&
-        isGptModel(modelID) &&
-        !isGptNativeSisyphusModel(modelID) &&
-        !isGpt6Model(modelID)
-      ) {
+      if (redirect) {
         if (!isAgentRegistered("hephaestus")) {
           showToast(ctx, input.sessionID, HEPHAESTUS_UNAVAILABLE_TOAST_MESSAGE)
           log("[no-sisyphus-gpt] Hephaestus is not registered; keeping Sisyphus instead of redirecting", {
@@ -99,7 +105,7 @@ export function createNoSisyphusGptHook(ctx: PluginInput) {
         }
 
         const hephaestusAgent = resolveRegisteredAgentName("hephaestus") ?? "hephaestus"
-        showToast(ctx, input.sessionID, TOAST_MESSAGE)
+        showToast(ctx, input.sessionID, native ? ALL_GPT_TOAST_MESSAGE : TOAST_MESSAGE)
         input.agent = hephaestusAgent
         if (output?.message) {
           output.message.agent = hephaestusAgent

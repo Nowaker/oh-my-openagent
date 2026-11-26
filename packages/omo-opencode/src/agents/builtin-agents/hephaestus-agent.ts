@@ -23,6 +23,8 @@ export function maybeCreateHephaestusConfig(input: {
   directory?: string
   useTaskSystem: boolean
   disableOmoEnv?: boolean
+  /** Replaces Hephaestus's own prompt (`sisyphus_agent.share_prompt_with_hephaestus`). */
+  promptFor?: (model: string) => string
 }): AgentConfig | undefined {
   const {
     disabledAgents,
@@ -37,6 +39,7 @@ export function maybeCreateHephaestusConfig(input: {
     directory,
     useTaskSystem,
     disableOmoEnv = false,
+    promptFor,
   } = input
 
   if (disabledAgents.includes("hephaestus")) return undefined
@@ -96,7 +99,11 @@ export function maybeCreateHephaestusConfig(input: {
     useTaskSystem,
   )
 
-  hephaestusConfig = { ...hephaestusConfig, variant: hephaestusResolvedVariant ?? "medium" }
+  hephaestusConfig = {
+    ...hephaestusConfig,
+    variant: hephaestusResolvedVariant ?? "medium",
+    ...(promptFor && { prompt: promptFor(hephaestusModel) }),
+  }
 
   const hepOverrideCategory = (hephaestusOverride as Record<string, unknown> | undefined)?.category as
     string | undefined

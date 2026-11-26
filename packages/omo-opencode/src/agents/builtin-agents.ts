@@ -69,6 +69,7 @@ export async function createBuiltinAgents(
   useTaskSystem = false,
   disableOmoEnv = false,
   teamModeEnabled = false,
+  shareSisyphusPromptWithHephaestus = false,
 ): Promise<Record<string, AgentConfig>> {
   const connectedProviders = readConnectedProvidersCache()
   const providerModelsConnected = connectedProviders ? (readProviderModelsCache()?.connected ?? []) : []
@@ -109,6 +110,7 @@ export async function createBuiltinAgents(
     disableOmoEnv,
   })
 
+  const sisyphusSkills = buildAvailableSkills(discoveredSkills, browserProvider, disabledSkills, teamModeEnabled, "sisyphus")
   const sisyphusConfig = maybeCreateSisyphusConfig({
     disabledAgents,
     agentOverrides,
@@ -117,13 +119,7 @@ export async function createBuiltinAgents(
     systemDefaultModel,
     isFirstRunNoCache,
     availableAgents,
-    availableSkills: buildAvailableSkills(
-      discoveredSkills,
-      browserProvider,
-      disabledSkills,
-      teamModeEnabled,
-      "sisyphus",
-    ),
+    availableSkills: sisyphusSkills,
     availableCategories,
     mergedCategories,
     directory,
@@ -154,6 +150,11 @@ export async function createBuiltinAgents(
     directory,
     useTaskSystem,
     disableOmoEnv,
+    // Sisyphus's prompt for Hephaestus's model, built from what Sisyphus is given, so the two agents match.
+    ...(shareSisyphusPromptWithHephaestus && {
+      promptFor: (model: string) =>
+        createSisyphusAgent(model, availableAgents, undefined, sisyphusSkills, availableCategories, useTaskSystem).prompt ?? "",
+    }),
   })
   if (hephaestusConfig) {
     result["hephaestus"] = hephaestusConfig

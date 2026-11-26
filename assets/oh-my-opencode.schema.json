@@ -9089,6 +9089,14 @@
         "tdd": {
           "default": true,
           "type": "boolean"
+        },
+        "gpt_to_hephaestus": {
+          "description": "Send Sisyphus on any GPT model to Hephaestus, including GPT models with a GPT-native Sisyphus prompt. Default false: only GPT models without one are sent.",
+          "type": "boolean"
+        },
+        "share_prompt_with_hephaestus": {
+          "description": "Give Hephaestus the same prompt Sisyphus would get on Hephaestus's model, orchestration instructions included, so the two agents differ only in name. Default false.",
+          "type": "boolean"
         }
       },
       "additionalProperties": false

@@ -34,6 +34,7 @@ export async function applyAgentConfig(params: ApplyAgentConfigParams): Promise<
     useTaskSystem,
     disableOmoEnv,
     params.pluginConfig.team_mode?.enabled ?? false,
+    params.pluginConfig.sisyphus_agent?.share_prompt_with_hephaestus ?? false,
   )
   const disabledAgentNames = new Set((migratedDisabledAgents ?? []).map((agent: string) => agent.toLowerCase()))
   const { configuredDefaultAgent } = await assembleAgentConfig({

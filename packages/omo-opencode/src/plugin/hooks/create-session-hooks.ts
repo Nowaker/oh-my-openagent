@@ -200,7 +200,8 @@ export function createSessionHooks(args: {
     : null
 
   const noSisyphusGpt = isHookEnabled("no-sisyphus-gpt")
-    ? safeHook("no-sisyphus-gpt", () => createNoSisyphusGptHook(ctx))
+    ? safeHook("no-sisyphus-gpt", () =>
+        createNoSisyphusGptHook(ctx, { gptToHephaestus: pluginConfig.sisyphus_agent?.gpt_to_hephaestus }))
     : null
 
   const noHephaestusNonGpt = isHookEnabled("no-hephaestus-non-gpt")
