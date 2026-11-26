@@ -120,7 +120,7 @@ import type {
 
 type OpencodeClient = PluginInput["client"]
 
-type ResumeTaskSnapshot = {
+type ResumeTaskSnapshot = Pick<BackgroundTask, "attempts" | "currentAttemptID" | "groupId" | "runOutputSince"> & {
   prompt: string
   originalPrompt?: string
   queuedAt?: Date
@@ -270,8 +270,8 @@ export class BackgroundManager {
   private readonly resumesAwaitingAdmission = new Set<string>()
   private completedTaskArchive: Map<string, BackgroundTask> = new Map()
   private readonly taskGroups = new TaskGroupCollector()
-  /** The run each task last reported, so a run that ends twice (finished, then failed late) sends one notice. */
-  private readonly notifiedRuns = new Map<string, string>()
+  /** Reported runs, including older runs whose notices can overlap with a continuation. */
+  private readonly notifiedRuns = new Map<string, Set<string>>()
   private idleDeferralTimers: Map<string, ReturnType<typeof setTimeout>> = new Map()
   private notificationQueueByParent: Map<string, Promise<void>> = new Map()
   private readonly parentWakeNotifier: ParentWakeNotifier
@@ -549,6 +549,10 @@ export class BackgroundManager {
       completedAt: task.completedAt,
       error: task.error,
       startedAt: task.startedAt,
+      attempts: task.attempts,
+      currentAttemptID: task.currentAttemptID,
+      groupId: task.groupId,
+      runOutputSince: task.runOutputSince,
       progress: task.progress,
       parentSessionId: task.parentSessionId,
       parentMessageId: task.parentMessageId,
@@ -587,6 +591,10 @@ export class BackgroundManager {
     task.completedAt = snapshot.completedAt
     task.error = snapshot.error
     task.startedAt = snapshot.startedAt
+    task.attempts = snapshot.attempts
+    task.currentAttemptID = snapshot.currentAttemptID
+    task.groupId = snapshot.groupId
+    task.runOutputSince = snapshot.runOutputSince
     task.progress = snapshot.progress
     task.parentMessageId = snapshot.parentMessageId
     task.parentModel = snapshot.parentModel
@@ -1680,9 +1688,6 @@ The fallback retry session is now created and can be inspected directly.
     existingTask.concurrencyKey = concurrencyKey
     existingTask.concurrencyGroup = concurrencyKey
 
-    existingTask.status = "running"
-    existingTask.completedAt = undefined
-    existingTask.error = undefined
     this.updateTaskParent(existingTask, input.parentSessionId)
     existingTask.parentMessageId = input.parentMessageId
     existingTask.parentModel = input.parentModel
@@ -1690,11 +1695,10 @@ The fallback retry session is now created and can be inspected directly.
     if (input.parentTools) {
       existingTask.parentTools = input.parentTools
     }
-    // Reset startedAt on resume to prevent immediate completion
-    // The MIN_IDLE_TIME_MS check uses startedAt, so resumed tasks need fresh timing
-    existingTask.startedAt = new Date()
-    // The earlier run's answer stays in the session; until this run writes its own, the child is not done.
-    existingTask.runOutputSince = existingTask.startedAt.getTime()
+    const attempt = startAttempt(existingTask, existingTask.model)
+    bindAttemptSession(existingTask, attempt.attemptId, input.sessionId, existingTask.model)
+    existingTask.runOutputSince = attempt.startedAt?.getTime()
+    existingTask.groupId = undefined
     this.taskHistory.record(input.parentSessionId, {
       id: existingTask.id,
       sessionID: existingTask.sessionId,
@@ -1826,7 +1830,12 @@ The fallback retry session is now created and can be inspected directly.
         }
       })
       .catch(async (error) => {
-        if (this.shutdownTriggered || !this.taskRecovery.owns(input.sessionId, resumeGeneration)) return
+        if (
+          this.shutdownTriggered ||
+          existingTask.status !== "running" ||
+          !this.taskRecovery.owns(input.sessionId, resumeGeneration)
+        )
+          return
         log("[background-agent] resume prompt error:", error)
         const errorInfo = {
           name: extractErrorName(error),
@@ -1836,11 +1845,10 @@ The fallback retry session is now created and can be inspected directly.
         if (await this.tryFallbackRetry(existingTask, errorInfo, "promptAsync.resume")) {
           return
         }
+        if (existingTask.status !== "running" || existingTask.currentAttemptID !== attempt.attemptId) return
 
-        existingTask.status = "interrupt"
         const errorMessage = errorInfo.message ?? (error instanceof Error ? error.message : String(error))
-        existingTask.error = errorMessage
-        existingTask.completedAt = new Date()
+        finalizeAttempt(existingTask, attempt.attemptId, "interrupt", errorMessage)
         this.taskHistory.record(existingTask.parentSessionId, {
           id: existingTask.id,
           sessionID: existingTask.sessionId,
@@ -2712,9 +2720,7 @@ The task was re-queued on a fallback model after a retryable failure.
         { preferResponseOnMissingData: true },
       )
       const messages =
-        outputSince === undefined
-          ? all
-          : all.filter((message) => (message.info?.time?.created ?? 0) >= outputSince)
+        outputSince === undefined ? all : all.filter((message) => (message.info?.time?.created ?? 0) >= outputSince)
 
       // Check for at least one assistant or tool message
       const hasAssistantOrToolMessage = messages.some(
@@ -3098,7 +3104,8 @@ The task was re-queued on a fallback model after a retryable failure.
         task.concurrencyKey = undefined
       }
 
-      this.markForNotification(task)
+      const completedRun = { ...task, attempts: cloneAttempts(task) }
+      this.markForNotification(completedRun)
 
       const idleTimer = this.idleDeferralTimers.get(task.id)
       if (idleTimer) {
@@ -3133,7 +3140,9 @@ The task was re-queued on a fallback model after a retryable failure.
       }
 
       try {
-        await this.enqueueNotificationForParent(task.parentSessionId, () => this.notifyParentSession(task))
+        await this.enqueueNotificationForParent(completedRun.parentSessionId, () =>
+          this.notifyParentSession(completedRun),
+        )
         log(`[background-agent] Task completed via ${source}:`, task.id)
       } catch (err) {
         log("[background-agent] Error in notifyParentSession:", { taskId: task.id, error: err })
@@ -3153,21 +3162,26 @@ The task was re-queued on a fallback model after a retryable failure.
     if (this.shutdownTriggered || !this.taskRecovery.owns(task.sessionId)) return
     // A resume, a revived handoff and a fallback retry each start a new run with a new start time or attempt.
     const run = `${task.currentAttemptID ?? ""}:${task.startedAt?.getTime() ?? ""}`
-    if (this.notifiedRuns.get(task.id) === run) {
+    const notified = this.notifiedRuns.get(task.id) ?? new Set<string>()
+    if (notified.has(run)) {
       log("[background-agent] Skipped a second notice for a task run that already reported:", {
         taskId: task.id,
         status: task.status,
       })
       return
     }
-    this.notifiedRuns.set(task.id, run)
+    notified.add(run)
+    this.notifiedRuns.set(task.id, notified)
     const duration = formatDuration(task.startedAt ?? new Date(), task.completedAt)
 
     log("[background-agent] notifyParentSession called for task:", task.id)
 
     // Show toast notification
+    const currentTask = this.tasks.get(task.id) ?? task
+    const isCurrentRun = () =>
+      currentTask.currentAttemptID === task.currentAttemptID && currentTask.startedAt === task.startedAt
     const toastManager = getTaskToastManager()
-    if (toastManager) {
+    if (toastManager && isCurrentRun() && currentTask.status !== "pending") {
       toastManager.showCompletionToast({
         id: task.id,
         description: task.description,
@@ -3180,7 +3194,7 @@ The task was re-queued on a fallback model after a retryable failure.
     let allComplete = false
     let remainingCount = 0
     if (pendingSet) {
-      pendingSet.delete(task.id)
+      if (isCurrentRun() && currentTask.status !== "pending") pendingSet.delete(task.id)
       remainingCount = pendingSet.size
       allComplete = remainingCount === 0
       if (allComplete) {
@@ -3198,12 +3212,17 @@ The task was re-queued on a fallback model after a retryable failure.
 
     const result =
       task.sessionId && this.enableParentSessionNotifications
-        ? await readTaskNotificationResult(this.client, task.sessionId, this.directory, task.ownMessagesSince)
+        ? await readTaskNotificationResult(this.client, task.sessionId, task.cwd ?? this.directory, {
+            since: taskOutputSince(task),
+            through: task.completedAt?.getTime(),
+          })
         : undefined
     const fork = task.ownMessagesSince !== undefined
     if (fork && task.status === "completed" && this.enableParentSessionNotifications && result === undefined) {
       task.status = "error"
       task.error = "The fork ended without an answer of its own: nothing it wrote after the fork point could be read."
+      if (isCurrentRun() && currentTask.status === "completed")
+        Object.assign(currentTask, { status: task.status, error: task.error })
     }
     // A fork that did not finish with its own answer failed, whichever way it stopped.
     const statusText =
@@ -3232,7 +3251,7 @@ The task was re-queued on a fallback model after a retryable failure.
       grouped: this.taskGroups.isGrouped(task),
     })
     // The removal timer is independent of the notice and outlasts its delivery by minutes.
-    if (task.status !== "running" && task.status !== "pending") {
+    if (isCurrentRun() && currentTask.status !== "running" && currentTask.status !== "pending") {
       this.scheduleTaskRemoval(task.id)
     }
     if (grouped.kind === "hold") {
@@ -3696,7 +3715,9 @@ The task was re-queued on a fallback model after a retryable failure.
             sessionGoneFromStatus && (task.consecutiveMissedPolls ?? 0) >= MIN_SESSION_GONE_POLLS
           const completionSource =
             sessionStatus?.type === "idle" ? "polling (idle status)" : "polling (session gone from status)"
+          const startedAt = task.startedAt
           const hasValidOutput = await this.validateSessionHasOutput(sessionID, taskOutputSince(task))
+          if (task.startedAt !== startedAt) continue
           if (!hasValidOutput) {
             if (sessionGoneThresholdReached) {
               const sessionExists = await this.verifySessionExists(sessionID)
@@ -3740,6 +3761,7 @@ The task was re-queued on a fallback model after a retryable failure.
           if (task.status !== "running") continue
 
           const hasIncompleteTodos = await this.checkSessionTodos(sessionID)
+          if (task.startedAt !== startedAt) continue
           if (hasIncompleteTodos) {
             log("[background-agent] Task has incomplete todos via polling, waiting:", task.id)
             continue

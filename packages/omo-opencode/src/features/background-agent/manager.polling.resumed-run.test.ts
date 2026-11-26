@@ -3,6 +3,7 @@
 import { describe, test, expect } from "bun:test"
 import { tmpdir } from "node:os"
 import type { PluginInput } from "@opencode-ai/plugin"
+import { ensureCurrentAttempt } from "./attempt-lifecycle"
 import { BackgroundManager } from "./manager"
 import type { BackgroundTask } from "./types"
 
@@ -33,27 +34,35 @@ describe("BackgroundManager polling a resumed run", () => {
   const sessionId = "ses_resumed_child"
   const earlier = Date.now() - 60_000
 
-  function rig() {
+  function rig(options?: { readonly notify?: true; readonly holdAbort?: () => Promise<void> }) {
     const messages: StoredMessage[] = [
       { info: { role: "user", id: "msg_1", time: { created: earlier } }, parts: [{ type: "text", text: "go" }] },
       {
-        info: { role: "assistant", id: "msg_2", finish: "stop", time: { created: earlier + 1, completed: earlier + 2 } },
+        info: {
+          role: "assistant",
+          id: "msg_2",
+          finish: "stop",
+          time: { created: earlier + 1, completed: earlier + 2 },
+        },
         parts: [{ type: "text", text: "earlier answer" }],
       },
     ]
     const aborted: string[] = []
+    const resumeDispatched = Promise.withResolvers<void>()
     let prompted = 0
     const client = {
       session: {
-        status: async () => ({ data: {} }),
+        status: async () => ({ data: options?.notify ? { "parent-session": { type: "busy" } } : {} }),
         get: async () => ({ data: { id: sessionId } }),
         prompt: async () => ({}),
-        promptAsync: async () => {
+        promptAsync: async ({ path }: { path: { id: string } }) => {
           prompted += 1
+          if (path.id === sessionId) resumeDispatched.resolve()
           return {}
         },
         abort: async (input: { path: { id: string } }) => {
           aborted.push(input.path.id)
+          if (aborted.length === 1) await options?.holdAbort?.()
           return {}
         },
         todo: async () => ({ data: [] }),
@@ -63,7 +72,7 @@ describe("BackgroundManager polling a resumed run", () => {
     const manager = new BackgroundManager({
       pluginContext: createPluginContext(client),
       config: undefined,
-      enableParentSessionNotifications: false,
+      enableParentSessionNotifications: options?.notify ?? false,
     })
     const task: BackgroundTask = {
       id: "bg_resumed",
@@ -81,7 +90,7 @@ describe("BackgroundManager polling a resumed run", () => {
     manager["tasks"].set(task.id, task)
     // The earlier run's output was seen as it streamed.
     manager["markSessionOutputObserved"](sessionId)
-    return { manager, task, messages, aborted, promptCount: () => prompted }
+    return { manager, task, messages, aborted, resumeDispatched: resumeDispatched.promise, promptCount: () => prompted }
   }
 
   async function resume(manager: BackgroundManager): Promise<void> {
@@ -122,5 +131,74 @@ describe("BackgroundManager polling a resumed run", () => {
 
     expect(task.status).toBe("completed")
     await manager.shutdown()
+  })
+
+  function noticeResults(manager: BackgroundManager): Array<string | null> {
+    return manager
+      .listUndeliveredParentWakes()
+      .flatMap(({ notifications }) =>
+        notifications.map((text) => /<result>\n(.*?)\n<\/result>/s.exec(text)?.[1] ?? null),
+      )
+  }
+
+  test.each(["next answer", null])(
+    "#when an existing native task completes its continuation (%s) #then both finishes report only their own result",
+    async (answer) => {
+      const { manager, task, messages, resumeDispatched } = rig({ notify: true })
+      try {
+        task.status = "running"
+        task.completedAt = undefined
+        ensureCurrentAttempt(task)
+        await manager["pollRunningTasks"]()
+        expect(noticeResults(manager)).toEqual(["earlier answer"])
+
+        await resume(manager)
+        await resumeDispatched
+        const now = Date.now()
+        messages.push({
+          info: { role: "assistant", id: "msg_3", finish: "stop", time: { created: now, completed: now } },
+          parts: answer === null ? [] : [{ type: "text", text: answer }],
+        })
+        await manager["pollRunningTasks"]()
+
+        expect(noticeResults(manager)).toEqual(["earlier answer", answer])
+      } finally {
+        await manager.shutdown()
+      }
+    },
+  )
+
+  test("#given first completion is still being prepared #when the child resumes #then the old notice still reports the original result", async () => {
+    const abortEntered = Promise.withResolvers<void>()
+    const abortReleased = Promise.withResolvers<void>()
+    const { manager, task, messages, resumeDispatched } = rig({
+      notify: true,
+      holdAbort: () => {
+        abortEntered.resolve()
+        return abortReleased.promise
+      },
+    })
+    task.status = "running"
+    task.completedAt = undefined
+    ensureCurrentAttempt(task)
+    const firstCompletion = manager["pollRunningTasks"]()
+    try {
+      await abortEntered.promise
+      await resume(manager)
+      await resumeDispatched
+      messages.push({
+        info: { role: "assistant", id: "msg_3", time: { created: Date.now() + 1 } },
+        parts: [{ type: "text", text: "continued work in progress" }],
+      })
+      abortReleased.resolve()
+      await firstCompletion
+
+      expect(noticeResults(manager)).toEqual(["earlier answer"])
+      expect(manager.listUnfinishedTasks().map(({ id }) => id)).toEqual([task.id])
+    } finally {
+      abortReleased.resolve()
+      await firstCompletion
+      await manager.shutdown()
+    }
   })
 })

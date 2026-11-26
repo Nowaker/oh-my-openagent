@@ -38,14 +38,13 @@ export function capNotificationResult(
 }
 
 /**
- * The child's final answer for its completion notice, or undefined when it cannot be read. A fork child's session
- * starts with a copy of its parent, so `ownMessagesSince` leaves out every message created before the fork.
+ * The child's final answer from the finished run, or undefined if that run had no readable answer.
  */
 export async function readTaskNotificationResult(
   client: OpencodeClient,
   sessionID: string,
   directory: string,
-  ownMessagesSince?: number,
+  bounds: { readonly since?: number; readonly through?: number },
 ): Promise<BackgroundTaskNotificationResult | undefined> {
   try {
     const response = await messagesInDirectory(
@@ -58,10 +57,10 @@ export async function readTaskNotificationResult(
     )
     const messages = normalizeSDKResponse(response, [] as ResultMessage[], { preferResponseOnMissingData: true })
     const all = Array.isArray(messages) ? messages : []
-    const own =
-      ownMessagesSince === undefined
-        ? all
-        : all.filter((message) => (message.info?.time?.created ?? 0) >= ownMessagesSince)
+    const own = all.filter(({ info }) => {
+      const created = info?.time?.created ?? 0
+      return created >= (bounds.since ?? 0) && created <= (bounds.through ?? Infinity)
+    })
     const text = finalAssistantText(own)
     return text === undefined ? undefined : capNotificationResult(text)
   } catch (error) {
