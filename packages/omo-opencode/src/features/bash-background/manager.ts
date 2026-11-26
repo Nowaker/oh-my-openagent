@@ -1,5 +1,5 @@
 import { log } from "../../shared/logger"
-import type { BashBackgroundExited, BashBackgroundRecord, BashBackgroundStarted } from "./types"
+import type { BashBackgroundCancelRequest, BashBackgroundExited, BashBackgroundRecord, BashBackgroundStarted } from "./types"
 
 export const BASH_BACKGROUND_STARTED_EVENT = "shell.background.started"
 export const BASH_BACKGROUND_EXITED_EVENT = "shell.background.exited"
@@ -13,7 +13,7 @@ const EXITED_UNSEEN_LIMIT = 1_000
 
 export type BashBackgroundManagerDeps = {
   /** Stops a running background job; true when one was stopped. */
-  readonly cancelJob: (id: string) => Promise<boolean>
+  readonly cancelJob: (request: BashBackgroundCancelRequest) => Promise<boolean>
   readonly now?: () => number
 }
 
@@ -60,9 +60,15 @@ export class BashBackgroundManager {
     return this.live().filter((record) => record.sessionID === sessionID)
   }
 
-  async stop(id: string): Promise<boolean> {
-    const stopped = await this.deps.cancelJob(id)
-    this.running.delete(id)
+  async stop(id: string, sessionID: string): Promise<boolean> {
+    const record = this.get(id)
+    if (record && record.sessionID !== sessionID) return false
+
+    const stopped = await this.deps.cancelJob({
+      jobID: id,
+      ...(record?.cancelToolReceipt === 1 ? { toolResultForSessionID: sessionID } : {}),
+    })
+    if (stopped && record && this.running.get(id) === record) this.running.delete(id)
     return stopped
   }
 

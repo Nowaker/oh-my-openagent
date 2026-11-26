@@ -59,22 +59,6 @@ describe("BashBackgroundManager", () => {
     expect(manager.get("bash_1")).toBeUndefined()
   })
 
-  test("#given a running command #when stop() is called #then it is cancelled through the route and no longer listed", async () => {
-    // given
-    const cancelJob = mock(async (_id: string) => true)
-    const manager = new BashBackgroundManager({ cancelJob })
-    await manager.handleEvent(started("bash_2"))
-
-    // when
-    const stopped = await manager.stop("bash_2")
-    await manager.handleEvent(exited("bash_2", { status: "cancelled", exitCode: undefined }))
-
-    // then
-    expect(stopped).toBe(true)
-    expect(cancelJob).toHaveBeenCalledWith("bash_2")
-    expect(manager.list("ses_parent")).toEqual([])
-  })
-
   test("#given commands of two sessions #when one session is forgotten #then only the other's remain", async () => {
     const manager = new BashBackgroundManager({ cancelJob: async () => true })
     await manager.handleEvent(started("bash_a", "ses_a"))
@@ -120,7 +104,7 @@ describe("BashBackgroundManager", () => {
   test("#given a record past its timeout plus the margin #when every session's commands are listed #then it is gone", async () => {
     // given
     let now = 1_000_000
-    const manager = new BashBackgroundManager({ notify: async () => {}, cancelJob: async () => true, now: () => now })
+    const manager = new BashBackgroundManager({ cancelJob: async () => true, now: () => now })
     await manager.handleEvent(started("bash_capped", "ses_a"))
 
     // when
@@ -132,26 +116,63 @@ describe("BashBackgroundManager", () => {
   })
 })
 
-describe("cancelBackgroundJob", () => {
-  test("#given the SDK transport #when a job is cancelled #then it posts to the cancel route and returns the route's answer", async () => {
-    // given
+describe("BashBackgroundManager stop through the owner SDK", () => {
+  const route = { url: "/experimental/background/{jobID}/cancel", path: { jobID: "bash_9" } }
+  const directory = "/work/project"
+  const parent = "ses_parent"
+
+  test.each([
+    { name: "without an advertisement", tracked: true, advertisement: undefined, query: { directory } },
+    { name: "with a version-1 advertisement", tracked: true, advertisement: 1, query: { directory, toolResultForSessionID: parent } },
+    { name: "with a string instead of version 1", tracked: true, advertisement: "1", query: { directory } },
+    { name: "with no local start record", tracked: false, advertisement: undefined, query: { directory } },
+  ])("sends one request and retires a confirmed stop $name", async ({ tracked, advertisement, query }) => {
     const post = mock(async (_options: unknown) => ({ data: true }))
-    const client = { _client: { post } }
-
-    // when
-    const stopped = await cancelBackgroundJob(client, "/work/project", "bash_9")
-
-    // then
-    expect(stopped).toBe(true)
-    expect(post).toHaveBeenCalledWith({
-      url: "/experimental/background/{jobID}/cancel",
-      path: { jobID: "bash_9" },
-      query: { directory: "/work/project" },
+    const manager = new BashBackgroundManager({
+      cancelJob: (request) => cancelBackgroundJob({ _client: { post } }, directory, request),
     })
+    if (tracked) {
+      const event = started("bash_9", parent)
+      await manager.handleEvent({ ...event, properties: { ...event.properties, cancelToolReceipt: advertisement } })
+    }
+
+    expect(await manager.stop("bash_9", parent)).toBe(true)
+    expect(post.mock.calls).toEqual([[{ ...route, query }]])
+    expect(manager.list(parent)).toEqual([])
   })
 
-  test("#given the route answers with an error #when cancelled #then the error is raised", async () => {
-    const client = { _client: { post: async () => ({ error: { name: "NotFound" } }) } }
-    await expect(cancelBackgroundJob(client, "/work", "bash_9")).rejects.toThrow("refused to stop bash_9")
+  test("refuses a stop if the current record belongs to a different session", async () => {
+    const post = mock(async (_options: unknown) => ({ data: true }))
+    const manager = new BashBackgroundManager({
+      cancelJob: (request) => cancelBackgroundJob({ _client: { post } }, directory, request),
+    })
+    const event = started("bash_9", "ses_other")
+    await manager.handleEvent({ ...event, properties: { ...event.properties, cancelToolReceipt: 1 } })
+
+    expect(await manager.stop("bash_9", parent)).toBe(false)
+    expect(post.mock.calls).toEqual([])
+    expect(manager.list("ses_other").map(({ id }) => id)).toEqual(["bash_9"])
+  })
+
+  test.each([
+    { name: "false", answer: async () => ({ data: false }) },
+    { name: "SDK rejection", answer: async () => ({ error: { name: "NotFound" } }) },
+    { name: "transport failure", answer: async () => { throw new Error("Owner SDK unavailable") } },
+  ])("keeps the running record until exit after $name, without retrying", async ({ name, answer }) => {
+    const post = mock(async (_options: unknown) => answer())
+    const manager = new BashBackgroundManager({
+      cancelJob: (request) => cancelBackgroundJob({ _client: { post } }, directory, request),
+    })
+    const event = started("bash_9", parent)
+    await manager.handleEvent({ ...event, properties: { ...event.properties, cancelToolReceipt: 1 } })
+
+    const stopping = manager.stop("bash_9", parent)
+    if (name === "false") await expect(stopping).resolves.toBe(false)
+    else await expect(stopping).rejects.toThrow(name === "SDK rejection" ? "refused to stop bash_9" : "Owner SDK unavailable")
+
+    expect(post.mock.calls).toEqual([[{ ...route, query: { directory, toolResultForSessionID: parent } }]])
+    expect(manager.list(parent).map(({ id }) => id)).toEqual(["bash_9"])
+    await manager.handleEvent(exited("bash_9"))
+    expect(manager.list(parent)).toEqual([])
   })
 })

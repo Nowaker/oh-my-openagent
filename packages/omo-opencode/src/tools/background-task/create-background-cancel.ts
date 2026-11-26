@@ -30,7 +30,7 @@ async function cancelBashCommand(
   if (!bashManager || !id.startsWith("bash_")) return undefined
   const record = bashManager.get(id)
   if (record && record.sessionID !== sessionID) return undefined
-  if (!(await bashManager.stop(id))) return `[ERROR] Cannot stop ${id}: it is not running.`
+  if (!(await bashManager.stop(id, sessionID))) return `[ERROR] OpenCode did not confirm stopping ${id}.`
   return `Background command stopped
 
 Command ID: ${id}${record ? `\nCommand: ${record.command}\nOutput file: ${record.outputPath}` : ""}`
@@ -57,6 +57,11 @@ export function createBackgroundCancel(
         ),
     },
     async execute(args: BackgroundCancelArgs, toolContext) {
+      const stoppedCommands: string[] = []
+      const bashStopReceipt = () =>
+        stoppedCommands.length > 0
+          ? `Stopped ${stoppedCommands.length} background command(s): ${stoppedCommands.map((id) => `\`${id}\``).join(", ")}\n\n`
+          : ""
       try {
         const cancelAll = args.all === true
 
@@ -71,17 +76,14 @@ export function createBackgroundCancel(
           for (const record of runningMonitors) {
             await monitorManager?.stop(record.id)
           }
-          const stoppedCommands: string[] = []
           for (const record of bashManager?.list(toolContext.sessionID) ?? []) {
-            if (await bashManager?.stop(record.id)) stoppedCommands.push(record.id)
+            if (await bashManager?.stop(record.id, toolContext.sessionID)) stoppedCommands.push(record.id)
           }
           const monitorsLine = [
             runningMonitors.length > 0
               ? `Stopped ${runningMonitors.length} monitor(s): ${runningMonitors.map((record) => `\`${record.id}\``).join(", ")}\n\n`
               : "",
-            stoppedCommands.length > 0
-              ? `Stopped ${stoppedCommands.length} background command(s): ${stoppedCommands.map((id) => `\`${id}\``).join(", ")}\n\n`
-              : "",
+            bashStopReceipt(),
           ].join("")
 
           if (cancellableTasks.length === 0) {
@@ -177,7 +179,7 @@ Description: ${task.description}
 Session ID: ${task.sessionId}
 Status: ${task.status}`
       } catch (error) {
-        return `[ERROR] Error cancelling task: ${error instanceof Error ? error.message : String(error)}`
+        return `${bashStopReceipt()}[ERROR] Error cancelling task: ${error instanceof Error ? error.message : String(error)}`
       }
     },
   })

@@ -220,7 +220,7 @@ export function createManagers(args: {
   })
 
   const bashBackgroundManager = new BashBackgroundManager({
-    cancelJob: (id) => cancelBackgroundJob(ctx.client, ctx.directory, id),
+    cancelJob: (request) => cancelBackgroundJob(ctx.client, ctx.directory, request),
   })
   const runningJobsLedger = createRunningJobsLedger({
     backgroundManager,

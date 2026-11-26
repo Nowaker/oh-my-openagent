@@ -1,7 +1,12 @@
 import { describe, expect, mock, test } from "bun:test"
 import { unsafeTestValue } from "../../../../../test-support/unsafe-test-value"
 import type { BackgroundManager } from "../../features/background-agent"
-import { BashBackgroundManager, BASH_BACKGROUND_STARTED_EVENT } from "../../features/bash-background"
+import {
+  BashBackgroundManager,
+  BASH_BACKGROUND_STARTED_EVENT,
+  type BashBackgroundCancelRequest,
+  type BashBackgroundStarted,
+} from "../../features/bash-background"
 import { createBackgroundCancel } from "./create-background-cancel"
 
 const backgroundManager = unsafeTestValue<BackgroundManager>({
@@ -10,10 +15,18 @@ const backgroundManager = unsafeTestValue<BackgroundManager>({
 })
 const context = unsafeTestValue({ sessionID: "ses_parent" })
 
-async function withCommands(...commands: Array<{ id: string; sessionID: string }>) {
-  const cancelJob = mock(async (_id: string) => true)
+type Command = Pick<BashBackgroundStarted, "id" | "sessionID" | "cancelToolReceipt"> & {
+  readonly stopError?: string
+}
+
+async function withCommands(...commands: Command[]) {
+  const cancelJob = mock(async (request: BashBackgroundCancelRequest) => {
+    const stopError = commands.find(({ id }) => id === request.jobID)?.stopError
+    if (stopError) throw new Error(stopError)
+    return true
+  })
   const bash = new BashBackgroundManager({ cancelJob })
-  for (const { id, sessionID } of commands) {
+  for (const { id, sessionID, cancelToolReceipt } of commands) {
     await bash.handleEvent({
       type: BASH_BACKGROUND_STARTED_EVENT,
       properties: {
@@ -25,6 +38,7 @@ async function withCommands(...commands: Array<{ id: string; sessionID: string }
         outputPath: `/tmp/${id}`,
         reason: "requested",
         timeoutMs: null,
+        cancelToolReceipt,
       },
     })
   }
@@ -34,20 +48,20 @@ async function withCommands(...commands: Array<{ id: string; sessionID: string }
 describe("background_cancel with a background bash command id", () => {
   test("#given a running command of this session #when its id is cancelled #then the command is stopped", async () => {
     // given
-    const { cancel, cancelJob } = await withCommands({ id: "bash_1", sessionID: "ses_parent" })
+    const { cancel, cancelJob } = await withCommands({ id: "bash_1", sessionID: "ses_parent", cancelToolReceipt: 1 })
 
     // when
     const result = await cancel.execute({ taskId: "bash_1" }, context)
 
     // then
-    expect(cancelJob).toHaveBeenCalledWith("bash_1")
+    expect(cancelJob.mock.calls).toEqual([[{ jobID: "bash_1", toolResultForSessionID: "ses_parent" }]])
     expect(result).toContain("Background command stopped")
     expect(result).toContain("Output file: /tmp/bash_1")
   })
 
   test("#given another session's command #when its id is cancelled here #then it is left running", async () => {
     // given
-    const { cancel, cancelJob } = await withCommands({ id: "bash_2", sessionID: "ses_other" })
+    const { cancel, cancelJob } = await withCommands({ id: "bash_2", sessionID: "ses_other", cancelToolReceipt: 1 })
 
     // when
     const result = await cancel.execute({ taskId: "bash_2" }, context)
@@ -61,14 +75,36 @@ describe("background_cancel with a background bash command id", () => {
     // given
     const { cancel, cancelJob } = await withCommands(
       { id: "bash_3", sessionID: "ses_parent" },
-      { id: "bash_4", sessionID: "ses_other" },
+      { id: "bash_4", sessionID: "ses_other", cancelToolReceipt: 1 },
+      { id: "bash_5", sessionID: "ses_parent", cancelToolReceipt: 1 },
     )
 
     // when
     const result = await cancel.execute({ all: true }, context)
 
     // then
-    expect(cancelJob.mock.calls.map(([id]) => id)).toEqual(["bash_3"])
-    expect(result).toContain("Stopped 1 background command(s)")
+    expect(cancelJob.mock.calls).toEqual([
+      [{ jobID: "bash_3" }],
+      [{ jobID: "bash_5", toolResultForSessionID: "ses_parent" }],
+    ])
+    expect(result).toContain("Stopped 2 background command(s)")
+  })
+
+  test("returns a confirmed Bash job ID even if the next stop throws", async () => {
+    const { bash, cancel, cancelJob } = await withCommands(
+      { id: "bash_confirmed", sessionID: "ses_parent", cancelToolReceipt: 1 },
+      { id: "bash_refused", sessionID: "ses_parent", cancelToolReceipt: 1, stopError: "Owner refused" },
+    )
+
+    const result = await cancel.execute({ all: true }, context)
+
+    expect(result).toContain("`bash_confirmed`")
+    expect(result).toContain("[ERROR]")
+    expect(result).not.toContain("`bash_refused`")
+    expect(cancelJob.mock.calls).toEqual([
+      [{ jobID: "bash_confirmed", toolResultForSessionID: "ses_parent" }],
+      [{ jobID: "bash_refused", toolResultForSessionID: "ses_parent" }],
+    ])
+    expect(bash.list("ses_parent").map(({ id }) => id)).toEqual(["bash_refused"])
   })
 })

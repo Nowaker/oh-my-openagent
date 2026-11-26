@@ -8,6 +8,7 @@ export type BashBackgroundStarted = {
   outputPath: string
   reason: "requested" | "timeout"
   timeoutMs: number | null
+  cancelToolReceipt?: 1
 }
 
 /** `shell.background.exited`: `output` is the tail of what the command printed. */
@@ -23,3 +24,8 @@ export type BashBackgroundExited = {
 }
 
 export type BashBackgroundRecord = BashBackgroundStarted & { startedAt: number }
+
+export type BashBackgroundCancelRequest = {
+  readonly jobID: string
+  readonly toolResultForSessionID?: string
+}
