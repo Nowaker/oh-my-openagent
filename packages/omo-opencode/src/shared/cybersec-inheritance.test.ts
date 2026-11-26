@@ -58,3 +58,23 @@ describe("inheritCybersecFallbackChain", () => {
     expect(inheritCybersecFallbackChain({ providerID: "anthropic", modelID: "claude-opus-5-5" }, chain, context)).toBe(chain)
   })
 })
+
+describe("anthropic-restricted parents", () => {
+  const RESTRICTED_PARENT = { providerID: "anthropic-restricted", modelID: "claude-opus-5-5" }
+
+  it("keep an anthropic child on anthropic-restricted, so it never spends a CVP account's allowance", () => {
+    const child = { providerID: "anthropic", modelID: "claude-sonnet-5-5", variant: "max" }
+    expect(inheritCybersecModel(RESTRICTED_PARENT, child, context)).toEqual({ providerID: "anthropic-restricted", modelID: "claude-sonnet-5-5", variant: "max" })
+  })
+
+  it("swap anthropic for anthropic-restricted in listed fallback entries only", () => {
+    const chain = [
+      { providers: ["anthropic"], model: "claude-opus-5-5" },
+      { providers: ["anthropic"], model: "claude-haiku-5-5" },
+    ]
+    expect(inheritCybersecFallbackChain(RESTRICTED_PARENT, chain, context)).toEqual([
+      { providers: ["anthropic-restricted"], model: "claude-opus-5-5" },
+      { providers: ["anthropic"], model: "claude-haiku-5-5" },
+    ])
+  })
+})

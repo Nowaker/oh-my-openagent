@@ -308,7 +308,7 @@ export function createDelegateTask(options: DelegateTaskToolOptions): ToolDefini
 
       if (isCybersecModel(parentContext.model)) {
         /* With no resolved model the child runs on the engine's default model,
-           so that is the one that would leave anthropic-cybersec. */
+           so that is the one that would leave the parent's provider. */
         const derived = categoryModel ?? parseModelString(systemDefaultModel ?? "")
         const cybersecContext = { sessionID: parentContext.sessionID, agent: agentToUse }
         const inherited = inheritCybersecModel(parentContext.model, derived, cybersecContext)

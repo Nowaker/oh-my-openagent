@@ -112,8 +112,9 @@ function resolveModelAndFallbackChain(args: {
 }
 
 /**
- * Under a parent on `anthropic-cybersec`, an anthropic model or fallback entry
- * resolved for the child moves to `anthropic-cybersec` when listed there
+ * Under a parent on `anthropic-cybersec` or `anthropic-restricted`, an anthropic
+ * model or fallback entry resolved for the child moves to the parent's provider
+ * when listed there
  * (`../../shared/cybersec-inheritance`).
  */
 async function inheritParentCybersec(
