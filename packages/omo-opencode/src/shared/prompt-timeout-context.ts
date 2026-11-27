@@ -1,8 +1,11 @@
+import type { PromptOrigin } from "./prompt-origin"
+
 export interface PromptTimeoutArgs {
   signal?: AbortSignal
 }
 
 export interface PromptRetryOptions {
+  readonly promptOrigin?: PromptOrigin
   timeoutMs?: number
   queueBehavior?: "enqueue" | "defer"
   checkStatus?: boolean

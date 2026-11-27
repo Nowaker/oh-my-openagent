@@ -67,6 +67,28 @@ describe("runtime fallback retry source hygiene", () => {
     expect(getLastUserRetryParts(onlySyntheticContinuations)).toEqual([])
   })
 
+  test.each([
+    { label: "valid origin", version: "5.1.0-beta.1+build", latestParts: [{ type: "text", text: "latest" }], carries: true },
+    { label: "untagged attachment", version: undefined, latestParts: [{ type: "file" }], carries: false },
+    { label: "untagged text", version: undefined, latestParts: [{ type: "text", text: "latest" }], carries: false },
+    { label: "unsafe version", version: "5.1.0\nheader", latestParts: [{ type: "text", text: "latest" }], carries: false },
+  ])("preserves only the valid origin of the replayed latest user: $label", ({ version, latestParts, carries }) => {
+    const latestOrigin = version === undefined ? undefined : { client: "oh-my-openagent", version, purpose: "helper" } as const
+    const result = resolveOriginalUserRetryMetadata({ data: [
+      {
+        info: { id: "older", role: "user", promptOrigin: { client: "oh-my-openagent", version: "5.0.0", purpose: "subagent" } },
+        parts: [{ type: "text", text: "older" }],
+      },
+      { info: { id: "latest", role: "user", promptOrigin: latestOrigin }, parts: latestParts },
+    ] })
+    const isAttachment = latestParts[0]?.type === "file"
+    expect(result).toEqual({
+      messageID: isAttachment ? "older" : "latest",
+      parts: [{ type: "text", text: isAttachment ? "older" : "latest" }],
+      ...(carries ? { promptOrigin: latestOrigin } : {}),
+    })
+  })
+
   test("keeps a retry-marked row when its text still contains the real prompt", () => {
     const markedPrompt = {
       data: [

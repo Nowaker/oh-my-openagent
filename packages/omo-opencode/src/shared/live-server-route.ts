@@ -2,6 +2,7 @@ import { createOpencodeClient as createOpencodeClientSdk } from "@opencode-ai/sd
 import { subagentSessions } from "../features/claude-code-session-state/state"
 import { getServerBasicAuthHeader, injectServerAuthIntoClient } from "./opencode-server-auth"
 import { log } from "./logger"
+import { registerPromptOriginClient, supportsPromptOrigin } from "./prompt-origin"
 
 const PROBE_TTL_MS = 60_000
 const PROBE_ABORT_MS = 1_500
@@ -21,6 +22,7 @@ type SessionAffinityEntry = {
 type RouteRegistration = {
   serverUrl: URL | undefined
   directory: string
+  readonly supportsPromptOrigin: boolean
   liveClient: unknown
   available: boolean | undefined
   probeTimestamp: number
@@ -68,6 +70,7 @@ export function initLiveServerRoute(opts: {
   const registration: RouteRegistration = {
     serverUrl: opts.serverUrl,
     directory: opts.directory,
+    supportsPromptOrigin: supportsPromptOrigin(opts.inProcessClient),
     liveClient: undefined,
     available: undefined,
     probeTimestamp: 0,
@@ -247,6 +250,8 @@ function getOrBuildLiveClient(registration: RouteRegistration): unknown {
     directory: registration.directory,
   })
   injectServerAuthIntoClient(client)
+  // Capable v1 engines expose only their own bound URL here; a portless engine exposes none.
+  if (registration.supportsPromptOrigin) registerPromptOriginClient(client)
   registration.liveClient = client
   return registration.liveClient
 }

@@ -3,6 +3,7 @@ import { extractSessionMessages } from "./session-messages"
 import { hasCompactionPart } from "../../shared/compaction-marker"
 import { hasRuntimeFallbackRetryMarker, hasSubstantivePromptText } from "../../shared/runtime-fallback-retry-marker"
 import { log } from "../../shared/logger"
+import { parseStoredPromptOrigin, type PromptOrigin } from "../../shared/prompt-origin"
 
 export type RetryPromptPart = { type: "text"; text: string; id?: string }
 
@@ -11,6 +12,7 @@ type UserRetryPartRecord = Record<string, unknown> & { type: "text"; text: strin
 export function resolveOriginalUserRetryMetadata(messagesResponse: unknown): {
   messageID?: string
   parts: RetryPromptPart[]
+  readonly promptOrigin?: PromptOrigin
 } {
   const messages = extractSessionMessages(messagesResponse)
   const lastUserMessage = messages
@@ -56,8 +58,11 @@ export function resolveOriginalUserRetryMetadata(messagesResponse: unknown): {
       ...(typeof part["id"] === "string" ? { id: part["id"] } : {}),
     }))
 
+  const latestUser = messages?.findLast((message) => message.info?.role === "user")
+  const promptOrigin = lastUserMessage === latestUser ? parseStoredPromptOrigin(latestUser?.info?.promptOrigin) : undefined
   return {
     ...(messageID ? { messageID } : {}),
     parts,
+    ...(promptOrigin ? { promptOrigin } : {}),
   }
 }

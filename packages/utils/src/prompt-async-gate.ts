@@ -128,6 +128,8 @@ export async function dispatchInternalPrompt<TInput = PromptAsyncInput>(
   const sessionName = args.mode === "async" ? "promptAsync" : "prompt"
   const resolved =
     tryResolveDispatchClientSync(args.client, sessionID) ?? (await resolveDispatchClient(args.client, sessionID))
+  const mapInput = (target: unknown, dispatchInput: TInput) =>
+    args.mapInputForClient ? args.mapInputForClient(target, dispatchInput) : dispatchInput
   const dispatch = (() => {
     if (args.mode === "async") {
       const resolvedAsAsync = resolved.client as PromptAsyncClient<TInput>
@@ -141,13 +143,13 @@ export async function dispatchInternalPrompt<TInput = PromptAsyncInput>(
         return async (dispatchInput: TInput) => {
           log(LIVE_ROUTE_DISPATCH_LOG, { sessionID, source })
           try {
-            return await dispatchPromptAsync(dispatchInput)
+            return await dispatchPromptAsync(mapInput(resolved.client, dispatchInput))
           } catch (error) {
             if (isPreSendConnectionFailure(error)) {
               markLiveRouteUnavailable(`dispatch:${error instanceof Error ? error.message : String(error)}`)
               if (typeof originalSession?.promptAsync === "function") {
                 const fallbackDispatch = originalSession.promptAsync.bind(originalSession)
-                return fallbackDispatch(dispatchInput)
+                return fallbackDispatch(mapInput(client, dispatchInput))
               }
             }
             throw error
@@ -157,7 +159,7 @@ export async function dispatchInternalPrompt<TInput = PromptAsyncInput>(
       if (resolved.reason === "unavailable") {
         log(LIVE_ROUTE_UNAVAILABLE_LOG, { sessionID, source })
       }
-      return (dispatchInput: TInput) => dispatchPromptAsync(dispatchInput)
+      return (dispatchInput: TInput) => dispatchPromptAsync(mapInput(resolved.client, dispatchInput))
     }
 
     const resolvedAsSync = resolved.client as PromptClient<TInput>
@@ -171,13 +173,13 @@ export async function dispatchInternalPrompt<TInput = PromptAsyncInput>(
       return async (dispatchInput: TInput) => {
         log(LIVE_ROUTE_DISPATCH_LOG, { sessionID, source })
         try {
-          return await dispatchPrompt(dispatchInput)
+          return await dispatchPrompt(mapInput(resolved.client, dispatchInput))
         } catch (error) {
           if (isPreSendConnectionFailure(error)) {
             markLiveRouteUnavailable(`dispatch:${error instanceof Error ? error.message : String(error)}`)
             if (typeof originalSession?.prompt === "function") {
               const fallbackDispatch = originalSession.prompt.bind(originalSession)
-              return fallbackDispatch(dispatchInput)
+              return fallbackDispatch(mapInput(client, dispatchInput))
             }
           }
           throw error
@@ -187,7 +189,7 @@ export async function dispatchInternalPrompt<TInput = PromptAsyncInput>(
     if (resolved.reason === "unavailable") {
       log(LIVE_ROUTE_UNAVAILABLE_LOG, { sessionID, source })
     }
-    return (dispatchInput: TInput) => dispatchPrompt(dispatchInput)
+    return (dispatchInput: TInput) => dispatchPrompt(mapInput(resolved.client, dispatchInput))
   })()
 
   if (!dispatch) {

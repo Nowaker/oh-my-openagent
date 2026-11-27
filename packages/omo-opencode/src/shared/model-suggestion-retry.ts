@@ -8,6 +8,7 @@ import {
   releasePromptAsyncReservation,
 } from "./prompt-async-gate"
 import { isAmbiguousPostDispatchPromptFailure } from "./prompt-failure-classifier"
+import { promptOriginDispatchOptions } from "./prompt-origin"
 
 export type { ModelSuggestionInfo } from "@oh-my-opencode/model-core"
 export { parseModelSuggestionFromCore as parseModelSuggestion }
@@ -86,6 +87,7 @@ export async function promptWithModelSuggestionRetry(
       },
       source: "model-suggestion-retry",
       settleMs: 0,
+      ...promptOriginDispatchOptions(options.promptOrigin),
       ...(options.queueBehavior ? { queueBehavior: options.queueBehavior } : {}),
       ...(options.checkStatus !== undefined ? { checkStatus: options.checkStatus } : {}),
       ...(options.checkToolState !== undefined ? { checkToolState: options.checkToolState } : {}),
@@ -124,6 +126,7 @@ export async function promptSyncWithModelSuggestionRetry(
   options: PromptRetryOptions = {},
 ): Promise<void> {
   const timeoutMs = options.timeoutMs ?? PROMPT_TIMEOUT_MS
+  const originDispatch = promptOriginDispatchOptions(options.promptOrigin)
 
   try {
     const timeoutContext = createPromptTimeoutContext(args, timeoutMs)
@@ -138,6 +141,7 @@ export async function promptSyncWithModelSuggestionRetry(
         },
         source: "model-suggestion-retry:sync",
         settleMs: 0,
+        ...originDispatch,
         checkStatus: false,
         checkToolState: false,
         ...(options.queueBehavior ? { queueBehavior: options.queueBehavior } : {}),
@@ -204,6 +208,7 @@ export async function promptSyncWithModelSuggestionRetry(
         },
         source: "model-suggestion-retry:sync-retry",
         settleMs: 0,
+        ...originDispatch,
         checkStatus: false,
         checkToolState: false,
         ...(options.queueBehavior ? { queueBehavior: options.queueBehavior } : {}),

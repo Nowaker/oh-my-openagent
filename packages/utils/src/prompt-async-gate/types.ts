@@ -42,6 +42,7 @@ export type PromptSessionName = "promptAsync" | "prompt"
 type InternalPromptDispatchCommonArgs<TInput> = {
   readonly sessionID: string
   readonly input: TInput
+  readonly mapInputForClient?: (client: unknown, input: NoInfer<TInput>) => NoInfer<TInput>
   readonly source: string
   readonly dedupeKey?: string
   readonly queueBehavior?: InternalPromptQueueBehavior
