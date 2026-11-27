@@ -22,6 +22,7 @@ import {
 } from "../../shared/delegated-child-session-bootstrap"
 import { resolveMessageEventSessionID, resolveSessionEventID } from "../../shared/event-session-id"
 import { hasMoreFallbacks, shouldRetryError } from "../../shared/model-error-classifier"
+import { createPromptOrigin, promptOriginDispatchOptions } from "../../shared/prompt-origin"
 import {
   awaitLateRuntimeFallbackRecoveryDecision,
   awaitRuntimeFallbackRecoveryDecision,
@@ -1046,6 +1047,7 @@ The fallback retry session is now created and can be inspected directly.
       tools: launchTools,
       parts: [createInternalAgentTextPart(input.prompt)],
     }
+    const promptOrigin = createPromptOrigin("subagent")
 
     this.taskRecovery
       .dispatch(
@@ -1055,6 +1057,7 @@ The fallback retry session is now created and can be inspected directly.
           query: { directory: childDirectory },
         },
         launchGeneration,
+        promptOrigin,
       )
       .catch(async (error) => {
         if (this.shutdownTriggered || !this.taskRecovery.owns(sessionID, launchGeneration)) return
@@ -1092,6 +1095,7 @@ The fallback retry session is now created and can be inspected directly.
                 query: { directory: childDirectory },
               },
               fallbackGeneration,
+              promptOrigin,
             )
             return
           } catch (retryError) {
@@ -1762,6 +1766,7 @@ The fallback retry session is now created and can be inspected directly.
       sessionID: existingTask.sessionId,
       source: "background-agent-resume",
       settleMs: 0,
+      ...promptOriginDispatchOptions(createPromptOrigin("subagent")),
       queueBehavior: "defer",
       checkToolState: !recovered,
       shouldDispatch: () => !this.shutdownTriggered && this.taskRecovery.owns(input.sessionId, resumeGeneration),

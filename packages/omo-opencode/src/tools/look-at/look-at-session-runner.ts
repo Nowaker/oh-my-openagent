@@ -1,6 +1,7 @@
 import type { PluginInput } from "@opencode-ai/plugin"
 import type { ToolContext } from "@opencode-ai/plugin/tool"
 import { isAmbiguousPromptDispatchFailure, log, promptSyncWithModelSuggestionRetry } from "../../shared"
+import { createPromptOrigin } from "../../shared/prompt-origin"
 import { extractLatestAssistantText } from "./assistant-message-extractor"
 import { MULTIMODAL_LOOKER_AGENT } from "./constants"
 import { READ_ENABLED, buildLookAtPrompt } from "./look-at-prompt"
@@ -112,6 +113,7 @@ async function collectLookAtResult(dispatch: LookAtDispatch): Promise<string> {
         },
       },
       {
+        promptOrigin: createPromptOrigin("helper"),
         queueBehavior: "defer",
       },
     )

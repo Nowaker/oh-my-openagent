@@ -15,6 +15,7 @@ import {
 } from "../../shared/delegated-child-session-bootstrap"
 import type { FallbackEntry } from "../../shared/model-requirements"
 import type { DelegatedModelConfig } from "../../shared/model-resolution-types"
+import { createPromptOrigin, promptOriginDispatchOptions } from "../../shared/prompt-origin"
 import { applySessionPromptParams } from "../../shared/session-prompt-params-helpers"
 import { deleteSessionTools, setSessionTools } from "../../shared/session-tools-store"
 import type { BackgroundManager } from "../../features/background-agent"
@@ -194,6 +195,7 @@ export async function executeSync(
         sessionID,
         source: "call-omo-agent:sync",
         settleMs: 0,
+        ...promptOriginDispatchOptions(createPromptOrigin("subagent")),
         queueBehavior: "defer",
         input: {
           path: { id: sessionID },

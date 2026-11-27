@@ -34,6 +34,7 @@ import { migrateLegacyWorkspaceDirectory } from "../shared/legacy-workspace-migr
 import { sweepOmoFamiliesBestEffort } from "../shared/omo-process-sweep"
 import { injectServerAuthIntoClient } from "../shared/opencode-server-auth"
 import { recordPluginTelemetry } from "../shared/posthog"
+import { registerPromptOriginClient } from "../shared/prompt-origin"
 import { initLiveServerRoute, setLiveParentWakeRoutingDisabled, warmLiveServerProbe } from "../shared/live-server-route"
 import { startBackgroundCheck as startTmuxCheck } from "../tools/interactive-bash"
 import { runOpenCodeStartupMigration } from "../startup-migration"
@@ -244,6 +245,7 @@ export function createPluginModule(overrides: Partial<PluginModuleDeps> = {}): P
         error: error instanceof Error ? error.message : String(error),
       })
     }
+    if ("promptOrigin" in input && input.promptOrigin === 1) registerPromptOriginClient(input.client)
     deps.initLiveServerRoute({ serverUrl: input.serverUrl, directory: input.directory, inProcessClient: input.client })
     deps.setLiveParentWakeRoutingDisabled(pluginConfig.experimental?.disable_live_parent_wake_routing === true)
     deps.warmLiveServerProbe()

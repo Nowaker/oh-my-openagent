@@ -17,6 +17,7 @@ import {
   type InternalPromptDispatchResult,
 } from "../shared/prompt-async-gate"
 import { isAmbiguousPostDispatchPromptFailure } from "../../shared/prompt-failure-classifier"
+import { promptOriginDispatchOptions } from "../../shared/prompt-origin"
 import { resolveOriginalUserRetryMetadata } from "./auto-retry-metadata"
 import { stringifyRuntimeModelWithVariant } from "./fallback-state"
 import { resolveRuntimeModelSettings } from "./runtime-model-settings"
@@ -142,6 +143,7 @@ export function createAutoRetryDispatcher(
       // Our own abort leaves a dangling assistant turn with no terminal error, which
       // the gate's assistant-active check would treat as blocking forever. Skip it.
       const wasInternallyAborted = internallyAbortedSessions.has(sessionID)
+      const originDispatch = promptOriginDispatchOptions(usingFetchedUserParts ? originalRetryMetadata.promptOrigin : undefined)
       const dispatchRetryPrompt = (retrySource: string, queueBehavior?: "defer") =>
         dispatchInternalPrompt({
           mode: "async",
@@ -149,6 +151,7 @@ export function createAutoRetryDispatcher(
           sessionID,
           source: retrySource,
           settleMs: 0,
+          ...originDispatch,
           ...(queueBehavior ? { queueBehavior } : {}),
           ...(wasInternallyAborted ? { checkToolState: false } : {}),
           shouldDispatch: isCurrentFallbackGeneration,

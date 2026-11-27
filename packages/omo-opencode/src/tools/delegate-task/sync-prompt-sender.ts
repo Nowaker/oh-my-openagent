@@ -4,6 +4,7 @@ import { getAgentToolRestrictions } from "../../shared/agent-tool-restrictions"
 import { createInternalAgentTextPart } from "../../shared/internal-initiator-marker"
 import { promptWithModelSuggestionRetry } from "../../shared/model-suggestion-retry"
 import { migrateToolsToPermission } from "../../shared/permission-compat"
+import { createPromptOrigin } from "../../shared/prompt-origin"
 import { applySessionPromptParams } from "../../shared/session-prompt-params-helpers"
 import { routePromptRetry } from "../../shared/session-route"
 import { setSessionTools } from "../../shared/session-tools-store"
@@ -126,6 +127,7 @@ export async function sendSyncPrompt(
       tools,
     })
     await deps.promptWithModelSuggestionRetry(client, routePromptRetry(promptArgs, input.directory), {
+      promptOrigin: createPromptOrigin("subagent"),
       queueBehavior: "defer",
       checkStatus: false,
       checkToolState: false,

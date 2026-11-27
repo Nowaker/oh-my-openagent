@@ -6,6 +6,7 @@ import { publishToolMetadata } from "../../features/tool-metadata-store"
 import { getTaskToastManager } from "../../features/task-toast-manager"
 import { getMessageDir, normalizeSDKResponse } from "../../shared"
 import { promptWithModelSuggestionRetry } from "../../shared/model-suggestion-retry"
+import { createPromptOrigin } from "../../shared/prompt-origin"
 import { resolveMessageContext } from "../../features/hook-message-injector"
 import { formatDuration } from "./time-formatter"
 import { syncContinuationDeps, type SyncContinuationDeps } from "./sync-continuation-deps"
@@ -219,6 +220,7 @@ export async function executeSyncContinuation(
         },
       },
       {
+        promptOrigin: createPromptOrigin("subagent"),
         queueBehavior: "defer",
         checkToolState: false,
       },

@@ -3,6 +3,7 @@ import { statSync } from "node:fs"
 import { z } from "zod"
 import { dispatchInternalPrompt, releasePromptAsyncReservation } from "../../shared/prompt-async-gate"
 import { isAmbiguousPostDispatchPromptFailure } from "../../shared/prompt-failure-classifier"
+import { promptOriginDispatchOptions, type PromptOrigin } from "../../shared/prompt-origin"
 import { createPromptTimeoutContext, PROMPT_TIMEOUT_MS } from "../../shared/prompt-timeout-context"
 import { log } from "../../shared/logger"
 import type { OpencodeClient } from "./constants"
@@ -246,6 +247,7 @@ export class TaskRecovery {
   async dispatch(
     input: Parameters<OpencodeClient["session"]["promptAsync"]>[0],
     generation: string | undefined,
+    promptOrigin: PromptOrigin,
   ): Promise<void> {
     const timeout = createPromptTimeoutContext({}, PROMPT_TIMEOUT_MS)
     try {
@@ -256,6 +258,7 @@ export class TaskRecovery {
         input: { ...input, signal: timeout.signal },
         source: "background-agent-launch",
         settleMs: 0,
+        ...promptOriginDispatchOptions(promptOrigin),
         queueBehavior: "defer",
         shouldDispatch: () => this.canDispatch() && this.owns(input.path.id, generation),
       })
