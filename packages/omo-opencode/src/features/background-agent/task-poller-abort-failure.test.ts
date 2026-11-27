@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import { unsafeTestValue } from "../../../../../test-support/unsafe-test-value"
-import { checkAndInterruptStaleTasks } from "./task-poller"
+import { checkAndInterruptStaleTasks, pruneStaleTasksAndNotifications } from "./task-poller"
 import type { BackgroundTask } from "./types"
 
 describe("checkAndInterruptStaleTasks abort failure on a confirmed-gone session", () => {
@@ -11,7 +11,7 @@ describe("checkAndInterruptStaleTasks abort failure on a confirmed-gone session"
     Date.now = originalDateNow
   })
 
-  test("finalizes a stale task whose session is gone even when abort fails", async () => {
+  test.each(["none", "first lookup", "second lookup"] as const)("preserves a stale task only during handoff (%s)", async (reservation) => {
     //#given - the session is gone from the status registry and from storage, and abort can no longer reach it
     spyOn(globalThis.Date, "now").mockReturnValue(fixedTime)
     const staleActivity = new Date(fixedTime - 45 * 60 * 1000)
@@ -28,10 +28,20 @@ describe("checkAndInterruptStaleTasks abort failure on a confirmed-gone session"
       progress: { toolCalls: 2, lastUpdate: staleActivity },
       consecutiveMissedPolls: 3,
     }
+    let held = false
+    let checks = 0
     const client = unsafeTestValue<Parameters<typeof checkAndInterruptStaleTasks>[0]["client"]>({
       session: {
         abort: mock(() => Promise.reject(new Error("session abort failed"))),
-        get: mock(() => Promise.resolve({ error: { status: 404, message: "session not found" } })),
+        get: mock(() => {
+          checks++
+          if (checks === 1 && reservation === "first lookup") {
+            held = true
+            return Promise.resolve({ data: { id: task.sessionId } })
+          }
+          if (checks === 2 && reservation === "second lookup") held = true
+          return Promise.resolve({ error: { status: 404, message: "session not found" } })
+        }),
       },
     })
     const notify = mock(() => Promise.resolve())
@@ -46,10 +56,18 @@ describe("checkAndInterruptStaleTasks abort failure on a confirmed-gone session"
       }),
       notifyParentSession: notify,
       sessionStatuses: {},
+      isHandoffReserved: () => held,
     })
 
     //#then - the task is cancelled and the parent is told, instead of waiting on a session that no longer exists
-    expect(task.status).toBe("cancelled")
-    expect(notify).toHaveBeenCalledTimes(1)
+    expect(task.status).toBe(reservation === "none" ? "cancelled" : "running")
+    expect(notify).toHaveBeenCalledTimes(reservation === "none" ? 1 : 0)
+    if (reservation !== "none") {
+      expect(task.consecutiveMissedPolls).toBe(4)
+      const prune = mock(() => {})
+      pruneStaleTasksAndNotifications({ tasks: new Map([[task.id, task]]), notifications: new Map(), onTaskPruned: prune,
+        taskTtlMs: 60_000, sessionStatuses: {}, isHandoffReserved: () => held })
+      expect(prune).not.toHaveBeenCalled()
+    }
   })
 })

@@ -1,6 +1,7 @@
 import type { DelegateTaskArgs, ToolContextWithMetadata } from "./types"
 import type { ExecutorContext, ParentContext } from "./executor-types"
-import { publishToolMetadata } from "../../features/tool-metadata-store"
+import { publishToolMetadata, resolveToolCallID } from "../../features/tool-metadata-store"
+import { offerTaskResumeHandoff, type ResumeHandoff } from "../../features/background-agent/resume-handoff"
 import { formatDetailedError } from "./error-formatting"
 import { getSessionTools } from "../../shared/session-tools-store"
 import { buildTaskMetadataBlock } from "../../features/tool-metadata-store/task-metadata-contract"
@@ -24,6 +25,7 @@ export async function executeBackgroundContinuation(
     }
 
     const effectivePrompt = systemContent ? `${systemContent}\n\n${args.prompt}` : args.prompt
+    const callId = resolveToolCallID(ctx)
 
     const task = await manager.resume({
       sessionId: taskID,
@@ -34,6 +36,9 @@ export async function executeBackgroundContinuation(
       parentAgent: parentContext.agent,
       parentTools: getSessionTools(parentContext.sessionID),
       wake: args.wake,
+      ...(callId ? { offerHandoff: (reserve: () => ResumeHandoff | undefined) => offerTaskResumeHandoff({
+        parentSessionId: parentContext.sessionID, childSessionId: taskID, callId,
+      }, reserve) } : {}),
     })
     const sessionId = task.sessionId
     const backgroundTaskId = task.id

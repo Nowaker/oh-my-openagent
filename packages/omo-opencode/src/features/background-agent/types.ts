@@ -164,4 +164,5 @@ export interface ResumeInput {
   parentAgent?: string
   parentTools?: Record<string, boolean>
   wake?: BackgroundTaskWake
+  readonly offerHandoff?: (reserve: () => import("./resume-handoff").ResumeHandoff | undefined) => void
 }

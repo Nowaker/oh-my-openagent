@@ -6,6 +6,8 @@ import type { PluginInput } from "@opencode-ai/plugin"
 import { unsafeTestValue } from "../../../../../test-support/unsafe-test-value"
 import { releaseAllPromptAsyncReservationsForTesting } from "../../shared/prompt-async-gate"
 import { readContinuationMarker } from "../run-continuation-state"
+import { executeBackgroundContinuation } from "../../tools/delegate-task/background-continuation"
+import type { ExecutorContext } from "../../tools/delegate-task/executor-types"
 import { BackgroundManager } from "./manager"
 import type { ConcurrencyManager } from "./concurrency"
 import type { BackgroundTask } from "./types"
@@ -96,6 +98,49 @@ async function queueResume(parentSessionId = "new-parent", busy = false) {
 const settleAdmission = () => new Promise<void>((resolve) => setImmediate(resolve))
 
 describe("queued resume review regressions", () => {
+  test.each([false, true])("a stale refusal can hand off only its exact current run (superseded=%s)", async (superseded) => {
+    const { manager, task } = createResumeFixture(true)
+    task.status = "running"
+    task.runId = "refused-run"
+    task.currentAttemptID = "refused-attempt"
+    task.startedAt = new Date(1)
+    const retire = mock(async () => undefined)
+    manager.setSessionRuntimeRetirementHandler(retire)
+    const abort = spyOn(unsafeTestValue<{ abortSessionWithLogging: () => Promise<boolean> }>(manager), "abortSessionWithLogging")
+    const target = { parentSessionId: task.parentSessionId, childSessionId: "child", callId: "call-refused" }
+    const text = await executeBackgroundContinuation({ task_id: "child", run_in_background: true,
+      description: "Follow up", prompt: "Check the artifact", load_skills: [] },
+    { sessionID: target.parentSessionId, messageID: "parent-message", callID: target.callId, agent: "build", abort: new AbortController().signal },
+    unsafeTestValue<ExecutorContext>({ manager }), { sessionID: target.parentSessionId, messageID: "parent-message", agent: "build" })
+    expect(text).toContain("currently running and cannot accept a continuation prompt")
+    const consume: unknown = Reflect.get(globalThis, Symbol.for("oh-my-openagent.task-resume-handoff.v1"))
+    if (typeof consume !== "function") throw new Error("the refused call did not publish a handoff capability")
+
+    expect(consume({ ...target, childSessionId: "unrelated" })).toBeUndefined()
+    expect(consume({ ...target, callId: "unrelated" })).toBeUndefined()
+    if (superseded) task.currentAttemptID = "newer-attempt"
+    const reservation: unknown = consume(target)
+    expect(consume(target)).toBeUndefined()
+    if (superseded) {
+      expect(reservation).toBeUndefined()
+      expect(manager.findBySession("child")).toBe(task)
+    } else {
+      if (!reservation || typeof reservation !== "object" || !("commit" in reservation) || typeof reservation.commit !== "function") {
+        throw new Error("the exact run did not reserve a handoff")
+      }
+      await expect(manager.resume({ sessionId: "child", parentSessionId: target.parentSessionId,
+        parentMessageId: "competing-message", prompt: "Competing continuation" })).rejects.toThrow("taking over")
+      expect(manager.findBySession("child")).toBe(task)
+      reservation.commit()
+      manager.handleEvent({ type: "session.idle", properties: { sessionID: "child" } })
+      await settleAdmission()
+      expect(manager.findBySession("child")).toBeUndefined()
+      expect(manager.getPendingNotifications(target.parentSessionId)).toEqual([])
+      expect(abort).not.toHaveBeenCalled()
+      expect(retire).not.toHaveBeenCalled()
+    }
+  })
+
   test("clears the temporary parent's marker after skipped admission", async () => {
     // given
     const { internals, directory, task } = await queueResume("new-parent", true)

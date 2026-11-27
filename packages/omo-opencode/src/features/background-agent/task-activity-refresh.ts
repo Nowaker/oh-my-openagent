@@ -27,6 +27,7 @@ function updateTaskActivityFromLookup(task: BackgroundTask, lookup: SessionActiv
 export async function refreshTaskActivityFromSession(
   task: BackgroundTask,
   getSessionActivity: SessionActivityResolver,
+  isCurrent?: () => boolean,
 ): Promise<TaskActivityRefreshResult> {
   if (!task.sessionId) return { type: "missing" }
 
@@ -42,5 +43,5 @@ export async function refreshTaskActivityFromSession(
     return { type: "unavailable" }
   }
 
-  return updateTaskActivityFromLookup(task, lookup)
+  return isCurrent?.() === false ? { type: "unavailable" } : updateTaskActivityFromLookup(task, lookup)
 }

@@ -57,6 +57,9 @@ function createFixture() {
   const parentAdmissions: (readonly TextPart[])[] = []
   let childStatus: "idle" | "busy" = "idle"
   let childAdmission: (() => void) | undefined
+  let childResponse: Promise<{ data: object }> | undefined
+  let childSends = 0
+  let childAborts = 0
   let taskId: string | undefined
   jest.useFakeTimers({ now: new Date("2026-11-27T12:00:00.000Z") })
 
@@ -94,12 +97,17 @@ function createFixture() {
           status: async () => ({ data: { [sessionId]: { type: childStatus } } }),
           messages: async ({ path }: SessionPath) => ({ data: [...(path.id === sessionId ? child : parent)] }),
           todo: async () => ({ data: [] }),
-          abort: async () => ({ data: true }),
+          abort: async ({ path }: SessionPath) => {
+            if (path.id === sessionId) childAborts++
+            return { data: true }
+          },
           promptAsync: async ({ path, body }: SessionPath & { readonly body: { readonly parts: readonly TextPart[] } }) => {
             if (path.id === sessionId) {
+              childSends++
               childStatus = "busy"
               storeMessage(child, "user", body.parts)
               childAdmission?.()
+              if (childResponse) return childResponse
             } else if (path.id === parentSessionId) {
               parentAdmissions.push(body.parts)
               parent.push({
@@ -155,6 +163,44 @@ function createFixture() {
   const delegation = { parentSessionId, description: "Check the result", agent: "explore", wake: "each" } as const
   return {
     sessionId,
+    async transferBeforeRejection(origin: "launch" | "resume", outcome: "commit" | "release") {
+      const start = () => manager.launch({ ...delegation, parentMessageId: "msg_parent_1", prompt: "Check" })
+      if (origin === "resume") {
+        await admitChild(start)
+        jest.advanceTimersByTime(MIN_IDLE_TIME_MS)
+        storeMessage(child, "assistant", [{ type: "text", text: "Original result" }])
+        childIdle()
+        await flushParent()
+        storeMessage(parent, "assistant", [{ type: "text", text: "Acknowledged" }])
+        jest.advanceTimersByTime(DEFAULT_PROMPT_SEMANTIC_DEDUPE_HOLD_MS + 1)
+      }
+      const before = { childSends, childAborts, parentNotices: parentAdmissions.length }
+      const response = Promise.withResolvers<{ data: object }>()
+      childResponse = response.promise
+      try {
+        const id = await admitChild(origin === "launch" ? start : () => manager.resume({ sessionId, parentSessionId,
+          parentMessageId: "msg_parent_2", prompt: "Check again" }))
+        const offer: { reserve?: () => import("./resume-handoff").ResumeHandoff | undefined } = {}
+        await expect(manager.resume({ sessionId, parentSessionId, parentMessageId: "msg_parent_2", prompt: "Repair",
+          offerHandoff: reserve => { offer.reserve = reserve },
+        })).rejects.toThrow("currently running")
+        const held = offer.reserve?.()
+        if (!held) throw new Error("old launch was not reserved")
+        response.reject(new Error("Agent explore not found"))
+        await drainReadyWork()
+        expect(manager.getTask(id)?.status).toBe("running")
+        expect(childAborts).toBe(before.childAborts)
+        expect(parentAdmissions).toHaveLength(before.parentNotices)
+        if (outcome === "commit") held.commit()
+        else held.release(false)
+        childIdle()
+        await flushParent()
+        return { childSends: childSends - before.childSends, childAborts: childAborts - before.childAborts,
+          parentNotices: parentAdmissions.length - before.parentNotices }
+      } finally {
+        response.resolve({ data: {} })
+      }
+    },
     launch: () => admitChild(() => manager.launch({ ...delegation, parentMessageId: "msg_parent_1", prompt: "Check" })),
     resume: () =>
       admitChild(() => manager.resume({ sessionId, parentSessionId, parentMessageId: "msg_parent_2", prompt: "Check again" })),
@@ -209,6 +255,25 @@ function createFixture() {
 }
 
 describe("BackgroundManager repeated child completion notices", () => {
+  test("does not retry, abort or notify on a late launch rejection after handoff", async () => {
+    const fixture = createFixture()
+    try {
+      expect(await fixture.transferBeforeRejection("launch", "commit")).toEqual({ childSends: 1, childAborts: 0, parentNotices: 0 })
+    } finally {
+      await fixture.cleanup()
+    }
+  })
+
+  test.each(["commit", "release"] as const)("settles a delayed resume refusal only after handoff %s", async (outcome) => {
+    const fixture = createFixture()
+    try {
+      const stopped = outcome === "commit" ? 0 : 1
+      expect(await fixture.transferBeforeRejection("resume", outcome)).toEqual({ childSends: 1, childAborts: stopped, parentNotices: stopped })
+    } finally {
+      await fixture.cleanup()
+    }
+  })
+
   test.each(["background launch", "foreground handoff"] as const)(
     "admits a terminal parent notice for each same-child run with identical results after %s",
     async (origin) => {
