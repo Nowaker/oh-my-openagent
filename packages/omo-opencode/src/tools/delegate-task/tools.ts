@@ -81,13 +81,13 @@ const delegateTaskArgsSchema = {
     .boolean()
     .optional()
     .describe(
-      "Default true: returns a background task ID `bg_...` at once; a notification with the child's final answer arrives when it finishes (background_output reads it again). false blocks this response until the child finishes; use it only for a short child whose result gates your very next call.",
+      "Default true: returns a background task ID `bg_...` without waiting for the result. The finished run reports by notice (background_output reads the result again). false blocks this response until the child finishes; use it only for a short child whose result gates your very next call.",
     ),
   wake: tool.schema
     .enum(["each", "none"])
     .optional()
     .describe(
-      "When a finished background child reports. each (default): every finished child starts your next turn with its result. none: no turn is started; the result waits for your next turn. With items, omitting it reports the whole fan-out once, when the last child finishes.",
+      'Controls whether a background completion notice requests a new turn. Omit to wake only when no other child of yours is found running; with items, the fan-out reports as a group. "each" requests a wake per run. "none" saves ordinary notices for your next turn without waking you, even for the last child. Errors, unrequested cancellations, and interruptions still wake you.',
     ),
   items: tool.schema
     .array(tool.schema.string())

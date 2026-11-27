@@ -83,8 +83,8 @@ export function createDelegateTaskPresentation(options: DelegateTaskPresentation
     Available categories:
   ${categoryList}
   - subagent_type: Use specific agent directly (explore, librarian, oracle, metis, momus)
-  - run_in_background: Default true: returns a background task ID like \`bg_...\` at once, and a notification with the child's final answer arrives when it finishes. false blocks this response until the child finishes; use it only for a short child whose result gates your very next call.
-  - wake: When a finished background child reports. "each" (default): every finished child starts your next turn with its result; children finishing close together share one turn. "none": no turn is started; the result waits for your next turn.
+  - run_in_background: Default true: returns a background task ID like \`bg_...\` without waiting for the result. false blocks this response until the child finishes; use it only for a short child whose result gates your very next call.
+  - wake: Each background run reports its outcome. By default, an ordinary notice wakes you only when no other child of yours is found running (see fan-out below). "each" requests a wake per run; notices close together can share a turn. "none" saves ordinary notices for your next turn without waking you, even for the last child. Errors, unrequested cancellations, and interruptions still wake you. If you cancel a task with \`background_cancel\`, the tool returns a receipt instead of sending a separate completion notice.
   - items + split: Fan-out. items is a list of work items; split (default: one per item) is how many background children share them, each getting prompt plus its contiguous slice (split=2 over A..J gives A-E and F-J). All children use the same category/subagent_type/load_skills. Unless wake is passed, the call reports once, with every child's result, when the last child finishes. Several unrelated tasks are still several task calls in one message.
   - task_id: Continuation session id (\`ses_...\`) from task metadata. Continues the same subagent session with FULL CONTEXT PRESERVED; not the background task id (\`bg_...\`).${providerLine}
 
