@@ -512,7 +512,7 @@ Control parallel agent execution and concurrency limits. `background_task` (came
 | `taskCleanupDelayMs`        | `600000`  | Delay before terminal task and sync-child runtime state leaves memory; session history is retained (min: 60000) |
 | `syncPollTimeoutMs`         | `1800000` | Abort a foreground (`run_in_background=false`) `task` child after this long without observable activity; a foreground `call_omo_agent` waits at most this long in total, 5 minutes when unset (min: 60000, `0`: never) |
 | `syncMaxAssistantTurns`     | `300`     | Abort a foreground `task` child after this many assistant turns, as a runaway loop (`0`: no cap) |
-| `foregroundHandoffMs`       | `0`       | Hand a foreground `task` or `call_omo_agent` child still running after this long to the background: it keeps running under the same task id, the call returns at once, and its completion notice wakes the parent (`0`: never, the parent waits) |
+| `foregroundHandoffMs`       | `0`       | Hand a foreground `task` or `call_omo_agent` child still running after this long to the background: it keeps running under the same task id, the call returns at once, and the child reports by notice (`0`: never, the parent waits) |
 | `busyParentWakeDelayMs`     | `60000`   | How long a notice for a parent whose turn is still running waits before OMO stores it in that session anyway; opencode reads it at the turn's next tool step, so the running turn sees it without a new turn (`0`: at once). Covers background task, background bash and monitor notices |
 | `recoverySweepMinAgeMs`     | `86400000` | Age before the hourly sweep examines a background-owners recovery file; it removes only records whose owner is dead and child session is gone (min: 3600000) |
 | `maxToolCalls`              | `4000`    | Maximum tool calls per subagent task (min: 10)                        |
@@ -522,7 +522,13 @@ Priority: `modelConcurrency` > `providerConcurrency` > `defaultConcurrency`
 
 Every limit above that kills or drops a running task takes `0` to turn it off, for subtasks that legitimately run for hours. `maxToolCalls` and `circuitBreaker` stop runaway loops by tool count, not by time.
 
-A `task` call runs in the background unless it passes `run_in_background=false`. Each finished background task sends its parent one notice with its final answer inline (cut at 6000 characters, with a pointer to `background_output` for the rest). `wake` on the `task` call decides when the parent hears it: `"each"` (default) starts a parent turn for every finished task, and tasks finishing close together share one turn; `"none"` starts no turn, and the notice waits for the parent's next turn.
+A `task` call runs in the background unless it passes `run_in_background=false`. Every background run reports its outcome, including on a continuation of the same child session. A completion notice includes the final answer inline (cut at 6000 characters, with a pointer to `background_output` for the rest). The `wake` argument controls whether a notice requests a new parent turn:
+
+- **Omitted:** An ordinary completion notice wakes the parent only when no other child of that parent is found running. Completions can be reported without starting separate turns.
+- **`"each"`:** Request a wake for every run. Notices close together can share a turn.
+- **`"none"`:** Save ordinary completion notices for the parent's next turn without waking it, even when the last child finishes.
+
+Errors, cancellations not requested by the parent, and interruptions still wake the parent. When the parent cancels with `background_cancel`, the tool returns a receipt instead of sending a separate completion notice.
 
 `items` (plus optional `split`) on a `task` call fans one prompt out over several background children: each gets the prompt plus its contiguous slice of `items` (`split: 2` over ten items gives 1-5 and 6-10; default one child per item), and all share the call's category or subagent type and skills. Unless the call passes `wake`, the children report once, together, in one notice carrying every child's result, when the last of them finishes.
 

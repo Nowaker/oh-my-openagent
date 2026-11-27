@@ -1,9 +1,8 @@
 import type { DelegateTaskArgs } from "./types"
 
-/** How a background launch tells the model to proceed: wait for the notice, or carry on when wake "none" holds it for the next turn. */
 export function backgroundLaunchFollowUp(wake: DelegateTaskArgs["wake"]): string {
   if (wake === "none") {
-    return 'Do NOT call background_output now, and do not wait for it: with wake "none" the result does not start a turn. It is saved and reaches you with your next turn. Carry on with other work, or end your turn.'
+    return 'Do not wait for an ordinary completion to wake you: with wake "none", its notice is saved for your next turn, even if this is the last child. Errors, unrequested cancellations, and interruptions can still wake you. Carry on with other work or end your turn; do not poll with background_output.'
   }
-  return "Do NOT call background_output now. Wait for <system-reminder> notification first. The system will deliver the result when the task completes; you do not need to poll for it."
+  return "Carry on with other work or end your turn. Completion notices arrive as <system-reminder> messages, not necessarily in a new turn; do not poll with background_output."
 }
