@@ -317,6 +317,9 @@ export class BackgroundManager {
   private readonly taskRecovery: TaskRecovery
   private readonly taskRunRecovery: TaskRunRecovery
   private readonly resumingSessions = new Set<string>()
+  private readonly abortingSessions = new Map<string, number>()
+  private readonly launchingTasks = new Set<BackgroundTask>()
+  private readonly resumeHandoffs = new Map<string, Promise<void>>()
   private readonly directChildTurns = new WeakMap<BackgroundTask, DirectChildTurn>()
 
   setSessionRuntimeRetirementHandler(handler: (sessionID: string) => Promise<void>): void {
@@ -325,7 +328,7 @@ export class BackgroundManager {
 
   async retireSessionRuntime(sessionID: string): Promise<void> {
     if (this.shutdownTriggered) return
-    if (this.resumingSessions.has(sessionID) || this.syncAttachedSessions.has(sessionID)) return
+    if (this.resumingSessions.has(sessionID) || this.syncAttachedSessions.has(sessionID) || this.resumeHandoffs.has(sessionID)) return
     const task = this.findBySession(sessionID)
     if (task?.status === "running" || task?.status === "pending") return
     this.taskRecovery.releaseRuntimeOwnership(sessionID)
@@ -394,9 +397,18 @@ export class BackgroundManager {
   }
 
   private async abortSessionWithLogging(sessionID: string, reason: string): Promise<boolean> {
-    if (!this.taskRecovery.owns(sessionID)) return false
+    if (this.resumeHandoffs.has(sessionID) || !this.taskRecovery.owns(sessionID)) return false
     try {
-      const aborted = await abortWithTimeout(this.client, sessionID)
+      const aborted = await abortWithTimeout({ session: { abort: async (request) => {
+        this.abortingSessions.set(sessionID, (this.abortingSessions.get(sessionID) ?? 0) + 1)
+        try {
+          return await this.client.session.abort(request)
+        } finally {
+          const remaining = (this.abortingSessions.get(sessionID) ?? 1) - 1
+          if (remaining === 0) this.abortingSessions.delete(sessionID)
+          else this.abortingSessions.set(sessionID, remaining)
+        }
+      } } }, sessionID)
       if (!aborted) {
         log(`[background-agent] Session abort did not complete during ${reason}:`, {
           sessionID,
@@ -828,6 +840,7 @@ export class BackgroundManager {
           continue
         }
 
+        this.launchingTasks.add(item.task)
         try {
           await this.startTask(item)
         } catch (error) {
@@ -872,6 +885,8 @@ export class BackgroundManager {
           this.enqueueTaskNotice(item.task, notice).catch((err) => {
             log("[background-agent] Failed to notify on startTask error:", err)
           })
+        } finally {
+          this.launchingTasks.delete(item.task)
         }
       }
     } finally {
@@ -882,6 +897,7 @@ export class BackgroundManager {
   private async startTask(item: QueueItem): Promise<void> {
     const { task, input } = item
     const attemptID = item.attemptID ?? ensureCurrentAttempt(task, input.model).attemptId
+    const runId = task.runId
 
     log("[background-agent] Starting task:", {
       taskId: task.id,
@@ -1069,6 +1085,9 @@ The fallback retry session is now created and can be inspected directly.
     await this.taskRecovery.persist(task, launchTools, childDirectory)
     await this.beginDurableRun(task)
     const launchGeneration = this.taskRecovery.generation(sessionID)
+    const current = () => !this.shutdownTriggered && this.tasks.get(task.id) === task && task.status === "running" &&
+      task.sessionId === sessionID && task.runId === runId && task.currentAttemptID === attemptID
+    const ready = () => this.afterResumeHandoff(sessionID, current)
 
     log("[background-agent] Launching task:", { taskId: task.id, sessionID, agent: input.agent })
     registerDelegatedChildSessionBootstrap({
@@ -1114,9 +1133,11 @@ The fallback retry session is now created and can be inspected directly.
         },
         launchGeneration,
         promptOrigin,
+        ready,
       )
       .catch(async (error) => {
-        if (this.shutdownTriggered || !this.taskRecovery.owns(sessionID, launchGeneration)) return
+        while (this.resumeHandoffs.has(sessionID)) await this.resumeHandoffs.get(sessionID)
+        if (!current() || !this.taskRecovery.owns(sessionID, launchGeneration)) return
         // Retry with fallback agent if the original agent was unregistered (e.g., after a model switch)
         if (isAgentNotFoundError(error) && input.agent !== FALLBACK_AGENT) {
           log("[background-agent] Agent not found, retrying with fallback agent", {
@@ -1143,6 +1164,8 @@ The fallback retry session is now created and can be inspected directly.
             })
             task.agent = FALLBACK_AGENT
             await this.taskRecovery.persist(task, fallbackTools, childDirectory)
+            while (this.resumeHandoffs.has(sessionID)) await this.resumeHandoffs.get(sessionID)
+            if (!current()) return
             const fallbackGeneration = this.taskRecovery.generation(sessionID)
             await this.taskRecovery.dispatch(
               {
@@ -1152,10 +1175,12 @@ The fallback retry session is now created and can be inspected directly.
               },
               fallbackGeneration,
               promptOrigin,
+              ready,
             )
             return
           } catch (retryError) {
-            if (this.shutdownTriggered || !this.taskRecovery.owns(sessionID)) return
+            while (this.resumeHandoffs.has(sessionID)) await this.resumeHandoffs.get(sessionID)
+            if (!current() || !this.taskRecovery.owns(sessionID)) return
             log("[background-agent] Fallback agent also failed:", retryError)
           }
         }
@@ -1180,6 +1205,8 @@ The fallback retry session is now created and can be inspected directly.
           if (await this.tryFallbackRetry(existingTask, errorInfo, "promptAsync.launch")) {
             return
           }
+          while (this.resumeHandoffs.has(sessionID)) await this.resumeHandoffs.get(sessionID)
+          if (!current()) return
 
           const errorMessage = errorInfo.message ?? (error instanceof Error ? error.message : String(error))
           const terminalError =
@@ -1357,7 +1384,7 @@ The fallback retry session is now created and can be inspected directly.
   private resolveTaskAttemptBySession(
     sessionID: string,
   ): { task: BackgroundTask; attemptID?: string; isCurrent: boolean } | undefined {
-    if (!this.taskRecovery.owns(sessionID)) return undefined
+    if (this.resumeHandoffs.has(sessionID) || !this.taskRecovery.owns(sessionID)) return undefined
     const task = this.findBySession(sessionID)
     if (!task) {
       return undefined
@@ -1583,6 +1610,7 @@ The fallback retry session is now created and can be inspected directly.
 
   async resume(input: ResumeInput): Promise<BackgroundTask> {
     if (this.shutdownTriggered) throw new TaskRecoveryError(input.sessionId, "owner shutting down")
+    if (this.resumeHandoffs.has(input.sessionId)) throw new TaskRecoveryError(input.sessionId, "another continuation is taking over this run")
     if (this.resumingSessions.has(input.sessionId)) {
       throw new Error(
         `Task for session ${input.sessionId} is already being resumed and cannot accept another continuation. ` +
@@ -1627,6 +1655,11 @@ The fallback retry session is now created and can be inspected directly.
     }
 
     if (existingTask.status === "running") {
+      if (input.offerHandoff && existingTask.sessionId === input.sessionId &&
+          existingTask.parentSessionId === input.parentSessionId && !existingTask.teamRunId && existingTask.runId && existingTask.currentAttemptID) {
+        const { runId, currentAttemptID } = existingTask
+        input.offerHandoff(() => this.reserveRefusedRun(existingTask, input, { runId, currentAttemptID }))
+      }
       throw new Error(
         `Task ${existingTask.id} is currently running and cannot accept a continuation prompt. ` +
           "Wait for it to complete before resuming it with task_id.",
@@ -1751,6 +1784,54 @@ The fallback retry session is now created and can be inspected directly.
     return existingTask
   }
 
+  private afterResumeHandoff(sessionId: string, current: () => boolean): boolean | Promise<boolean> {
+    const pending = this.resumeHandoffs.get(sessionId)
+    return pending ? pending.then(() => this.afterResumeHandoff(sessionId, current)) : current()
+  }
+
+  private reserveRefusedRun(task: BackgroundTask, input: ResumeInput, identity: Pick<BackgroundTask, "runId" | "currentAttemptID">) {
+    const { sessionId, parentSessionId } = input
+    if (this.shutdownTriggered || this.tasks.get(task.id) !== task || task.status !== "running" ||
+        task.sessionId !== sessionId || task.parentSessionId !== parentSessionId || task.runId !== identity.runId ||
+        task.currentAttemptID !== identity.currentAttemptID || this.resumingSessions.has(sessionId) || this.abortingSessions.has(sessionId) ||
+        this.syncAttachedSessions.has(sessionId) || this.launchingTasks.has(task) || this.resumeHandoffs.has(sessionId) ||
+        !this.taskRecovery.owns(sessionId)) return undefined
+
+    const reservation = Promise.withResolvers<void>()
+    this.resumeHandoffs.set(sessionId, reservation.promise)
+    const finish = (relinquish: boolean) => {
+      if (this.resumeHandoffs.get(sessionId) !== reservation.promise) return
+      try {
+        if (relinquish) this.relinquishRefusedRun(task, parentSessionId)
+      } finally {
+        this.resumeHandoffs.delete(sessionId)
+        reservation.resolve()
+      }
+    }
+    return { commit: () => finish(true), release: (stopped = false) => finish(stopped) }
+  }
+
+  private relinquishRefusedRun(task: BackgroundTask, parentSessionId: string): void {
+    task.status = "cancelled"
+    task.completedAt = new Date()
+    if (task.concurrencyKey) {
+      this.concurrencyManager.release(task.concurrencyKey)
+      task.concurrencyKey = undefined
+    }
+    if (task.rootSessionId) this.unregisterRootDescendant(task.rootSessionId)
+    for (const timers of [this.completionTimers, this.idleDeferralTimers]) {
+      clearTimeout(timers.get(task.id))
+      timers.delete(task.id)
+    }
+    this.cleanupPendingByParent(task)
+    this.clearNotificationsForTask(task.id)
+    this.removeTask(task)
+    this.clearTaskHistoryWhenParentTasksGone(parentSessionId)
+    removeTaskToastTracking(task.id)
+    this.updateBackgroundTaskMarker(parentSessionId)
+    this.taskRunRecovery.discard(task)
+  }
+
   private async startResumedTask(
     existingTask: BackgroundTask,
     input: ResumeInput,
@@ -1844,8 +1925,10 @@ The fallback retry session is now created and can be inspected directly.
       : undefined
     const resumeVariant = existingTask.model?.variant
     const runId = existingTask.runId
-    const isCurrent = () => !this.shutdownTriggered && existingTask.runId === runId &&
+    const isCurrent = () => !this.shutdownTriggered && this.tasks.get(existingTask.id) === existingTask &&
+      existingTask.runId === runId && existingTask.currentAttemptID === attempt.attemptId && existingTask.status === "running" &&
       existingTask.sessionId === sessionID && this.taskRecovery.owns(sessionID, resumeGeneration)
+    const ready = () => this.afterResumeHandoff(sessionID, isCurrent)
 
     if (existingTask.model) {
       applySessionPromptParams(sessionID, existingTask.model)
@@ -1860,7 +1943,7 @@ The fallback retry session is now created and can be inspected directly.
       ...promptOriginDispatchOptions(createPromptOrigin("subagent")),
       queueBehavior: "defer",
       checkToolState: !recovered,
-      shouldDispatch: () => isCurrent() && existingTask.status === "running",
+      shouldDispatch: ready,
       input: {
         path: { id: sessionID },
         body: {
@@ -1888,7 +1971,8 @@ The fallback retry session is now created and can be inspected directly.
         query: { directory: existingTask.cwd ?? this.directory },
       },
     })
-      .then((promptResult) => {
+      .then(async (promptResult) => {
+        while (this.resumeHandoffs.has(sessionID)) await this.resumeHandoffs.get(sessionID)
         if (!isCurrent()) return
         if (promptResult.status === "failed") {
           if (isAmbiguousPostDispatchPromptFailure(promptResult)) {
@@ -1922,7 +2006,8 @@ The fallback retry session is now created and can be inspected directly.
         }
       })
       .catch(async (error) => {
-        if (!isCurrent() || existingTask.status !== "running") return
+        while (this.resumeHandoffs.has(sessionID)) await this.resumeHandoffs.get(sessionID)
+        if (!isCurrent()) return
         log("[background-agent] resume prompt error:", error)
         const errorInfo = {
           name: extractErrorName(error),
@@ -1933,7 +2018,8 @@ The fallback retry session is now created and can be inspected directly.
           return
         }
 
-        if (!isCurrent() || existingTask.status !== "running") return
+        while (this.resumeHandoffs.has(sessionID)) await this.resumeHandoffs.get(sessionID)
+        if (!isCurrent()) return
         const errorMessage = errorInfo.message ?? (error instanceof Error ? error.message : String(error))
         finalizeAttempt(existingTask, attempt.attemptId, "interrupt", errorMessage)
         this.taskHistory.record(existingTask.parentSessionId, {
@@ -2530,6 +2616,7 @@ The fallback retry session is now created and can be inspected directly.
     errorMessage: string,
     reason: string,
   ): Promise<void> {
+    if (task.sessionId && this.resumeHandoffs.has(task.sessionId)) return
     // Reserve a notification-preparation slot for the parent BEFORE flipping the
     // child to a terminal status, for the same reason as the completion path: the
     // status flip drops the child from hasActiveChildTasks() immediately, but the
@@ -2675,9 +2762,14 @@ The fallback retry session is now created and can be inspected directly.
     errorName: string | undefined,
     errorMessage: string | undefined,
   ): Promise<void> {
+    const { sessionId, runId, currentAttemptID } = task
+    const isCurrent = () => this.tasks.get(task.id) === task && task.status === "running" &&
+      (sessionId === undefined || !this.resumeHandoffs.has(sessionId)) &&
+      task.sessionId === sessionId && task.runId === runId && task.currentAttemptID === currentAttemptID
     if (await this.tryFallbackRetry(task, errorInfo, "session.error")) {
       return
     }
+    if (!isCurrent()) return
 
     const errorMsg = errorMessage ?? "Session error"
     const canRetry =
@@ -2692,9 +2784,9 @@ The fallback retry session is now created and can be inspected directly.
       canRetry,
     })
 
-    const sessionId = task.sessionId
     if (sessionId) {
       const sessionStillAlive = await this.verifySessionExists(sessionId)
+      if (!isCurrent()) return
       if (sessionStillAlive && !isTerminalSessionError(errorInfo)) {
         this.logger("[background-agent] session.error received but session still alive, treating as transient:", {
           taskId: task.id,
@@ -2782,6 +2874,7 @@ The fallback retry session is now created and can be inspected directly.
     errorInfo: { name?: string; message?: string; statusCode?: number },
     source: string,
   ): Promise<boolean> {
+    if (task.sessionId && this.resumeHandoffs.has(task.sessionId)) return false
     if (this.shutdownTriggered || !this.taskRecovery.owns(task.sessionId)) return false
     const previousSessionID = task.sessionId
     let retryingNotification: string | undefined
@@ -3084,6 +3177,7 @@ The task was re-queued on a fallback model after a retryable failure.
     options?: { source?: string; reason?: string; abortSession?: boolean; skipNotification?: boolean },
   ): Promise<boolean> {
     const task = this.tasks.get(taskId)
+    if (task?.sessionId && this.resumeHandoffs.has(task.sessionId)) return false
     if (task && !this.taskRecovery.owns(task.sessionId)) return false
     if (!task || (task.status !== "running" && task.status !== "pending")) {
       return false
@@ -3254,6 +3348,7 @@ The task was re-queued on a fallback model after a retryable failure.
    * Returns true if task was successfully completed, false if already completed by another path.
    */
   private async tryCompleteTask(task: BackgroundTask, source: string): Promise<boolean> {
+    if (task.sessionId && this.resumeHandoffs.has(task.sessionId)) return false
     if (this.shutdownTriggered || !this.taskRecovery.owns(task.sessionId)) return false
     // Guard: Check if task is still running (could have been completed by another path)
     if (task.status !== "running") {
@@ -3699,6 +3794,7 @@ The task was re-queued on a fallback model after a retryable failure.
       sessionStatuses: allStatuses,
       hasPendingRemovalTimer: (taskId) => this.completionTimers.has(taskId),
       hasAttachedSyncSession: (sessionID) => this.syncAttachedSessions.has(sessionID),
+      isHandoffReserved: (sessionID) => this.resumeHandoffs.has(sessionID),
       onTaskPruned: (taskId, task, errorMessage) => {
         const wasPending = task.status === "pending"
         log("[background-agent] Pruning stale task:", {
@@ -3770,13 +3866,16 @@ The task was re-queued on a fallback model after a retryable failure.
 
   private async checkAndInterruptStaleTasks(allStatuses: SessionStatusMap | undefined): Promise<void> {
     await checkAndInterruptStaleTasks({
-      tasks: Array.from(this.tasks.values()).filter((task) => this.taskRecovery.owns(task.sessionId)),
+      tasks: Array.from(this.tasks.values()).filter((task) =>
+        (!task.sessionId || !this.resumeHandoffs.has(task.sessionId)) && this.taskRecovery.owns(task.sessionId)),
       client: this.client,
       directory: this.directory,
       config: this.config,
       concurrencyManager: this.concurrencyManager,
       notifyParentSession: (task) => this.enqueueTaskNotice(task),
       sessionStatuses: allStatuses,
+      abortSession: (sessionId) => this.abortSessionWithLogging(sessionId, "stale task poll"),
+      isHandoffReserved: (sessionID) => this.resumeHandoffs.has(sessionID),
     })
   }
 
@@ -3878,8 +3977,9 @@ The task was re-queued on a fallback model after a retryable failure.
         if (!sessionID) continue
         const runId = task.runId
         const attemptID = task.currentAttemptID
-        const isCurrent = () => task.status === "running" && task.sessionId === sessionID &&
+        const isCurrent = () => !this.resumeHandoffs.has(sessionID) && task.status === "running" && task.sessionId === sessionID &&
           task.runId === runId && task.currentAttemptID === attemptID && this.taskRecovery.owns(sessionID)
+        if (!isCurrent()) continue
 
         try {
           const sessionStatus = allStatuses?.[sessionID]
@@ -3893,6 +3993,7 @@ The task was re-queued on a fallback model after a retryable failure.
             if (await this.tryFallbackRetry(task, errorInfo, "polling:session.status")) {
               continue
             }
+            if (!isCurrent()) continue
           }
 
           // Only skip completion when session status is actively running.

@@ -31,6 +31,7 @@ export function pruneStaleTasksAndNotifications(args: {
   sessionStatuses?: SessionStatusMap
   hasPendingRemovalTimer?: (taskId: string) => boolean
   hasAttachedSyncSession?: (sessionID: string) => boolean
+  isHandoffReserved?: (sessionID: string) => boolean
 }): void {
   const { tasks, notifications, onTaskPruned } = args
   const effectiveTtl = args.taskTtlMs ?? TASK_TTL_MS
@@ -48,6 +49,7 @@ export function pruneStaleTasksAndNotifications(args: {
   }
 
   for (const [taskId, task] of tasks.entries()) {
+    if (task.sessionId && args.isHandoffReserved?.(task.sessionId)) continue
     if (TERMINAL_TASK_STATUSES.has(task.status)) {
       if (tasksWithPendingNotifications.has(taskId)) continue
       // scheduleTaskRemoval owns records it still tracks; pruning them here
@@ -131,6 +133,10 @@ async function interruptStaleTask(args: {
   timeoutConfigKey: "messageStalenessTimeoutMs" | "sessionGoneTimeoutMs" | "staleTimeoutMs"
   errorSuffix: string
   logReason: string
+  runId: string | undefined
+  attemptId: string | undefined
+  abortSession?: (sessionId: string) => Promise<boolean>
+  isHandoffReserved?: (sessionId: string) => boolean
 }): Promise<void> {
   const {
     task,
@@ -147,7 +153,11 @@ async function interruptStaleTask(args: {
     logReason,
   } = args
 
-  const aborted = await abortWithTimeout(client, sessionID)
+  const isCurrent = () => !args.isHandoffReserved?.(sessionID) && task.status === "running" && task.sessionId === sessionID &&
+    task.runId === args.runId && task.currentAttemptID === args.attemptId
+  if (!isCurrent()) return
+  const aborted = await (args.abortSession ? args.abortSession(sessionID) : abortWithTimeout(client, sessionID))
+  if (!isCurrent()) return
   if (!aborted) {
     const existence = await checkSessionExistence(client, sessionID, directory)
     if (existence !== "missing") {
@@ -165,7 +175,7 @@ async function interruptStaleTask(args: {
     })
   }
 
-  if (task.status !== "running" || task.sessionId !== sessionID) return
+  if (!isCurrent()) return
 
   task.status = "cancelled"
   task.error = `Stale timeout (${reason} for ${staleMinutes}min${errorSuffix}). This is a FINAL cancellation - do NOT create a replacement task. If the timeout is too short, increase 'background_task.${timeoutConfigKey}' in .omo/omo.jsonc.`
@@ -196,6 +206,8 @@ export async function checkAndInterruptStaleTasks(args: {
   sessionStatuses?: SessionStatusMap
   onTaskInterrupted?: (task: BackgroundTask) => void
   getSessionActivity?: SessionActivityResolver
+  abortSession?: (sessionId: string) => Promise<boolean>
+  isHandoffReserved?: (sessionId: string) => boolean
 }): Promise<void> {
   const {
     tasks,
@@ -221,7 +233,10 @@ export async function checkAndInterruptStaleTasks(args: {
 
     const startedAt = task.startedAt
     const sessionID = task.sessionId
-    if (!startedAt || !sessionID) continue
+    const { runId, currentAttemptID: attemptId } = task
+    if (!startedAt || !sessionID || args.isHandoffReserved?.(sessionID)) continue
+    const isCurrent = () => !args.isHandoffReserved?.(sessionID) && task.status === "running" && task.sessionId === sessionID &&
+      task.runId === runId && task.currentAttemptID === attemptId
 
     const sessionStatus = sessionStatuses?.[sessionID]?.type
     const sessionMissing = sessionStatuses !== undefined && sessionStatus === undefined
@@ -246,13 +261,15 @@ export async function checkAndInterruptStaleTasks(args: {
       if (runtime <= effectiveTimeout) continue
 
       if (shouldRefreshFromSessionActivity) {
-        const activityRefresh = await refreshTaskActivityFromSession(task, getSessionActivity)
+        const activityRefresh = await refreshTaskActivityFromSession(task, getSessionActivity, isCurrent)
+        if (!isCurrent()) continue
         if (activityRefresh.type === "unavailable") continue
         if (activityRefresh.type === "activity" && now - activityRefresh.activityTime <= effectiveTimeout) continue
       }
 
       if (sessionGone) {
         const existence = await checkSessionExistence(client, sessionID, directory)
+        if (!isCurrent()) continue
         if (existence === "exists") {
           task.consecutiveMissedPolls = 0
           continue
@@ -271,6 +288,10 @@ export async function checkAndInterruptStaleTasks(args: {
           notifyParentSession,
           onTaskInterrupted,
           sessionID,
+          runId,
+          attemptId,
+          abortSession: args.abortSession,
+          isHandoffReserved: args.isHandoffReserved,
           reason,
           staleMinutes,
           timeoutConfigKey: sessionGone ? "sessionGoneTimeoutMs" : "messageStalenessTimeoutMs",
@@ -291,7 +312,8 @@ export async function checkAndInterruptStaleTasks(args: {
     if (timeSinceLastUpdate <= effectiveStaleTimeout) continue
 
     if (shouldRefreshFromSessionActivity) {
-      const activityRefresh = await refreshTaskActivityFromSession(task, getSessionActivity)
+      const activityRefresh = await refreshTaskActivityFromSession(task, getSessionActivity, isCurrent)
+      if (!isCurrent()) continue
       if (activityRefresh.type === "unavailable") continue
       const refreshedLastUpdate =
         task.progress?.lastUpdate.getTime() ??
@@ -302,10 +324,11 @@ export async function checkAndInterruptStaleTasks(args: {
       }
     }
 
-    if (task.status !== "running") continue
+    if (!isCurrent()) continue
 
     if (sessionGone) {
       const existence = await checkSessionExistence(client, sessionID, directory)
+      if (!isCurrent()) continue
       if (existence === "exists") {
         task.consecutiveMissedPolls = 0
         continue
@@ -324,6 +347,10 @@ export async function checkAndInterruptStaleTasks(args: {
         notifyParentSession,
         onTaskInterrupted,
         sessionID,
+        runId,
+        attemptId,
+        abortSession: args.abortSession,
+        isHandoffReserved: args.isHandoffReserved,
         reason,
         staleMinutes,
         timeoutConfigKey: sessionGone ? "sessionGoneTimeoutMs" : "staleTimeoutMs",

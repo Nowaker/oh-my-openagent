@@ -253,6 +253,7 @@ export class TaskRecovery {
     input: Parameters<OpencodeClient["session"]["promptAsync"]>[0],
     generation: string | undefined,
     promptOrigin: PromptOrigin,
+    current: () => boolean | Promise<boolean>,
   ): Promise<void> {
     const timeout = createPromptTimeoutContext({}, PROMPT_TIMEOUT_MS)
     try {
@@ -265,7 +266,7 @@ export class TaskRecovery {
         settleMs: 0,
         ...promptOriginDispatchOptions(promptOrigin),
         queueBehavior: "defer",
-        shouldDispatch: () => this.canDispatch() && this.owns(input.path.id, generation),
+        shouldDispatch: () => this.canDispatch() && this.owns(input.path.id, generation) && current(),
       })
       if (timeout.wasTimedOut())
         throw new TaskRecoveryError(input.path.id, `prompt timed out after ${PROMPT_TIMEOUT_MS}ms`)
