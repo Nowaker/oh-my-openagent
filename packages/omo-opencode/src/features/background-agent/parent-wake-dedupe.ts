@@ -1,4 +1,5 @@
 import { resolveRegisteredAgentName } from "../claude-code-session-state"
+import type { RecoveryPointerIdentity } from "./parent-wake-run-notice"
 
 export type ParentWakePromptContext = {
   agent?: string
@@ -16,6 +17,9 @@ export type PendingParentWake = {
   noReplyAdmittedAt?: number
   /** Notices already deposited in the parent by an admit-only dispatch; a later reply dispatch does not repeat them. */
   admittedNotifications?: string[]
+  storedRunNotices?: readonly string[]
+  recoveryPointerIdentity?: RecoveryPointerIdentity
+  dispatchedRunPrompt?: { readonly text: string; readonly identity: RecoveryPointerIdentity | undefined }
   toolCallDeferralStartedAt?: number
   allowEmptyAssistantTurnRetry?: boolean
   noAssistantOutputRetryCount?: number
@@ -43,6 +47,9 @@ export function cloneParentWake(wake: PendingParentWake): PendingParentWake {
     ...(wake.dispatchedAt !== undefined ? { dispatchedAt: wake.dispatchedAt } : {}),
     ...(wake.noReplyAdmittedAt !== undefined ? { noReplyAdmittedAt: wake.noReplyAdmittedAt } : {}),
     ...(wake.admittedNotifications !== undefined ? { admittedNotifications: [...wake.admittedNotifications] } : {}),
+    ...(wake.storedRunNotices !== undefined ? { storedRunNotices: wake.storedRunNotices } : {}),
+    ...(wake.recoveryPointerIdentity !== undefined ? { recoveryPointerIdentity: wake.recoveryPointerIdentity } : {}),
+    ...(wake.dispatchedRunPrompt !== undefined ? { dispatchedRunPrompt: wake.dispatchedRunPrompt } : {}),
     ...(wake.toolCallDeferralStartedAt !== undefined
       ? { toolCallDeferralStartedAt: wake.toolCallDeferralStartedAt }
       : {}),
@@ -89,7 +96,7 @@ function parentWakeNotificationsAreCovered(latestWake: PendingParentWake, dispat
   return latestWake.notifications.every((notification) => dispatchedNotifications.has(notification))
 }
 
-export function isFailureParentWake(wake: PendingParentWake): boolean {
+export function isFailureParentWake(wake: Pick<PendingParentWake, "shouldReply" | "notifications">): boolean {
   return (
     wake.shouldReply &&
     wake.notifications.some((notification) =>

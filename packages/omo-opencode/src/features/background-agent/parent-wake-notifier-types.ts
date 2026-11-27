@@ -2,8 +2,9 @@ import type { PromptDispatchClient, PromptMessagesQuery } from "@oh-my-opencode/
 import type { ParentWakePromptContext } from "./parent-wake-dedupe"
 
 type ParentWakePromptBody = ParentWakePromptContext & {
+  readonly messageID?: string
   readonly noReply?: boolean
-  readonly parts: { readonly type: "text"; readonly text: string }[]
+  readonly parts: { readonly id?: string; readonly type: "text"; readonly text: string }[]
 }
 
 type ParentWakePromptAsyncInput = {

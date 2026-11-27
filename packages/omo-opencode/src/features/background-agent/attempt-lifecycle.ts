@@ -57,6 +57,7 @@ export function ensureCurrentAttempt(
 
   const attempt: BackgroundTaskAttempt = {
     attemptId: `att_${crypto.randomUUID().slice(0, 8)}`,
+    runId: task.runId,
     attemptNumber: (task.attempts?.length ?? 0) + 1,
     sessionId: task.sessionId,
     ...toAttemptModel(model),
@@ -94,6 +95,7 @@ export function projectTaskFromCurrentAttempt(task: BackgroundTask): BackgroundT
 export function startAttempt(task: BackgroundTask, model: DelegatedModelConfig | undefined): BackgroundTaskAttempt {
   const attempt: BackgroundTaskAttempt = {
     attemptId: `att_${crypto.randomUUID().slice(0, 8)}`,
+    runId: task.runId,
     attemptNumber: (task.attempts?.length ?? 0) + 1,
     ...toAttemptModel(model),
     status: "pending",
@@ -176,5 +178,5 @@ export function scheduleRetryAttempt(
 }
 
 export function findAttemptBySession(task: BackgroundTask, sessionID: string): BackgroundTaskAttempt | undefined {
-  return task.attempts?.find((attempt) => attempt.sessionId === sessionID)
+  return task.attempts?.findLast((attempt) => attempt.sessionId === sessionID)
 }

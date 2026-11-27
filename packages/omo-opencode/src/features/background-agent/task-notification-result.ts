@@ -1,4 +1,4 @@
-import { log, messagesInDirectory, normalizeSDKResponse } from "../../shared"
+import { log, normalizeSDKResponse } from "../../shared"
 import type { BackgroundTaskNotificationResult } from "./background-task-notification-template"
 import type { OpencodeClient } from "./opencode-client"
 
@@ -39,29 +39,26 @@ export function capNotificationResult(
 
 /**
  * The child's final answer for its completion notice, or undefined when it cannot be read. A fork child's session
- * starts with a copy of its parent, so `ownMessagesSince` leaves out every message created before the fork.
+ * or resumed child's transcript includes other turns, so bound the read to the reported run.
  */
 export async function readTaskNotificationResult(
   client: OpencodeClient,
   sessionID: string,
   directory: string,
-  ownMessagesSince?: number,
+  window?: { readonly since?: number; readonly until?: number },
 ): Promise<BackgroundTaskNotificationResult | undefined> {
   try {
-    const response = await messagesInDirectory(
-      client,
-      {
-        path: { id: sessionID },
-        query: { limit: RESULT_MESSAGE_WINDOW },
-      },
-      directory,
-    )
+    const response = await client.session.messages({
+      path: { id: sessionID },
+      query: { directory, limit: RESULT_MESSAGE_WINDOW },
+    })
     const messages = normalizeSDKResponse(response, [] as ResultMessage[], { preferResponseOnMissingData: true })
     const all = Array.isArray(messages) ? messages : []
-    const own =
-      ownMessagesSince === undefined
-        ? all
-        : all.filter((message) => (message.info?.time?.created ?? 0) >= ownMessagesSince)
+    const own = all.filter((message) => {
+      const created = message.info?.time?.created
+      if (window?.since !== undefined && (created === undefined || created < window.since)) return false
+      return window?.until === undefined || created === undefined || created <= window.until
+    })
     const text = finalAssistantText(own)
     return text === undefined ? undefined : capNotificationResult(text)
   } catch (error) {

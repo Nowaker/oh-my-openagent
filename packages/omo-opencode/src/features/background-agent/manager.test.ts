@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { join } from "node:path"
 import { describe, test, expect, beforeEach, afterEach, afterAll, spyOn, mock } from "bun:test"
 import type { PluginInput } from "@opencode-ai/plugin"
+import { awaitWithinTestBudget } from "../../../../../test-support/test-deadline"
 import * as sharedModule from "../../shared"
 import {
   clearAllDelegatedChildSessionBootstrap,
@@ -3895,8 +3896,10 @@ describe("BackgroundManager - Non-blocking Queue Integration", () => {
       expect(task.currentAttemptID).toBe(task.attempts?.[0]?.attemptId)
       const currentAttemptID = task.currentAttemptID
       if (currentAttemptID === undefined) throw new Error("Expected a current launch attempt")
+      expect(task.runId).toEqual(expect.any(String))
       expect(task.attempts?.[0]).toEqual({
         attemptId: currentAttemptID,
+        runId: task.runId,
         attemptNumber: 1,
         providerId: "openai",
         modelId: "gpt-5.6-luna-fast",
@@ -6613,11 +6616,21 @@ describe("BackgroundManager.handleEvent - session.error", () => {
     "terminates task and notifies parent on terminal %s while session is still alive",
     async (_case: string, errorName: string, errorMessage: string) => {
       //#given
-      const manager = createBackgroundManager()
-      mockVerifySessionExists(manager, true)
-      const notifyParentSession = mock(async (_task: BackgroundTask) => {})
-      cast<{ notifyParentSession: (task: BackgroundTask) => Promise<void> }>(manager).notifyParentSession =
-        notifyParentSession
+      const parentSessionId = "parent-terminal-expanded"
+      type Prompt = Parameters<PluginInput["client"]["session"]["promptAsync"]>[0]
+      const parentNotice = Promise.withResolvers<Prompt>()
+      const client = {
+        session: {
+          get: async ({ path }: { path: { id: string } }) => ({ data: { id: path.id } }),
+          status: async () => ({ data: { [parentSessionId]: { type: "idle" } } }),
+          messages: async () => ({ data: [] }),
+          promptAsync: async (input: Prompt) => {
+            if (input.path.id === parentSessionId) parentNotice.resolve(input)
+            return {}
+          },
+        },
+      }
+      const manager = new BackgroundManager({ pluginContext: createPluginInput(client) })
       const concurrencyManager = getConcurrencyManager(manager)
       const concurrencyKey = `terminal/${errorName}`
       await concurrencyManager.acquire(concurrencyKey)
@@ -6625,7 +6638,7 @@ describe("BackgroundManager.handleEvent - session.error", () => {
       const task = createMockTask({
         id: `task-terminal-${errorName}`,
         sessionId: `ses-terminal-${errorName}`,
-        parentSessionId: "parent-terminal-expanded",
+        parentSessionId,
         parentMessageId: "msg-terminal-expanded",
         description: "task with an unrecoverable session error",
         agent: "explore",
@@ -6635,25 +6648,31 @@ describe("BackgroundManager.handleEvent - session.error", () => {
       getTaskMap(manager).set(task.id, task)
       getPendingByParent(manager).set(task.parentSessionId, new Set([task.id]))
 
-      //#when
-      manager.handleEvent({
-        type: "session.error",
-        properties: {
-          sessionID: task.sessionId,
-          error: { name: errorName, message: errorMessage },
-        },
-      })
-      await flushBackgroundNotifications()
+      try {
+        //#when
+        manager.handleEvent({
+          type: "session.error",
+          properties: {
+            sessionID: task.sessionId,
+            error: { name: errorName, message: errorMessage },
+          },
+        })
+        const notice = await awaitWithinTestBudget(parentNotice.promise, `parent notice for ${errorName}`)
 
-      //#then
-      expect(task.status).toBe("error")
-      expect(task.error).toBe(errorMessage)
-      expect(task.concurrencyKey).toBeUndefined()
-      expect(concurrencyManager.getCount(concurrencyKey)).toBe(0)
-      expect(getPendingByParent(manager).get(task.parentSessionId)).toBeUndefined()
-      expect(notifyParentSession).toHaveBeenCalledWith(task)
-
-      manager.shutdown()
+        //#then
+        expect(task.status).toBe("error")
+        expect(task.error).toBe(errorMessage)
+        expect(task.concurrencyKey).toBeUndefined()
+        expect(concurrencyManager.getCount(concurrencyKey)).toBe(0)
+        expect(getPendingByParent(manager).get(task.parentSessionId)).toBeUndefined()
+        expect(notice.body?.noReply).toBe(false)
+        const text = notice.body?.parts.flatMap((part) => part.type === "text" ? [part.text] : []).join("\n")
+        expect(text).toContain(`<task-id>${task.id}</task-id>`)
+        expect(text).toContain("<status>error</status>")
+        expect(text).toContain(`<error>${errorMessage}</error>`)
+      } finally {
+        await manager.shutdown()
+      }
     },
   )
 
@@ -7851,8 +7870,10 @@ describe("BackgroundManager.handleEvent - early session.idle deferral", () => {
       },
     }
 
-    const manager = new BackgroundManager({ pluginContext: createPluginInput(client) })
-    stubNotifyParentSession(manager)
+    const manager = new BackgroundManager({
+      pluginContext: createPluginInput(client),
+      enableParentSessionNotifications: false,
+    })
 
     const task: BackgroundTask = {
       id: "task-early-idle",
@@ -7961,8 +7982,10 @@ describe("BackgroundManager.handleEvent - early session.idle deferral", () => {
       },
     }
 
-    const manager = new BackgroundManager({ pluginContext: createPluginInput(client) })
-    stubNotifyParentSession(manager)
+    const manager = new BackgroundManager({
+      pluginContext: createPluginInput(client),
+      enableParentSessionNotifications: false,
+    })
 
     const remainingMs = 120
     const task: BackgroundTask = {
@@ -8279,8 +8302,10 @@ describe("BackgroundManager.handleEvent - non-tool event lastUpdate", () => {
         },
       },
     }
-    const manager = new BackgroundManager({ pluginContext: createPluginInput(client) })
-    stubNotifyParentSession(manager)
+    const manager = new BackgroundManager({
+      pluginContext: createPluginInput(client),
+      enableParentSessionNotifications: false,
+    })
 
     const task: BackgroundTask = {
       id: "task-output-cached-idle",

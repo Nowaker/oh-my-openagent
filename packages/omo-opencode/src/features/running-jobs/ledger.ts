@@ -12,6 +12,7 @@ export const RUNNING_JOBS_FLUSH_INTERVAL_MS = 1_000
 const RunningJobSchema = z.object({
   kind: z.enum(["task", "monitor", "bash", "wake"]),
   id: z.string().min(1),
+  runId: z.string().optional(),
   sessionId: z.string().min(1),
   description: z.string(),
   startedAt: z.string(),
@@ -57,6 +58,8 @@ export interface RunningJobsLedgerDeps {
   readonly sources: ReadonlyArray<() => RunningJob[]>
   /** Jobs a previous process of the session left unfinished. */
   readonly onLost: (sessionID: string, jobs: RunningJob[]) => void
+  /** Resolves after deciding and scheduling recovery, without waiting for a parent prompt. */
+  readonly recoverInterruptedTaskRuns?: (parentSessionId: string) => Promise<void>
   readonly root?: string
   readonly pid?: number
   readonly hostname?: string
@@ -74,6 +77,7 @@ export interface RunningJobsLedgerDeps {
 export class RunningJobsLedger {
   private readonly written = new Map<string, string>()
   private readonly claimed = new Set<string>()
+  private readonly recoveries = new Map<string, Promise<void>>()
   private frozen = false
   private timer: ReturnType<typeof setInterval> | undefined
 
@@ -109,7 +113,7 @@ export class RunningJobsLedger {
     }
     for (const [sessionID, jobs] of bySession) {
       // An earlier process's record must be read before this one replaces it.
-      this.claimSession(sessionID)
+      this.claimLostJobs(sessionID)
       const body = JSON.stringify(jobs)
       if (this.written.get(sessionID) === body) continue
       this.write(sessionID, jobs)
@@ -122,9 +126,31 @@ export class RunningJobsLedger {
     }
   }
 
-  /** Reports, once per session, the jobs an earlier process of that session left unfinished. */
-  claimSession(sessionID: string): void {
-    if (this.claimed.has(sessionID) || !SAFE_SESSION_ID.test(sessionID)) return
+  claimSession(sessionID: string, options?: { readonly recoverDurableRuns: boolean }): void | Promise<void> {
+    if (!SAFE_SESSION_ID.test(sessionID)) return
+    this.claimLostJobs(sessionID)
+    const { recoverInterruptedTaskRuns } = this.deps
+    if (!recoverInterruptedTaskRuns || this.frozen || options?.recoverDurableRuns === false) return
+
+    const inFlight = this.recoveries.get(sessionID)
+    if (inFlight) return inFlight
+    const recovery = Promise.resolve()
+      .then(() => recoverInterruptedTaskRuns(sessionID))
+      .catch((error: unknown) => {
+        log("[running-jobs] Could not recover interrupted task runs:", {
+          sessionID,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      })
+      .finally(() => {
+        this.recoveries.delete(sessionID)
+      })
+    this.recoveries.set(sessionID, recovery)
+    return recovery
+  }
+
+  private claimLostJobs(sessionID: string): void {
+    if (this.claimed.has(sessionID)) return
     this.claimed.add(sessionID)
     let lost: RunningJob[]
     try {
@@ -164,7 +190,7 @@ export class RunningJobsLedger {
       throw error
     }
     this.remove(claimedFile)
-    return parsed.data.jobs
+    return parsed.data.jobs.filter((job) => job.kind !== "task" || job.runId === undefined)
   }
 
   private write(sessionID: string, jobs: RunningJob[]): void {

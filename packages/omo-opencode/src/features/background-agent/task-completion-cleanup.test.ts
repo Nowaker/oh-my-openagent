@@ -71,10 +71,6 @@ function createTask(overrides: Partial<BackgroundTask> & { id: string; parentSes
   }
 }
 
-function createManager(enableParentSessionNotifications: boolean): {
-  manager: BackgroundManager
-  promptAsyncCalls: PromptAsyncCall[]
-}
 function createManager(
   enableParentSessionNotifications: boolean,
   sessionStatuses?: Record<string, { type: string }>,
@@ -358,7 +354,8 @@ describe("BackgroundManager.notifyParentSession cleanup scheduling", () => {
   describe("#given background tasks for same parent", () => {
     test("#when two completions arrive back-to-back while parent is idle #then one batched notification is sent with both tasks", async () => {
       // given
-      const { manager, promptAsyncCalls } = createManager(true)
+      const sessionStatuses = { "ses-b": { type: "busy" } }
+      const { manager, promptAsyncCalls } = createManager(true, sessionStatuses)
       managerUnderTest = manager
       const taskA = createTask({
         id: "task-a",
@@ -367,7 +364,7 @@ describe("BackgroundManager.notifyParentSession cleanup scheduling", () => {
         status: "completed",
         completedAt: new Date("2026-03-11T00:01:00.000Z"),
       })
-      const taskB = createTask({ id: "task-b", parentSessionId: "parent-1", description: "task B", status: "running" })
+      const taskB = createTask({ id: "task-b", sessionId: "ses-b", parentSessionId: "parent-1", description: "task B" })
       getTasks(manager).set(taskA.id, taskA)
       getTasks(manager).set(taskB.id, taskB)
       getPendingByParent(manager).set(taskA.parentSessionId, new Set([taskA.id, taskB.id]))
@@ -375,6 +372,7 @@ describe("BackgroundManager.notifyParentSession cleanup scheduling", () => {
       await notifyParentSessionForTest(manager, taskA)
       taskB.status = "completed"
       taskB.completedAt = new Date("2026-03-11T00:02:00.000Z")
+      sessionStatuses["ses-b"] = { type: "idle" }
 
       // when
       await notifyParentSessionForTest(manager, taskB)
@@ -464,6 +462,7 @@ describe("BackgroundManager.notifyParentSession cleanup scheduling", () => {
       // given
       const sessionStatuses: Record<string, { type: string }> = {
         "parent-1": { type: "busy" },
+        "ses-b": { type: "busy" },
       }
       const { manager, promptAsyncCalls } = createManager(true, sessionStatuses)
       managerUnderTest = manager
@@ -475,7 +474,7 @@ describe("BackgroundManager.notifyParentSession cleanup scheduling", () => {
         completedAt: new Date("2026-03-11T00:01:00.000Z"),
         wake: "none",
       })
-      const taskB = createTask({ id: "task-b", parentSessionId: "parent-1", description: "task B", status: "running" })
+      const taskB = createTask({ id: "task-b", sessionId: "ses-b", parentSessionId: "parent-1", description: "task B" })
       getTasks(manager).set(taskA.id, taskA)
       getTasks(manager).set(taskB.id, taskB)
       getPendingByParent(manager).set(taskA.parentSessionId, new Set([taskA.id, taskB.id]))
@@ -503,6 +502,7 @@ describe("BackgroundManager.notifyParentSession cleanup scheduling", () => {
       // given
       const sessionStatuses: Record<string, { type: string }> = {
         "parent-1": { type: "busy" },
+        "ses-b": { type: "busy" },
       }
       const { manager, promptAsyncCalls } = createManager(true, sessionStatuses, undefined, [
         {
@@ -518,8 +518,9 @@ describe("BackgroundManager.notifyParentSession cleanup scheduling", () => {
         description: "task A",
         status: "completed",
         completedAt: new Date("2026-03-11T00:01:00.000Z"),
+        wake: "each",
       })
-      const taskB = createTask({ id: "task-b", parentSessionId: "parent-1", description: "task B", status: "running" })
+      const taskB = createTask({ id: "task-b", sessionId: "ses-b", parentSessionId: "parent-1", description: "task B" })
       getTasks(manager).set(taskA.id, taskA)
       getTasks(manager).set(taskB.id, taskB)
       getPendingByParent(manager).set(taskA.parentSessionId, new Set([taskA.id, taskB.id]))
@@ -543,6 +544,80 @@ describe("BackgroundManager.notifyParentSession cleanup scheduling", () => {
       expect(notificationPayload).toContain("A's final answer")
       expect(notificationPayload).not.toContain("ALL BACKGROUND TASKS COMPLETE")
     })
+
+    for (const wakeCase of [
+      {
+        name: "a default-wake task finishes with a stale idle sibling #then its all-complete notice wakes the parent",
+        siblingStatus: "idle",
+        taskOptions: { status: "completed" },
+        protocolStatus: "completed",
+        allComplete: true,
+        noReply: false,
+      },
+      {
+        name: "a default-wake task finishes with a busy sibling #then its partial notice does not wake the parent",
+        siblingStatus: "busy",
+        taskOptions: { status: "completed" },
+        protocolStatus: "completed",
+        allComplete: false,
+        noReply: true,
+      },
+      {
+        name: "a wake none task finishes with a stale idle sibling #then its all-complete notice does not wake the parent",
+        siblingStatus: "idle",
+        taskOptions: { status: "completed", wake: "none" },
+        protocolStatus: "completed",
+        allComplete: true,
+        noReply: true,
+      },
+      ...([
+        ["error", "error", "fails"],
+        ["cancelled", "cancelled", "is cancelled without a user request"],
+        ["interrupt", "interrupted", "is interrupted"],
+      ] as const).map(([status, protocolStatus, outcome]) => ({
+        name: `a wake none task ${outcome} with a busy sibling #then its partial notice wakes the parent`,
+        siblingStatus: "busy",
+        taskOptions: { status, wake: "none" as const },
+        protocolStatus,
+        allComplete: false,
+        noReply: false,
+      })),
+    ] as const) {
+      test(`#when ${wakeCase.name}`, async () => {
+        // given
+        const { manager, promptAsyncCalls } = createManager(true, {
+          "parent-1": { type: "idle" },
+          "ses-a": { type: "idle" },
+          "ses-b": { type: wakeCase.siblingStatus },
+        })
+        managerUnderTest = manager
+        const task = createTask({
+          id: "task-a",
+          sessionId: "ses-a",
+          parentSessionId: "parent-1",
+          completedAt: new Date("2026-03-11T00:01:00.000Z"),
+          ...wakeCase.taskOptions,
+        })
+        const sibling = createTask({ id: "task-b", sessionId: "ses-b", parentSessionId: task.parentSessionId })
+        getTasks(manager).set(task.id, task)
+        getTasks(manager).set(sibling.id, sibling)
+        getPendingByParent(manager).set(task.parentSessionId, new Set([task.id, sibling.id]))
+
+        // when
+        await notifyParentSessionForTest(manager, task)
+        await waitForCoalescedFlush(manager, promptAsyncCalls)
+
+        // then
+        expect(promptAsyncCalls).toHaveLength(1)
+        const call = promptAsyncCalls[0]
+        expect(call?.path.id).toBe(task.parentSessionId)
+        const payload = JSON.stringify(call?.body.parts)
+        expect(payload).toContain(`<task-id>${task.id}</task-id>`)
+        expect(payload).toContain(`<status>${wakeCase.protocolStatus}</status>`)
+        expect(payload.includes("[ALL BACKGROUND TASKS COMPLETE]")).toBe(wakeCase.allComplete)
+        expect(call?.body.noReply).toBe(wakeCase.noReply)
+      })
+    }
 
     for (const forkCase of [
       { name: "a fork that wrote nothing after its fork point", own: false },
@@ -638,6 +713,7 @@ describe("BackgroundManager.notifyParentSession cleanup scheduling", () => {
       // given
       const sessionStatuses: Record<string, { type: string }> = {
         "parent-1": { type: "busy" },
+        "ses-b": { type: "busy" },
       }
       const { manager, promptAsyncCalls } = createManager(true, sessionStatuses)
       managerUnderTest = manager
@@ -648,7 +724,7 @@ describe("BackgroundManager.notifyParentSession cleanup scheduling", () => {
         status: "completed",
         completedAt: new Date("2026-03-11T00:01:00.000Z"),
       })
-      const taskB = createTask({ id: "task-b", parentSessionId: "parent-1", description: "task B", status: "running" })
+      const taskB = createTask({ id: "task-b", sessionId: "ses-b", parentSessionId: "parent-1", description: "task B" })
       getTasks(manager).set(taskA.id, taskA)
       getTasks(manager).set(taskB.id, taskB)
       getPendingByParent(manager).set(taskA.parentSessionId, new Set([taskA.id, taskB.id]))
@@ -656,6 +732,7 @@ describe("BackgroundManager.notifyParentSession cleanup scheduling", () => {
       await notifyParentSessionForTest(manager, taskA)
       taskB.status = "completed"
       taskB.completedAt = new Date("2026-03-11T00:02:00.000Z")
+      sessionStatuses["ses-b"] = { type: "idle" }
 
       // when
       await notifyParentSessionForTest(manager, taskB)

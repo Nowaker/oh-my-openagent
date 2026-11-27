@@ -1,6 +1,7 @@
 import { log } from "../../shared/logger"
+import { recoveryPointerRunID, terminalRunIDs } from "../background-agent/parent-wake-run-notice"
 import { formatLostJobNotice } from "./lost-notice"
-import { openedSession, RunningJobsLedger } from "./ledger"
+import { openedSession, RunningJobsLedger, type RunningJobsRecord } from "./ledger"
 import type { RunningJob } from "./types"
 
 /** How long after start a process claims the session it opened: its server must answer before a notice can wake it. */
@@ -9,6 +10,7 @@ export const STARTUP_CLAIM_DELAY_MS = 5_000
 type TaskSource = {
   listUnfinishedTasks(): ReadonlyArray<{
     id: string
+    readonly runId?: string
     parentSessionId: string
     description: string
     agent: string
@@ -25,6 +27,7 @@ type TaskSource = {
     queuedAt?: number
   }>
   queueSessionNotice(sessionID: string, notification: string): Promise<void>
+  recoverInterruptedTaskRuns?(parentSessionId: string): Promise<void>
 }
 type MonitorSource = {
   listRunning(): ReadonlyArray<{
@@ -57,7 +60,7 @@ export function createRunningJobsLedger(input: {
   readonly pid?: number
   readonly isAlive?: (pid: number) => boolean
 }): RunningJobsLedger {
-  const tasks = (): RunningJob[] =>
+  const tasks = (): RunningJobsRecord["jobs"] =>
     input.backgroundManager.listUnfinishedTasks().map((task) => ({
       kind: "task",
       id: task.id,
@@ -65,6 +68,7 @@ export function createRunningJobsLedger(input: {
       description: task.description,
       startedAt: (task.startedAt ?? task.queuedAt ?? new Date()).toISOString(),
       agent: task.agent,
+      ...(task.runId !== undefined ? { runId: task.runId } : {}),
       ...(task.sessionId ? { childSessionId: task.sessionId } : { prompt: task.prompt }),
     }))
   const wakes = (): RunningJob[] =>
@@ -99,18 +103,25 @@ export function createRunningJobsLedger(input: {
       ...(record.timeoutMs !== null ? { timeoutMs: record.timeoutMs } : {}),
     }))
 
+  const recoverInterruptedTaskRuns = input.backgroundManager.recoverInterruptedTaskRuns?.bind(input.backgroundManager)
   const ledger = new RunningJobsLedger({
     sources: [tasks, wakes, monitors, commands],
     ...(input.root ? { root: input.root } : {}),
     ...(input.pid !== undefined ? { pid: input.pid } : {}),
     ...(input.isAlive ? { isAlive: input.isAlive } : {}),
+    ...(recoverInterruptedTaskRuns ? { recoverInterruptedTaskRuns } : {}),
     onLost: (sessionID, jobs) => {
       log("[running-jobs] Reporting jobs an earlier process left unfinished:", {
         sessionID,
         jobs: jobs.map((job) => job.id),
       })
       for (const job of jobs) {
-        input.backgroundManager.queueSessionNotice(sessionID, formatLostJobNotice(job)).catch((error) => {
+        const notifications = job.notifications?.filter(
+          (notice) => terminalRunIDs(notice).length === 0 && recoveryPointerRunID(notice) === undefined,
+        )
+        if (job.kind === "wake" && job.notifications && notifications?.length === 0) continue
+        const replay = notifications ? { ...job, notifications } : job
+        input.backgroundManager.queueSessionNotice(sessionID, formatLostJobNotice(replay)).catch((error) => {
           log("[running-jobs] Could not deliver a lost-job notice:", { sessionID, id: job.id, error: String(error) })
         })
       }
@@ -119,7 +130,9 @@ export function createRunningJobsLedger(input: {
 
   const opened = input.argv ? openedSession(input.argv, () => undefined) : openedSession()
   if (opened) {
-    setTimeout(() => ledger.claimSession(opened), STARTUP_CLAIM_DELAY_MS).unref?.()
+    setTimeout(() => {
+      void ledger.claimSession(opened)
+    }, STARTUP_CLAIM_DELAY_MS).unref?.()
   }
   return ledger
 }

@@ -4,6 +4,7 @@ export type BackgroundTaskNotificationStatus = "COMPLETED" | "CANCELLED" | "INTE
 
 export interface BackgroundTaskNotificationTask {
   id: string
+  runId?: string
   sessionId?: string
   description: string
   status: BackgroundTaskStatus
@@ -86,6 +87,7 @@ function taskFieldLines(input: BackgroundTaskNotificationInput): string[] {
   const status = statusText.toLowerCase()
   return [
     `<task-id>${task.id}</task-id>`,
+    ...(task.runId ? [`<run-id>${task.runId}</run-id>`] : []),
     ...(task.sessionId ? [`<session-id>${task.sessionId}</session-id>`] : []),
     `<status>${status}</status>`,
     `<summary>Task "${task.description || task.id}" ${status} after ${duration}</summary>`,

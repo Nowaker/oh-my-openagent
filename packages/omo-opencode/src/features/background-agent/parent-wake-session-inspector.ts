@@ -1,9 +1,10 @@
 import { log, normalizeSDKResponse } from "../../shared"
 import { isPromptMessageInspectionAborted } from "@oh-my-opencode/utils/prompt-async-gate/message-inspection-error"
-import type { PromptMessagesQuery } from "@oh-my-opencode/utils/prompt-async-gate/types"
+import type { PromptDispatchClient, PromptMessagesQuery } from "@oh-my-opencode/utils/prompt-async-gate/types"
 import { getErrorText } from "./error-classifier"
 import type { PendingParentWake } from "./parent-wake-dedupe"
 import type { ParentWakeSessionMessage } from "./parent-wake-session-message"
+import { observeStoredRunNotices } from "./parent-wake-run-notice"
 import {
   getParentWakeSessionHistoryDeferralDecision,
   hasAssistantOrToolOutputAfterParentWake,
@@ -68,6 +69,7 @@ export class ParentWakeSessionInspector {
 
   async shouldDeferForHistory(sessionID: string, wake: PendingParentWake): Promise<ToolWaitDeferralDecision> {
     const messages = await this.loadMessages(sessionID)
+    observeStoredRunNotices(wake, messages)
     return getParentWakeSessionHistoryDeferralDecision({
       sessionID,
       messages,
@@ -78,6 +80,7 @@ export class ParentWakeSessionInspector {
 
   async hasRecordedPromptMessageAfterDispatchedWake(sessionID: string, wake: PendingParentWake): Promise<boolean> {
     const messages = await this.loadMessages(sessionID)
+    observeStoredRunNotices(wake, messages)
     return hasRecordedParentWakePromptMessage({
       messages,
       wake,
@@ -95,6 +98,7 @@ export class ParentWakeSessionInspector {
 
   async hasAssistantOrToolOutputAfterDispatchedWake(sessionID: string, wake: PendingParentWake): Promise<boolean> {
     const messages = await this.loadMessages(sessionID)
+    observeStoredRunNotices(wake, messages)
     return hasAssistantOrToolOutputAfterParentWake({
       messages,
       wake,
@@ -106,21 +110,26 @@ export class ParentWakeSessionInspector {
   }
 
   private async loadMessages(sessionID: string): Promise<ParentWakeSessionMessage[] | undefined> {
-    try {
-      const messagesResp = await this.client.session.messages({
-        path: { id: sessionID },
-        query: { directory: this.options.directory },
-      })
-      const fallback: ParentWakeSessionMessage[] = []
-      return normalizeSDKResponse(messagesResp, fallback)
-    } catch (error) {
-      const errorText =
-        error instanceof Error ? `${error.name}: ${error.message}` : getErrorText(error) || String(error)
-      log("[background-agent] Failed to inspect parent session messages for wake safety:", {
-        sessionID,
-        error: errorText,
-      })
-      return isPromptMessageInspectionAborted(error) ? [] : undefined
-    }
+    return readParentWakeSessionMessages(this.client, { sessionID, directory: this.options.directory })
+  }
+}
+
+export async function readParentWakeSessionMessages(
+  client: PromptDispatchClient,
+  input: { readonly sessionID: string; readonly directory: string },
+): Promise<ParentWakeSessionMessage[] | undefined> {
+  const { sessionID, directory } = input
+  try {
+    const messagesResp = await client.session?.messages?.({ path: { id: sessionID }, query: { directory } })
+    const fallback: ParentWakeSessionMessage[] = []
+    return normalizeSDKResponse(messagesResp, fallback)
+  } catch (error) {
+    const errorText =
+      error instanceof Error ? `${error.name}: ${error.message}` : getErrorText(error) || String(error)
+    log("[background-agent] Failed to inspect parent session messages for wake safety:", {
+      sessionID,
+      error: errorText,
+    })
+    return isPromptMessageInspectionAborted(error) ? [] : undefined
   }
 }

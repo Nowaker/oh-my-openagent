@@ -28,6 +28,10 @@ export function handleSessionIdleBackgroundEvent(args: {
 
   const task = findBySession(sessionID)
   if (!task || task.status !== "running") return
+  const runId = task.runId
+  const attemptID = task.currentAttemptID
+  const isCurrent = () => task.status === "running" && task.sessionId === sessionID &&
+    task.runId === runId && task.currentAttemptID === attemptID
 
   const startedAt = task.startedAt
   if (!startedAt) return
@@ -43,7 +47,7 @@ export function handleSessionIdleBackgroundEvent(args: {
       })
       const timer = setTimeout(() => {
         idleDeferralTimers.delete(task.id)
-        emitIdleEvent(sessionID)
+        if (isCurrent()) emitIdleEvent(sessionID)
       }, remainingMs)
       idleDeferralTimers.set(task.id, timer)
     } else {
@@ -54,7 +58,7 @@ export function handleSessionIdleBackgroundEvent(args: {
 
   validateSessionHasOutput(sessionID, taskOutputSince(task))
     .then(async (hasValidOutput) => {
-      if (task.status !== "running") {
+      if (!isCurrent()) {
         log("[background-agent] Task status changed during validation, skipping:", {
           taskId: task.id,
           status: task.status,
@@ -69,7 +73,7 @@ export function handleSessionIdleBackgroundEvent(args: {
 
       const hasIncompleteTodos = await checkSessionTodos(sessionID)
 
-      if (task.status !== "running") {
+      if (!isCurrent()) {
         log("[background-agent] Task status changed during todo check, skipping:", {
           taskId: task.id,
           status: task.status,

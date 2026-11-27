@@ -27,6 +27,7 @@ export type BackgroundTaskAttemptStatus = BackgroundTaskStatus
 
 export interface BackgroundTaskAttempt {
   attemptId: string
+  runId?: string
   attemptNumber: number
   sessionId?: string
   providerId?: string
@@ -40,6 +41,8 @@ export interface BackgroundTaskAttempt {
 
 export interface BackgroundTask {
   id: string
+  /** One user run of this task, shared by all of its fallback attempts. */
+  runId?: string
   sessionId?: string
   rootSessionId?: string
   parentSessionId: string
@@ -74,7 +77,7 @@ export interface BackgroundTask {
   parentTools?: Record<string, boolean>
   skillContent?: string
   sessionPermission?: SessionPermissionRule[]
-  /** When the parent hears about the finished task: each (default) starts a parent turn, none leaves a note for its next turn. */
+  /** Omitted wakes when no sibling is active; each always requests a wake; none leaves a notice for the next turn. */
   wake?: BackgroundTaskWake
   /** A fan-out group whose members report together once all of them have finished. */
   groupId?: string

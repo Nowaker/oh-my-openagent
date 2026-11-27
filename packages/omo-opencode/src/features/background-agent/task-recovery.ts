@@ -244,6 +244,11 @@ export class TaskRecovery {
     return this.generations.has(sessionId) ? this.store.read(sessionId)?.tools : undefined
   }
 
+  async ownerIdentity(): Promise<Pick<TaskRecoveryRecord, "owner" | "ownerProcess">> {
+    const [owner, ownerProcess] = await Promise.all([this.worker.open(), currentOwnerProcess()])
+    return { owner, ownerProcess }
+  }
+
   async dispatch(
     input: Parameters<OpencodeClient["session"]["promptAsync"]>[0],
     generation: string | undefined,

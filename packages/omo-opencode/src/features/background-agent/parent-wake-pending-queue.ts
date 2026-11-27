@@ -95,6 +95,12 @@ export class ParentWakePendingQueue {
           ...new Set([...(pendingWake.admittedNotifications ?? []), ...latestWake.admittedNotifications]),
         ]
       }
+      if (latestWake.storedRunNotices) {
+        pendingWake.storedRunNotices = [...new Set([...(pendingWake.storedRunNotices ?? []), ...latestWake.storedRunNotices])]
+      }
+      if (latestWake.recoveryPointerIdentity) {
+        pendingWake.recoveryPointerIdentity = latestWake.recoveryPointerIdentity
+      }
       pendingWake.toolCallDeferralStartedAt ??= latestWake.toolCallDeferralStartedAt
       pendingWake.allowEmptyAssistantTurnRetry ||= latestWake.allowEmptyAssistantTurnRetry
       pendingWake.lostDispatchRetry ||= latestWake.lostDispatchRetry

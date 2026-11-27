@@ -138,14 +138,28 @@ export function hasRecordedParentWakePromptMessage(input: {
     return false
   }
   const dispatchedAt = input.wake.dispatchedAt
+  const receipt = input.wake.dispatchedRunPrompt
   return input.messages.some((message) => {
     const createdAt = getParentWakeMessageCreatedAt(message)
+    if (receipt?.identity) {
+      const { messageID, partID } = receipt.identity
+      if (
+        (message.info?.id ?? message.id) === messageID &&
+        getParentWakeMessageRole(message) === "user" &&
+        message.parts?.some((part) => part.id === partID && part.type === "text")
+      ) {
+        return true
+      }
+    }
     if (createdAt === undefined) {
       return false
     }
     if (
       createdAt >= dispatchedAt - input.acceptedMessageSkewMs &&
-      parentWakeMessageContainsNotification(message, input.wake)
+      (receipt
+        ? getParentWakeMessageRole(message) === "user" &&
+          message.parts?.some((part) => part.type === "text" && part.text === receipt.text)
+        : parentWakeMessageContainsNotification(message, input.wake))
     ) {
       return true
     }

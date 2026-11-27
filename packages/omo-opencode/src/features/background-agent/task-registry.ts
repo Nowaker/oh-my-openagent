@@ -46,6 +46,7 @@ function cloneAttempts(attempts: BackgroundTask["attempts"]): BackgroundTask["at
 function cloneRegisteredTask(task: BackgroundTask): BackgroundTask {
   return {
     id: task.id,
+    runId: task.runId,
     rootSessionId: task.rootSessionId,
     parentSessionId: task.parentSessionId,
     parentMessageId: task.parentMessageId,
@@ -69,6 +70,10 @@ function cloneRegisteredTask(task: BackgroundTask): BackgroundTask {
     concurrencyGroup: task.concurrencyGroup,
     parentAgent: task.parentAgent,
     parentTools: task.parentTools,
+    wake: task.wake,
+    ownMessagesSince: task.ownMessagesSince,
+    runOutputSince: task.runOutputSince,
+    cwd: task.cwd,
     isUnstableAgent: task.isUnstableAgent,
     error: task.error,
     category: task.category,

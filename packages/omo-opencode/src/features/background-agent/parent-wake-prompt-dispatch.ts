@@ -9,7 +9,15 @@ import type { PromptDispatchClient } from "@oh-my-opencode/utils/prompt-async-ga
 import { getErrorText } from "./error-classifier"
 import { createEmptyAssistantTurnRetryDedupeKey, createLostDispatchRetryDedupeKey } from "./parent-wake-history-state"
 import { cloneParentWake, isRedundantParentWake, type PendingParentWake } from "./parent-wake-dedupe"
+import {
+  observeStoredRunNotices,
+  recoveryPointerRunID,
+  recoveryPointerText,
+  resolveRecoveryPointerIdentity,
+  terminalRunIDs,
+} from "./parent-wake-run-notice"
 import type { ToolWaitDeferralDecision } from "./parent-wake-session-history"
+import { readParentWakeSessionMessages } from "./parent-wake-session-inspector"
 
 type ParentWakePromptDispatchInput = {
   readonly client: PromptDispatchClient
@@ -36,19 +44,47 @@ export const NOTICES_ABOVE_REMINDER = `<system-reminder>
 
 /* Notices an earlier admit-only dispatch already put in the parent are not repeated; when nothing new is left, a reply
    dispatch still owes the parent a turn and sends a short pointer instead. */
-function notificationContentFor(input: ParentWakePromptDispatchInput): string {
-  const admitted = new Set(input.latestWake.admittedNotifications ?? [])
-  const fresh = input.latestWake.notifications.filter((notification) => !admitted.has(notification))
-  if (fresh.length > 0) return fresh.join("\n\n")
-  const replying = input.forceNoReply !== true && input.latestWake.shouldReply
-  return replying ? NOTICES_ABOVE_REMINDER : input.latestWake.notifications.join("\n\n")
+function notificationsFor(wake: PendingParentWake, noReply: boolean): readonly string[] {
+  const admitted = new Set(wake.admittedNotifications)
+  const stored = new Set(wake.storedRunNotices)
+  const fresh = wake.notifications.flatMap((notification) => {
+    if (stored.has(notification)) return noReply ? [] : terminalRunIDs(notification).map(recoveryPointerText)
+    return admitted.has(notification) ? [] : [notification]
+  })
+  if (fresh.length > 0) return fresh
+  if (!noReply) return [NOTICES_ABOVE_REMINDER]
+  return stored.size > 0 ? [] : wake.notifications
 }
 
 export async function sendParentWakePrompt(input: ParentWakePromptDispatchInput): Promise<void> {
-  const notificationContent = notificationContentFor(input)
-  let dispatchStartedAt = Date.now()
   try {
-    dispatchStartedAt = Date.now()
+    const wake = input.latestWake
+    const noReply = input.forceNoReply === true || !wake.shouldReply
+    const hasRunNotice = wake.notifications.some((notice) =>
+      terminalRunIDs(notice).length > 0 || recoveryPointerRunID(notice) !== undefined,
+    )
+    const messages = hasRunNotice ? await readParentWakeSessionMessages(input.client, input) : undefined
+    observeStoredRunNotices(wake, messages)
+    const notifications = notificationsFor(wake, noReply)
+    if (notifications.length === 0 && wake.storedRunNotices?.length) {
+      if (input.retainPendingWake) input.scheduleFlush()
+      return
+    }
+    const identity = hasRunNotice
+      ? resolveRecoveryPointerIdentity({
+          sessionID: input.sessionID,
+          notifications,
+          messages,
+          previous: wake.recoveryPointerIdentity,
+        })
+      : undefined
+    if (identity) wake.recoveryPointerIdentity = identity
+    const textPart = createInternalAgentTextPart(notifications.join("\n\n"))
+    const markedPart = noReply ? withInternalNoReplyMarker(textPart) : textPart
+    const part = identity ? { ...markedPart, id: identity.partID } : markedPart
+    const receipt = hasRunNotice ? { text: part.text, identity } : undefined
+
+    const dispatchStartedAt = Date.now()
     const promptResult = await dispatchInternalPrompt({
       mode: "async",
       client: input.client,
@@ -66,13 +102,10 @@ export async function sendParentWakePrompt(input: ParentWakePromptDispatchInput)
       input: {
         path: { id: input.sessionID },
         body: {
-          noReply: input.forceNoReply === true || !input.latestWake.shouldReply,
+          noReply,
           ...input.latestWake.promptContext,
-          parts: [
-            input.forceNoReply === true || !input.latestWake.shouldReply
-              ? withInternalNoReplyMarker(createInternalAgentTextPart(notificationContent))
-              : createInternalAgentTextPart(notificationContent),
-          ],
+          ...(identity ? { messageID: identity.messageID } : {}),
+          parts: [part],
         },
         query: { directory: input.directory },
       },
@@ -81,12 +114,12 @@ export async function sendParentWakePrompt(input: ParentWakePromptDispatchInput)
       if (isAmbiguousPostDispatchPromptFailure(promptResult)) {
         const dispatchedWake = cloneParentWake(input.latestWake)
         dispatchedWake.dispatchedAt = dispatchStartedAt
-        if (await input.hasRecordedPromptAfterDispatch(dispatchedWake)) {
+        if (receipt) dispatchedWake.dispatchedRunPrompt = receipt
+        const promptRecorded = await input.hasRecordedPromptAfterDispatch(dispatchedWake)
+        if (dispatchedWake.storedRunNotices) wake.storedRunNotices = dispatchedWake.storedRunNotices
+        if (promptRecorded) {
           markRetainedNoReplyAdmission(input, dispatchStartedAt)
-          input.trackDispatchedWake(
-            createTrackedDispatchedWake(input.latestWake, input.forceNoReply),
-            dispatchStartedAt,
-          )
+          input.trackDispatchedWake(createTrackedDispatchedWake(input, receipt), dispatchStartedAt)
           log("[background-agent] Treated failed parent wake prompt as accepted after observing session history:", {
             sessionID: input.sessionID,
             error: promptResult.error,
@@ -126,7 +159,7 @@ export async function sendParentWakePrompt(input: ParentWakePromptDispatchInput)
     delete input.latestWake.lostDispatchRetry
     delete input.latestWake.gateHoldExpiresAt
     markRetainedNoReplyAdmission(input, dispatchStartedAt)
-    input.trackDispatchedWake(createTrackedDispatchedWake(input.latestWake, input.forceNoReply), dispatchStartedAt)
+    input.trackDispatchedWake(createTrackedDispatchedWake(input, receipt), dispatchStartedAt)
   } catch (error) {
     const errorText = error instanceof Error ? `${error.name}: ${error.message}` : getErrorText(error) || String(error)
     input.requeueWake(input.latestWake)
@@ -163,13 +196,14 @@ function markRetainedNoReplyAdmission(input: ParentWakePromptDispatchInput, disp
   input.scheduleFlush()
 }
 
-function createTrackedDispatchedWake(wake: PendingParentWake, forceNoReply: boolean | undefined): PendingParentWake {
-  if (forceNoReply !== true || !wake.shouldReply) {
-    return wake
-  }
-
+function createTrackedDispatchedWake(
+  { latestWake: wake, forceNoReply }: ParentWakePromptDispatchInput,
+  receipt: PendingParentWake["dispatchedRunPrompt"],
+): PendingParentWake {
+  if (!receipt && (forceNoReply !== true || !wake.shouldReply)) return wake
   return {
     ...cloneParentWake(wake),
-    shouldReply: false,
+    shouldReply: forceNoReply !== true && wake.shouldReply,
+    ...(receipt ? { dispatchedRunPrompt: receipt } : {}),
   }
 }
